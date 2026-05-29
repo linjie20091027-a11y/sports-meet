@@ -215,61 +215,59 @@ AI_ROUTER.post('/ai-key', authMiddleware, adminOnly, (req, res) => {
   }
 });
 
-// AI 对话路由
+// AI 对话路由（支持会话记忆）
 AI_ROUTER.post('/ai-chat', optionalAuth, async (req, res) => {
   try {
     loadApiKey();
-    const { message } = req.body;
+    const { message, history } = req.body;
     if (!message?.trim()) return res.json({ success: false, error: '請輸入問題' });
     if (!DEEPSEEK_API_KEY) return res.json({ success: false, error: 'AI 助手尚未配置，請管理員設置 API Key' });
 
     const https = require('https');
     const db = getDb();
 
-    // 構建實時上下文
+    // 构建实时上下文
     const meet = db.prepare("SELECT * FROM meet_info WHERE id=1").get() || {};
-    const events = db.prepare("SELECT name, category, event_type, gender_group, venue, max_participants FROM events WHERE status='active' ORDER BY sort_order LIMIT 20").all();
     const totalRegs = db.prepare("SELECT COUNT(*) as cnt FROM registrations").get()?.cnt || 0;
     const pendingRegs = db.prepare("SELECT COUNT(*) as cnt FROM registrations WHERE status='pending'").get()?.cnt || 0;
     const schedules = db.prepare("SELECT COUNT(*) as cnt FROM schedules WHERE status='published'").get()?.cnt || 0;
     const maxEvents = db.prepare("SELECT value FROM settings WHERE key='max_events_per_student'").get()?.value || '3';
 
-    const eventList = events.map(e => {
-      const gender = e.gender_group === 'male' ? '男子' : e.gender_group === 'female' ? '女子' : '混合';
-      const type = e.event_type === 'team' ? '集體' : '個人';
-      return `${e.name}（${gender}${type}，場地：${e.venue||'待定'}）`;
-    }).join('；');
+    const context = `【系統實時數據】
+當前時間：${new Date().toLocaleString('zh-CN', {timeZone:'Asia/Shanghai'})}
+運動會：濠江中學第三十屆田徑運動會（${meet.start_date||'待定'} 至 ${meet.end_date||'待定'}）
+報名：${meet.registration_open?'開放中':'已關閉'}，已有${totalRegs}人次報名（${pendingRegs}待審核）
+賽程：已發布${schedules}場，每人限報${maxEvents}項
+學校：澳門濠江中學，1932年創校，校訓「忠誠勤奮求實創新」，位於青洲大馬路`;
 
-    const context = `【澳門濠江中學資料庫】
-建校於1932年，校訓「忠誠、勤奮、求實、創新」。位於澳門青洲大馬路，設有幼稚園、小學部、中學部。校園約15,000平方米，擁有標準田徑場、室內體育館、游泳池、圖書館等設施。全校約200名教職員，體育科組8位專業教師。畢業生升學率超95%。
-校址：Rua do Comandante João Belo, Macau。電話：(+853) 2822 1234。官網：www.houkong.edu.mo。
+    const systemPrompt = `你是「小濠」，一個全能的AI助手，部署於澳門濠江中學運動會管理系統中。
 
-【當前運動會實時數據】
-- 運動會名稱：${meet.name||'學校運動會'}
-- 舉辦日期：${meet.start_date||'待定'} 至 ${meet.end_date||'待定'}
-- 報名狀態：${meet.registration_open?'已開放':'已關閉'}
-- 比賽項目總數：${events.length}個
-- 已報名人次：${totalRegs}，待審核：${pendingRegs}
-- 已發布賽程：${schedules}場
-- 每人限報：${maxEvents}個項目`;
+【核心原則】
+- 你有廣博的知識儲備，能回答任何領域的問題（科學、歷史、編程、數學、文學、生活常識等）
+- 回答風格：清晰、直接、有條理，避免廢話。像一個聰明靠譜的朋友
+- 如果用戶問程式開發、代碼調試、系統架構等問題，發揮你的編程能力給出實用建議
+- 如果用戶問數學/科學問題，給出準確的解釋和計算
+- 如果問學校/運動會相關，結合上方【系統實時數據】準確回答
+- 全程繁體中文，可適度夾雜粵語口語詞增加親切感
+- 適度使用 emoji 但不濫用
+- 保持誠實：不知道就說不知道，不要編造`;
 
-    const systemPrompt = `你是澳門濠江中學運動會的官方AI助手「小濠」🏅。你的設定：
+    // 构建消息列表（含历史）
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: context }
+    ];
 
-**身份**：濠江中學學生會宣傳部成員，熱心、專業、靠譜，對運動會瞭如指掌。
+    // 注入最近10轮历史
+    if (Array.isArray(history)) {
+      history.slice(-10).forEach(h => {
+        if (h.role === 'user' || h.role === 'assistant') {
+          messages.push({ role: h.role, content: h.content });
+        }
+      });
+    }
 
-**能力範圍**：
-1. 回答運動會相關的所有問題（項目規則、報名流程、賽程安排、場地指引、成績查詢等）
-2. 根據上方【實時數據】提供準確的最新資訊
-3. 引導學生正確完成報名、查看成績等操作
-
-**回答風格**：
-- 熱情但專業，像學長學姐般親切
-- 繁體中文，可適當夾雜粵語口語詞（如「唔使擔心」「記得準時」）
-- 每次回答控制在150字以內，重點突出
-- 善用 emoji 增加可讀性但不濫用
-- 如果問題超出運動會範圍，友好提示並引導回來
-
-**重要提醒**：提及數字時務必參照上方【實時數據】，不要憑空編造。`;
+    messages.push({ role: 'user', content: message });
 
     const apiReq = https.request(DEEPSEEK_BASE_URL, {
       method: 'POST',
@@ -300,12 +298,8 @@ AI_ROUTER.post('/ai-chat', optionalAuth, async (req, res) => {
 
     apiReq.write(JSON.stringify({
       model: 'deepseek-chat',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: context },
-        { role: 'user', content: message }
-      ],
-      max_tokens: 600,
+      messages: messages,
+      max_tokens: 1000,
       temperature: 0.7
     }));
     apiReq.end();

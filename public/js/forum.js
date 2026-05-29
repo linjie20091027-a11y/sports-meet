@@ -178,6 +178,7 @@ const Forum = {
   // ===== AI 助手 =====
   _initAIChat() {
     if (document.getElementById('ai-chat-panel')) return;
+    this._chatHistory = [];
     const html = `
       <div id="ai-chat-bubble" class="ai-chat-bubble" title="AI 助手小濠">
         <i class="fas fa-robot"></i>
@@ -246,6 +247,7 @@ const Forum = {
     if (!msg) return;
     const msgs = document.getElementById('ai-chat-messages');
     msgs.innerHTML += `<div class="ai-msg ai-msg-user">${App._escHtml(msg)}</div>`;
+    this._chatHistory.push({ role: 'user', content: msg });
     input.value = '';
     msgs.scrollTop = msgs.scrollHeight;
 
@@ -256,10 +258,11 @@ const Forum = {
     msgs.scrollTop = msgs.scrollHeight;
 
     try {
-      const r = await API.post('/ai/ai-chat', { message: msg });
+      const r = await API.post('/ai/ai-chat', { message: msg, history: this._chatHistory.slice(-10) });
       loading.remove();
       if (r.success) {
         msgs.innerHTML += `<div class="ai-msg ai-msg-bot">${r.data.reply.replace(/\n/g,'<br>')}</div>`;
+        this._chatHistory.push({ role: 'assistant', content: r.data.reply });
       } else {
         msgs.innerHTML += `<div class="ai-msg ai-msg-bot" style="color:var(--red)">${r.error}</div>`;
       }
