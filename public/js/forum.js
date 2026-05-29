@@ -139,7 +139,7 @@ const Forum = {
         const content = document.getElementById('forum-reply-text')?.value?.trim();
         if (!content) return App.showToast('請輸入回覆內容', 'warning');
         const r = await API.forum.reply(id, content);
-        if (r.success) { App.showToast('回覆成功', 'success'); this.renderPost(id); }
+        if (r.success) { App.showToast(App.user?.role==='admin'?'回覆成功':'回覆已提交，待管理員審核', 'success'); this.renderPost(id); }
         else App.showToast(r.error || '回覆失敗', 'error');
       });
     } catch (e) {

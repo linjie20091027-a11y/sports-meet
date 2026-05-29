@@ -158,552 +158,108 @@ const Admin = {
 
   // 生成空状态 HTML
   _emptyState(icon, title, desc) {
-    return '<div class="empty-state"><div class="empty-state__icon"><i class="' + (icon || 'fas fa-inbox') + '"></i></div><div class="empty-state__title">' + (title || '暂无数据') + '</div>' + (desc ? '<div class="empty-state__desc">' + desc + '</div>' : '') + '</div>';
+    return `<div class="empty-state"><div class="empty-state__icon"><i class="${icon}"></i></div><p class="empty-state__desc">${title||''}</p>${desc?`<p class="text-sm text-muted">${desc}</p>`:''}</div>`;
   },
 
-  // ==================== 控制台 ====================
-  async renderDashboard(container) {
-    container.innerHTML = '<div style="text-align:center;padding:60px;color:#9ca3af;">加载中...</div>';
+  // 论坛评论审核
+  async _showForumModeration() {
+    App.showLoading();
     try {
-      App.showLoading();
-      const dashData = await API.admin.getDashboard();
-      const logsData = await API.get('/admin/logs?limit=10');
+      const res = await API.get('/forum/pending-replies');
       App.hideLoading();
-
-      const d = dashData.data || dashData;
-      const totalUsers = d.total_users || d.totalUsers || 0;
-      const totalRegs = d.total_registrations || d.totalRegs || 0;
-      const totalEvents = d.total_events || d.totalEvents || 0;
-      const totalResults = d.total_results || d.totalResults || 0;
-
-      let html = '<div class="card-grid card-grid--4" style="margin-bottom:24px;">';
-      html += '<div class="stat-card"><div class="stat-card__icon stat-card__icon--blue"><i class="fas fa-users"></i></div><div class="stat-card__number">' + totalUsers + '</div><div class="stat-card__label">总用户数</div></div>';
-      html += '<div class="stat-card"><div class="stat-card__icon stat-card__icon--green"><i class="fas fa-clipboard-list"></i></div><div class="stat-card__number">' + totalRegs + '</div><div class="stat-card__label">总报名数</div></div>';
-      html += '<div class="stat-card"><div class="stat-card__icon stat-card__icon--orange"><i class="fas fa-running"></i></div><div class="stat-card__number">' + totalEvents + '</div><div class="stat-card__label">总项目数</div></div>';
-      html += '<div class="stat-card"><div class="stat-card__icon stat-card__icon--gold"><i class="fas fa-medal"></i></div><div class="stat-card__number">' + totalResults + '</div><div class="stat-card__label">总成绩数</div></div>';
-      html += '<div class="stat-card"><div class="stat-card__icon stat-card__icon--purple"><i class="fas fa-clock"></i></div><div class="stat-card__number">' + (d.pending_registrations || 0) + '</div><div class="stat-card__label">待审核报名</div></div>';
-      html += '<div class="stat-card"><div class="stat-card__icon stat-card__icon--teal"><i class="fas fa-calendar-check"></i></div><div class="stat-card__number">' + (d.today_schedules || 0) + '</div><div class="stat-card__label">今日赛程</div></div>';
-      html += '<div class="stat-card"><div class="stat-card__icon stat-card__icon--pink"><i class="fas fa-trophy"></i></div><div class="stat-card__number">' + (d.awarded_count || 0) + '</div><div class="stat-card__label">获奖人数</div></div>';
-      html += '<div class="stat-card"><div class="stat-card__icon stat-card__icon--indigo"><i class="fas fa-check-circle"></i></div><div class="stat-card__number">' + (d.published_results || 0) + '</div><div class="stat-card__label">已公示成绩</div></div>';
-      html += '</div>';
-
-      // 报名趋势图表
-      html += '<div class="card" style="margin-bottom:24px;">';
-      html += '<div class="card__header"><h3 class="card__title">报名趋势</h3></div>';
-      html += '<div class="card__body">';
-      const eventRegs = d.event_registrations || d.eventRegs || [];
-      if (eventRegs.length > 0) {
-        html += '<canvas id="chart-reg-trend" style="max-height:300px;"></canvas>';
+      const replies = res.data || [];
+      let html = '<div class="modal__header"><h3 class="modal__title">论坛评论审核</h3><button class="modal__close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>';
+      html += '<div class="modal__body">';
+      if (replies.length === 0) {
+        html += '<p class="text-muted text-center">没有待审核的评论</p>';
       } else {
-        html += this._emptyState('fas fa-chart-bar', '暂无报名数据');
+        html += replies.map(r => `
+          <div style="border:1px solid var(--border-light);padding:12px;margin-bottom:8px;border-radius:4px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+              <strong>${r.author_name} (${r.class_name||''})</strong>
+              <span class="text-sm text-muted">帖子：${r.post_title}</span>
+            </div>
+            <p style="margin-bottom:12px;color:var(--text2)">${r.content}</p>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-success btn-xs" onclick="Admin._approveReply(${r.id})">通过</button>
+              <button class="btn btn-danger btn-xs" onclick="Admin._rejectReply(${r.id})">驳回</button>
+            </div>
+          </div>
+        `).join('');
       }
-      html += '</div></div>';
+      html += '</div><div class="modal__footer"><button class="btn btn-secondary" onclick="App.hideModal()">关闭</button></div>';
+      App.showModal(html);
+    } catch(e) { App.hideLoading(); App.showToast(e.message,'error'); }
+  },
 
-      // 最近操作日志
-      html += '<div class="card">';
-      html += '<div class="card__header"><h3 class="card__title">最近操作日志</h3></div>';
-      html += '<div class="card__body"><div class="table-container"><table class="table table--striped"><thead><tr><th>时间</th><th>用户</th><th>操作</th><th>详情</th><th>IP</th></tr></thead><tbody>';
-      const logs = (logsData.data && logsData.data.list) ? logsData.data.list : (logsData.list || []);
-      if (logs.length > 0) {
-        logs.forEach(l => {
-          html += '<tr><td>' + (l.created_at || '') + '</td><td>' + (l.username || '') + '</td><td>' + (l.action || '') + '</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (l.detail || '') + '</td><td>' + (l.ip_address || l.ip || '') + '</td></tr>';
-        });
-      } else {
-        html += '<tr><td colspan="5">' + this._emptyState('fas fa-history', '暂无操作日志') + '</td></tr>';
-      }
-      html += '</tbody></table></div></div></div>';
+  async _approveReply(id) {
+    try { await API.put('/forum/replies/'+id+'/approve'); App.showToast('已通过','success'); this._showForumModeration(); }
+    catch(e) { App.showToast(e.message,'error'); }
+  },
 
-      container.innerHTML = html;
+  async _rejectReply(id) {
+    try { await API.put('/forum/replies/'+id+'/reject'); App.showToast('已驳回','success'); this._showForumModeration(); }
+    catch(e) { App.showToast(e.message,'error'); }
+  },
 
-      // 渲染图表
-      if (eventRegs.length > 0) {
-        const labels = eventRegs.map(e => e.name || e.event_name || '');
-        const data = eventRegs.map(e => e.count || e.reg_count || 0);
-        const ctx = document.getElementById('chart-reg-trend');
-        if (ctx) {
-          const chart = new Chart(ctx, {
-            type: 'bar',
-            data: {
-              labels: labels,
-              datasets: [{
-                label: '报名人数',
-                data: data,
-                backgroundColor: 'rgba(26, 115, 232, 0.6)',
-                borderColor: 'rgba(26, 115, 232, 1)',
-                borderWidth: 1
-              }]
-            },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              plugins: { legend: { display: false } },
-              scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
-            }
+  // AI 生成赛程
+  async _generateSchedule() {
+    App.showLoading();
+    try {
+      const res = await API.get('/ai/generate-schedule');
+      App.hideLoading();
+      if (!res.success) return App.showToast(res.error,'error');
+      const schedule = res.data;
+      
+      let html = '<div class="modal__header"><h3 class="modal__title">AI生成赛程表</h3><button class="modal__close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>';
+      html += '<div class="modal__body">';
+      const days = [
+        { key: 'day1_am', label: '第一天 上午 (8:00-12:00)' },
+        { key: 'day1_pm', label: '第一天 下午 (14:00-17:00)' },
+        { key: 'day2_am', label: '第二天 上午 (8:00-12:00)' },
+        { key: 'day2_pm', label: '第二天 下午 (14:00-17:00)' },
+      ];
+      days.forEach(day => {
+        const items = schedule[day.key] || [];
+        if (items.length) {
+          html += `<h4 style="margin:12px 0 8px;color:var(--red)">${day.label}</h4>`;
+          html += '<div class="table-container"><table class="table"><thead><tr><th>时间</th><th>项目</th><th>轮次</th><th>场地</th><th>参赛者</th></tr></thead><tbody>';
+          items.forEach(item => {
+            html += `<tr><td>${item.time||'-'}</td><td>${item.event||'-'}</td><td>${item.round||'-'}</td><td>${item.venue||'-'}</td><td>${Array.isArray(item.students)?item.students.join('、'):item.students||'-'}</td></tr>`;
           });
-          this._chartInstances.push(chart);
+          html += '</tbody></table></div>';
         }
-      }
-    } catch (e) {
-      App.hideLoading();
-      container.innerHTML = '<div class="empty-state"><div class="empty-state__icon"><i class="fas fa-exclamation-triangle"></i></div><div class="empty-state__title">加载失败</div><div class="empty-state__desc">' + e.message + '</div></div>';
-    }
-  },
-
-  // ==================== 用户管理 ====================
-  _usersPage: 1,
-  _usersLimit: 20,
-
-  async renderUsers(container) {
-    this._usersPage = 1;
-    container.innerHTML = `
-      <div class="card">
-        <div class="card__header">
-          <h3 class="card__title">用户管理</h3>
-          <div class="card__actions">
-            <button class="btn btn--primary btn--sm" id="btn-add-user"><i class="fas fa-plus"></i> 添加用户</button>
-            <button class="btn btn--outline btn--sm" id="btn-import-users"><i class="fas fa-upload"></i> 批量导入</button>
-            <button class="btn btn--outline btn--sm" id="btn-export-users"><i class="fas fa-download"></i> 导出</button>
-          </div>
-        </div>
-        <div class="card__body">
-          <div class="search-filter-bar" id="users-filter-bar"></div>
-          <div class="table-container" id="users-table-container"></div>
-          <div id="users-pagination"></div>
-        </div>
-      </div>
-    `;
-    this._renderUsersFilter(container);
-    this._loadUsers(container);
-    this._bindUsersEvents(container);
-  },
-
-  _renderUsersFilter(container) {
-    const bar = container.querySelector('#users-filter-bar');
-    bar.innerHTML = `
-      <input type="text" id="users-keyword" class="form__input" placeholder="搜索学号/姓名/邮箱..." style="max-width:240px;">
-      <select id="users-grade" class="form__select"><option value="">全部年级</option></select>
-      <select id="users-class" class="form__select"><option value="">全部班级</option></select>
-      <select id="users-status" class="form__select">
-        <option value="">全部状态</option>
-        <option value="active">正常</option>
-        <option value="disabled">已禁用</option>
-      </select>
-      <button class="btn btn--primary btn--sm" id="btn-users-search"><i class="fas fa-search"></i> 搜索</button>
-    `;
-    this._loadUsersGrades(container);
-    this._loadUsersClasses(container);
-  },
-
-  async _loadUsersGrades(container) {
-    try {
-      const res = await API.public.getGrades();
-      const grades = res.data && res.data.grades ? res.data.grades : (res.data || []);
-      const sel = container.querySelector('#users-grade');
-      grades.forEach(g => {
-        const opt = document.createElement('option');
-        opt.value = g.name || g.id;
-        opt.textContent = g.name;
-        sel.appendChild(opt);
       });
-    } catch (e) {}
+
+      // 导出Excel按钮
+      html += '<div style="margin-top:16px"><button class="btn btn-success btn-sm" onclick="Admin._exportScheduleExcel()">导出为Excel</button></div>';
+      html += '</div><div class="modal__footer"><button class="btn btn-secondary" onclick="App.hideModal()">关闭</button></div>';
+      
+      // 保存赛程数据供导出
+      this._currentSchedule = schedule;
+      App.showModal(html);
+    } catch(e) { App.hideLoading(); App.showToast(e.message,'error'); }
   },
 
-  async _loadUsersClasses(container) {
-    try {
-      const res = await API.public.getGrades();
-      const classes = res.data && res.data.classes ? res.data.classes : [];
-      const sel = container.querySelector('#users-class');
-      classes.forEach(c => {
-        const opt = document.createElement('option');
-        opt.value = c.name;
-        opt.textContent = c.name;
-        sel.appendChild(opt);
+  _exportScheduleExcel() {
+    if (!this._currentSchedule) return App.showToast('没有赛程数据');
+    const days = ['day1_am','day1_pm','day2_am','day2_pm'];
+    const labels = ['第一天 上午','第一天 下午','第二天 上午','第二天 下午'];
+    const rows = [['赛段','时间','项目','轮次','场地','参赛者']];
+    days.forEach((d,i) => {
+      (this._currentSchedule[d]||[]).forEach(item => {
+        rows.push([labels[i], item.time||'', item.event||'', item.round||'', item.venue||'', Array.isArray(item.students)?item.students.join('、'):'']);
       });
-    } catch (e) {}
-  },
-
-  _bindUsersEvents(container) {
-    container.querySelector('#btn-add-user').addEventListener('click', () => this._showUserModal(null, container));
-    container.querySelector('#btn-import-users').addEventListener('click', () => this._showUsersImport(container));
-    container.querySelector('#btn-export-users').addEventListener('click', () => this._exportUsers(container));
-    container.querySelector('#btn-users-search').addEventListener('click', () => {
-      this._usersPage = 1;
-      this._loadUsers(container);
     });
+    if (typeof XLSX !== 'undefined') {
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '赛程表');
+      XLSX.writeFile(wb, '运动会赛程表.xlsx');
+      App.showToast('导出成功','success');
+    } else { App.showToast('XLSX库未加载','error'); }
   },
-
-  async _loadUsers(container) {
-    try {
-      App.showLoading();
-      const keyword = container.querySelector('#users-keyword').value;
-      const grade = container.querySelector('#users-grade').value;
-      const className = container.querySelector('#users-class').value;
-      const status = container.querySelector('#users-status').value;
-      const params = { page: this._usersPage, limit: this._usersLimit };
-      if (keyword) params.keyword = keyword;
-      if (grade) params.grade = grade;
-      if (className) params.class_name = className;
-      if (status) params.status = status;
-
-      const res = await API.admin.getUsers(params);
-      const d = res.data || res;
-      const list = d.list || [];
-      const total = d.total || 0;
-      App.hideLoading();
-
-      let html = '';
-      if (list.length > 0) {
-        html = '<table class="table table--striped"><thead><tr><th>学号</th><th>姓名</th><th>邮箱</th><th>班级</th><th>年级</th><th>状态</th><th style="width:200px;">操作</th></tr></thead><tbody>';
-        list.forEach(u => {
-          const statusBadge = u.status === 'active' ? '<span class="badge badge--active">正常</span>' : '<span class="badge badge--inactive">已禁用</span>';
-          html += '<tr>';
-          html += '<td>' + (u.student_id || '-') + '</td>';
-          html += '<td>' + (u.name || '-') + '</td>';
-          html += '<td>' + (u.email || '-') + '</td>';
-          html += '<td>' + (u.class_name || '-') + '</td>';
-          html += '<td>' + (u.grade || '-') + '</td>';
-          html += '<td>' + statusBadge + '</td>';
-          html += '<td><div class="table__actions">';
-          html += '<button class="btn btn--ghost btn--xs btn-edit-user" data-id="' + u.id + '"><i class="fas fa-edit"></i></button>';
-          html += '<button class="btn btn--ghost btn--xs btn-reset-pwd" data-id="' + u.id + '"><i class="fas fa-key"></i></button>';
-          const toggleIcon = u.status === 'active' ? 'fa-ban' : 'fa-check';
-          const toggleTitle = u.status === 'active' ? '禁用' : '启用';
-          html += '<button class="btn btn--ghost btn--xs btn-toggle-user" data-id="' + u.id + '" data-status="' + u.status + '" title="' + toggleTitle + '"><i class="fas ' + toggleIcon + '"></i></button>';
-          html += '<button class="btn btn--ghost btn--xs btn-delete-user" data-id="' + u.id + '" style="color:#ef4444;"><i class="fas fa-trash"></i></button>';
-          html += '</div></td></tr>';
-        });
-        html += '</tbody></table>';
-      } else {
-        html = this._emptyState('fas fa-users', '暂无数据', '还没有用户数据');
-      }
-
-      const tableContainer = container.querySelector('#users-table-container');
-      tableContainer.innerHTML = html;
-
-      const pagInfo = this._paginate({ page: this._usersPage, total, limit: this._usersLimit, callback: (p) => { this._usersPage = p; this._loadUsers(container); } });
-      container.querySelector('#users-pagination').innerHTML = this._renderPagination(pagInfo, 'users-pagination');
-
-      // 绑定行操作按钮
-      tableContainer.querySelectorAll('.btn-edit-user').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          const id = btn.dataset.id;
-          try {
-            const res = await API.admin.getUser(id);
-            this._showUserModal(res.data || res, container);
-          } catch (e) { App.showToast(e.message, 'error'); }
-        });
-      });
-      tableContainer.querySelectorAll('.btn-reset-pwd').forEach(btn => {
-        btn.addEventListener('click', () => this._confirmResetPassword(btn.dataset.id, container));
-      });
-      tableContainer.querySelectorAll('.btn-toggle-user').forEach(btn => {
-        btn.addEventListener('click', () => this._toggleUserStatus(btn.dataset.id, btn.dataset.status, container));
-      });
-      tableContainer.querySelectorAll('.btn-delete-user').forEach(btn => {
-        btn.addEventListener('click', () => this._confirmDeleteUser(btn.dataset.id, container));
-      });
-    } catch (e) {
-      App.hideLoading();
-      App.showToast(e.message, 'error');
-    }
-  },
-
-  _showUserModal(user, container) {
-    const isEdit = !!user;
-    const title = isEdit ? '编辑用户' : '添加用户';
-    let html = '<div class="modal__header"><h3 class="modal__title">' + title + '</h3><button class="modal__close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>';
-    html += '<div class="modal__body"><div class="form">';
-    html += '<div class="form__group"><label class="form__label form__label--required">学号</label><input class="form__input" id="user-student-id" value="' + (isEdit ? (user.student_id || '') : '') + '"></div>';
-    html += '<div class="form__group"><label class="form__label form__label--required">姓名</label><input class="form__input" id="user-name" value="' + (isEdit ? (user.name || '') : '') + '"></div>';
-    html += '<div class="form__group"><label class="form__label form__label--required">邮箱</label><input class="form__input" id="user-email" value="' + (isEdit ? (user.email || '') : '') + '"></div>';
-    if (!isEdit) {
-      html += '<div class="form__group"><label class="form__label form__label--required">密码</label><input class="form__input" id="user-password" type="password" value="123456"></div>';
-    }
-    html += '<div class="form__group"><label class="form__label form__label--required">班级</label><input class="form__input" id="user-class" value="' + (isEdit ? (user.class_name || '') : '') + '"></div>';
-    html += '<div class="form__group"><label class="form__label form__label--required">年级</label><input class="form__input" id="user-grade" value="' + (isEdit ? (user.grade || '') : '') + '"></div>';
-    html += '<div class="form__group"><label class="form__label">用户名</label><input class="form__input" id="user-username" value="' + (isEdit ? (user.username || '') : '') + '"></div>';
-    html += '</div></div>';
-    html += '<div class="modal__footer">';
-    html += '<button class="btn btn--outline" onclick="App.hideModal()">取消</button>';
-    html += '<button class="btn btn--primary" id="btn-save-user" data-id="' + (isEdit ? user.id : '') + '">保存</button>';
-    html += '</div>';
-    App.showModal(html);
-
-    document.getElementById('btn-save-user').addEventListener('click', async () => {
-      const id = document.getElementById('btn-save-user').dataset.id;
-      const studentId = document.getElementById('user-student-id').value.trim();
-      const name = document.getElementById('user-name').value.trim();
-      const email = document.getElementById('user-email').value.trim();
-      const password = document.getElementById('user-password') ? document.getElementById('user-password').value.trim() : '';
-      const className = document.getElementById('user-class').value.trim();
-      const grade = document.getElementById('user-grade').value.trim();
-      const username = document.getElementById('user-username').value.trim();
-
-      if (!studentId || !name || !email || !className || !grade) {
-        App.showToast('请填写所有必填字段', 'warning');
-        return;
-      }
-      if (!isEdit && !password) {
-        App.showToast('请输入密码', 'warning');
-        return;
-      }
-      try {
-        App.showLoading();
-        if (isEdit) {
-          await API.admin.updateUser(id, { student_id: studentId, name, email, username, class_name: className, grade });
-          App.showToast('用户信息已更新', 'success');
-        } else {
-          await API.post('/admin/users', { student_id: studentId, name, email, password, class_name: className, grade, username: username || studentId });
-          App.showToast('用户添加成功', 'success');
-        }
-        App.hideModal();
-        App.hideLoading();
-        this._loadUsers(container);
-      } catch (e) {
-        App.hideLoading();
-        App.showToast(e.message, 'error');
-      }
-    });
-  },
-
-  _showUsersImport(container) {
-    let html = '<div class="modal__header"><h3 class="modal__title">批量导入用户</h3><button class="modal__close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>';
-    html += '<div class="modal__body">';
-    html += '<button type="button" class="btn btn-outline btn-sm mb-2" onclick="Admin._downloadTemplate(\'users\')"><i class="fas fa-download"></i> 下载Excel模板</button>';
-    html += '<div class="form"><div class="form__group"><label class="form__label">选择 Excel 文件</label><input type="file" id="users-import-file" class="form__input" accept=".xlsx,.xls,.csv"></div>';
-    html += '<div class="form__hint">表格需包含列：学号、姓名、班级、年级。密码默认为 123456。</div></div>';
-    html += '</div>';
-    html += '<div class="modal__footer">';
-    html += '<button class="btn btn--outline" onclick="App.hideModal()">取消</button>';
-    html += '<button class="btn btn--primary" id="btn-do-import-users">开始导入</button>';
-    html += '</div>';
-    App.showModal(html);
-
-    document.getElementById('btn-do-import-users').addEventListener('click', async () => {
-      const fileInput = document.getElementById('users-import-file');
-      if (!fileInput.files || !fileInput.files[0]) {
-        App.showToast('请选择文件', 'warning');
-        return;
-      }
-      const formData = new FormData();
-      formData.append('file', fileInput.files[0]);
-      try {
-        App.showLoading();
-        const res = await API.upload('/admin/users/batch', formData);
-        App.hideLoading();
-        App.hideModal();
-        App.showToast(res.message || '导入完成', 'success');
-        this._loadUsers(container);
-      } catch (e) {
-        App.hideLoading();
-        App.showToast(e.message, 'error');
-      }
-    });
-  },
-
-  async _exportUsers(container) {
-    try {
-      App.showLoading();
-      const res = await API.get('/admin/users/export');
-      const data = res.data || [];
-      App.hideLoading();
-      this._exportExcel(data, '用户名单');
-    } catch (e) {
-      App.hideLoading();
-      App.showToast(e.message, 'error');
-    }
-  },
-
-  _confirmResetPassword(id, container) {
-    App.showModal(
-      '<div class="confirm-dialog">' +
-      '<div class="confirm-dialog__icon confirm-dialog__icon--warning"><i class="fas fa-key"></i></div>' +
-      '<div class="confirm-dialog__title">确认重置密码？</div>' +
-      '<div class="confirm-dialog__desc">密码将被重置为 <strong>123456</strong></div>' +
-      '<div class="modal__footer" style="justify-content:center;">' +
-      '<button class="btn btn--outline" onclick="App.hideModal()">取消</button>' +
-      '<button class="btn btn--primary" id="btn-confirm-reset-pwd">确认重置</button>' +
-      '</div></div>'
-    );
-    document.getElementById('btn-confirm-reset-pwd').addEventListener('click', async () => {
-      try {
-        App.showLoading();
-        await API.admin.resetUserPassword(id);
-        App.hideLoading();
-        App.hideModal();
-        App.showToast('密码已重置为 123456', 'success');
-      } catch (e) {
-        App.hideLoading();
-        App.showToast(e.message, 'error');
-      }
-    });
-  },
-
-  async _toggleUserStatus(id, currentStatus, container) {
-    const newStatus = currentStatus === 'active' ? 'disabled' : 'active';
-    try {
-      App.showLoading();
-      await API.put('/admin/users/' + id + '/status', { status: newStatus });
-      App.hideLoading();
-      App.showToast(newStatus === 'active' ? '账号已启用' : '账号已禁用', 'success');
-      this._loadUsers(container);
-    } catch (e) {
-      App.hideLoading();
-      App.showToast(e.message, 'error');
-    }
-  },
-
-  _confirmDeleteUser(id, container) {
-    App.showModal(
-      '<div class="confirm-dialog">' +
-      '<div class="confirm-dialog__icon confirm-dialog__icon--danger"><i class="fas fa-trash"></i></div>' +
-      '<div class="confirm-dialog__title">确认删除用户？</div>' +
-      '<div class="confirm-dialog__desc">删除后不可恢复，该用户的所有报名和成绩数据也会被删除。</div>' +
-      '<div class="modal__footer" style="justify-content:center;">' +
-      '<button class="btn btn--outline" onclick="App.hideModal()">取消</button>' +
-      '<button class="btn btn--danger" id="btn-confirm-delete-user">确认删除</button>' +
-      '</div></div>'
-    );
-    document.getElementById('btn-confirm-delete-user').addEventListener('click', async () => {
-      try {
-        App.showLoading();
-        await API.admin.deleteUser(id);
-        App.hideLoading();
-        App.hideModal();
-        App.showToast('用户已删除', 'success');
-        this._loadUsers(container);
-      } catch (e) {
-        App.hideLoading();
-        App.showToast(e.message, 'error');
-      }
-    });
-  },
-
-  // ==================== 项目管理 ====================
-  async renderEvents(container) {
-    container.innerHTML = `
-      <div class="card">
-        <div class="card__header">
-          <h3 class="card__title">项目管理</h3>
-          <div class="card__actions">
-            <button class="btn btn--primary btn--sm" id="btn-add-event"><i class="fas fa-plus"></i> 添加项目</button>
-          </div>
-        </div>
-        <div class="card__body">
-          <div class="table-container" id="events-table-container"></div>
-        </div>
-      </div>
-    `;
-    this._loadEvents(container);
-    container.querySelector('#btn-add-event').addEventListener('click', () => this._showEventModal(null, container));
-  },
-
-  async _loadEvents(container) {
-    try {
-      App.showLoading();
-      const res = await API.get('/admin/events');
-      const list = res.data || [];
-      App.hideLoading();
-
-      const catMap = { track: '径赛', field: '田赛', team: '团体', other: '其他' };
-      const typeMap = { individual: '个人', relay: '接力' };
-      const genderMap = { male: '男子', female: '女子', mixed: '混合' };
-
-      let html = '';
-      if (list.length > 0) {
-        html = '<table class="table table--striped"><thead><tr><th>ID</th><th>名称</th><th>分类</th><th>类型</th><th>性别组别</th><th>人数上限</th><th>场地</th><th>状态</th><th>操作</th></tr></thead><tbody>';
-        list.forEach(e => {
-          const statusBadge = e.status === 'active' ? '<span class="badge badge--active">启用</span>' : '<span class="badge badge--inactive">停用</span>';
-          html += '<tr>';
-          html += '<td>' + e.id + '</td>';
-          html += '<td>' + e.name + '</td>';
-          html += '<td>' + (catMap[e.category] || e.category || '-') + '</td>';
-          html += '<td>' + (typeMap[e.event_type] || e.event_type || '-') + '</td>';
-          html += '<td>' + (genderMap[e.gender_group] || e.gender_group || '-') + '</td>';
-          html += '<td>' + (e.max_participants || '不限') + '</td>';
-          html += '<td>' + (e.venue || '-') + '</td>';
-          html += '<td>' + statusBadge + '</td>';
-          html += '<td><div class="table__actions">';
-          html += '<button class="btn btn--ghost btn--xs btn-edit-event" data-id="' + e.id + '"><i class="fas fa-edit"></i></button>';
-          html += '<button class="btn btn--ghost btn--xs btn-delete-event" data-id="' + e.id + '" data-name="' + e.name + '" style="color:#ef4444;"><i class="fas fa-trash"></i></button>';
-          html += '</div></td></tr>';
-        });
-        html += '</tbody></table>';
-      } else {
-        html = this._emptyState('fas fa-running', '暂无项目');
-      }
-
-      container.querySelector('#events-table-container').innerHTML = html;
-
-      container.querySelectorAll('.btn-edit-event').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const event = list.find(e => e.id == btn.dataset.id);
-          if (event) this._showEventModal(event, container);
-        });
-      });
-      container.querySelectorAll('.btn-delete-event').forEach(btn => {
-        btn.addEventListener('click', () => this._confirmDeleteEvent(btn.dataset.id, btn.dataset.name, container));
-      });
-    } catch (e) {
-      App.hideLoading();
-      App.showToast(e.message, 'error');
-    }
-  },
-
-  _showEventModal(event, container) {
-    const isEdit = !!event;
-    const title = isEdit ? '编辑项目' : '添加项目';
-    let html = '<div class="modal__header"><h3 class="modal__title">' + title + '</h3><button class="modal__close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>';
-    html += '<div class="modal__body"><div class="form">';
-    html += '<div class="form__group"><label class="form__label form__label--required">项目名称</label><input class="form__input" id="event-name" value="' + (isEdit ? (event.name || '') : '') + '"></div>';
-    html += '<div class="form__group"><label class="form__label">分类</label><select class="form__select" id="event-category">';
-    ['track:径赛', 'field:田赛', 'team:团体', 'other:其他'].forEach(o => {
-      const [val, label] = o.split(':');
-      const sel = isEdit && event.category === val ? ' selected' : '';
-      html += '<option value="' + val + '"' + sel + '>' + label + '</option>';
-    });
-    html += '</select></div>';
-    html += '<div class="form__group"><label class="form__label">类型</label><select class="form__select" id="event-type">';
-    ['individual:个人', 'relay:接力'].forEach(o => {
-      const [val, label] = o.split(':');
-      const sel = isEdit && event.event_type === val ? ' selected' : '';
-      html += '<option value="' + val + '"' + sel + '>' + label + '</option>';
-    });
-    html += '</select></div>';
-    html += '<div class="form__group"><label class="form__label">性别组别</label><select class="form__select" id="event-gender">';
-    ['male:男子', 'female:女子', 'mixed:混合'].forEach(o => {
-      const [val, label] = o.split(':');
-      const sel = isEdit && event.gender_group === val ? ' selected' : '';
-      html += '<option value="' + val + '"' + sel + '>' + label + '</option>';
-    });
-    html += '</select></div>';
-    html += '<div class="form__group"><label class="form__label">人数上限</label><input class="form__input" id="event-max" type="number" value="' + (isEdit ? (event.max_participants || '') : '') + '" placeholder="0 表示不限"></div>';
-    html += '<div class="form__group"><label class="form__label">比赛规则</label><textarea class="form__textarea" id="event-rules" rows="3">' + (isEdit ? (event.rules || '') : '') + '</textarea></div>';
-    html += '<div class="form__group"><label class="form__label">场地</label><input class="form__input" id="event-venue" value="' + (isEdit ? (event.venue || '') : '') + '"></div>';
-    if (isEdit) {
-      html += '<div class="form__group"><label class="form__label">状态</label><select class="form__select" id="event-status">';
-      html += '<option value="active"' + (event.status === 'active' ? ' selected' : '') + '>启用</option>';
-      html += '<option value="inactive"' + (event.status === 'inactive' ? ' selected' : '') + '>停用</option>';
-      html += '</select></div>';
-    }
-    html += '</div></div>';
-    html += '<div class="modal__footer">';
-    html += '<button class="btn btn--outline" onclick="App.hideModal()">取消</button>';
-    html += '<button class="btn btn--primary" id="btn-save-event" data-id="' + (isEdit ? event.id : '') + '">保存</button>';
-    html += '</div>';
-    App.showModal(html);
-
-    document.getElementById('btn-save-event').addEventListener('click', async () => {
-      const id = document.getElementById('btn-save-event').dataset.id;
-      const data = {
-        name: document.getElementById('event-name').value.trim(),
-        category: document.getElementById('event-category').value,
-        event_type: document.getElementById('event-type').value,
-        gender_group: document.getElementById('event-gender').value,
-        max_participants: parseInt(document.getElementById('event-max').value) || 0,
-        rules: document.getElementById('event-rules').value.trim(),
-        venue: document.getElementById('event-venue').value.trim()
-      };
+};
       if (isEdit) {
         data.status = document.getElementById('event-status').value;
       }

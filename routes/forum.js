@@ -308,6 +308,100 @@ AI_ROUTER.post('/ai-chat', optionalAuth, async (req, res) => {
   }
 });
 
+// AI 自動生成賽程
+AI_ROUTER.get('/generate-schedule', authMiddleware, adminOnly, async (req, res) => {
+  try {
+    loadApiKey();
+    if (!DEEPSEEK_API_KEY) return res.json({ success: false, error: 'AI 尚未配置 API Key' });
+
+    const db = getDb();
+    const https = require('https');
+
+    // 获取所有已通过报名的数据
+    const registrations = db.prepare(`
+      SELECT r.event_id, e.name as event_name, e.category, e.event_type, e.gender_group,
+             e.max_participants, u.id as user_id, u.name as user_name, u.class_name
+      FROM registrations r
+      JOIN events e ON r.event_id = e.id
+      JOIN users u ON r.user_id = u.id
+      WHERE r.status = 'approved'
+      ORDER BY e.sort_order, u.class_name
+    `).all();
+
+    if (!registrations.length) return res.json({ success: false, error: '暫無已通過審核的報名記錄' });
+
+    // 构建数据摘要
+    const events = {};
+    registrations.forEach(r => {
+      if (!events[r.event_id]) {
+        events[r.event_id] = {
+          name: r.event_name, category: r.category, type: r.event_type,
+          gender: r.gender_group, max: r.max_participants, students: []
+        };
+      }
+      events[r.event_id].students.push({ name: r.user_name, class: r.class_name, id: r.user_id });
+    });
+
+    let eventSummary = '';
+    Object.values(events).forEach(e => {
+      eventSummary += `\n項目：${e.name}（${e.type==='team'?'集體':'個人'}，${e.gender==='male'?'男子':e.gender==='female'?'女子':'混合'}）| 參賽人數：${e.students.length} | 參賽者：${e.students.map(s=>s.name+'('+s.class+')').join('、')}`;
+    });
+
+    const prompt = `你是澳門濠江中學運動會的賽程編排專家。請根據以下報名數據，生成一份合理的比賽時間表。
+
+【編排要求】
+1. 運動會日期：第一天上午(8:00-12:00)、下午(14:00-17:00)；第二天上午(8:00-12:00)、下午(14:00-17:00)
+2. 徑賽項目安排在上午（天氣較涼爽），田賽和集體項目安排在下午
+3. 每個項目按參賽人數分組（每組6-8人），計算需要的輪次
+4. 同一運動員不應同時參加兩個項目（根據參賽者名單避免衝突）
+5. 100米、200米等短項目先進行預賽再決賽；長跑項目直接決賽
+6. 接力項目安排在每天最後時段
+7. 請用純JSON格式返回，格式如下：
+
+{
+  "day1_am": [{"time":"08:00","event":"100米男子預賽","venue":"田徑場","round":"預賽第1組","students":["姓名(班級)"]}],
+  "day1_pm": [...],
+  "day2_am": [...],
+  "day2_pm": [...]
+}
+
+只返回JSON，不要任何其他文字。
+
+【報名數據】
+${eventSummary}`;
+
+    const apiReq = https.request(DEEPSEEK_BASE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${DEEPSEEK_API_KEY}` }
+    }, (apiRes) => {
+      let body = '';
+      apiRes.on('data', c => body += c);
+      apiRes.on('end', () => {
+        try {
+          const result = JSON.parse(body);
+          const content = result.choices?.[0]?.message?.content || '';
+          // 提取JSON
+          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const schedule = JSON.parse(jsonMatch[0]);
+            res.json({ success: true, data: schedule });
+          } else {
+            res.json({ success: false, error: 'AI 生成格式異常', raw: content.substring(0, 200) });
+          }
+        } catch (e) {
+          res.json({ success: false, error: '解析AI回應失敗：' + e.message });
+        }
+      });
+    });
+
+    apiReq.on('error', (e) => res.json({ success: false, error: 'AI 服務暫不可用' }));
+    apiReq.write(JSON.stringify({ model: 'deepseek-chat', messages: [{ role: 'user', content: prompt }], max_tokens: 4000, temperature: 0.3 }));
+    apiReq.end();
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // 檢查 API Key 狀態
 AI_ROUTER.get('/ai-status', (req, res) => {
   res.json({ success: true, data: { configured: !!DEEPSEEK_API_KEY } });
