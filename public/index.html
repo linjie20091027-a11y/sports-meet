@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>运动會管理系統｜澳門濠江中學</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="#/" class="nav-logo">
+        <div><small>澳門濠江中學</small>運動會管理系統</div>
+      </a>
+      <ul class="nav-links" id="nav-links">
+        <li><a href="#/" class="nav-link active">首頁</a></li>
+        <li><a href="#/events" class="nav-link">賽事項目</a></li>
+        <li><a href="#/results" class="nav-link">成績公示</a></li>
+        <li><a href="#/announcements" class="nav-link">公告通知</a></li>
+      </ul>
+      <div class="nav-right">
+        <div class="nav-search">
+          <input type="text" id="nav-search-input" placeholder="搜尋...">
+          <button id="nav-search-btn"><i class="fas fa-search"></i></button>
+        </div>
+        <div id="auth-btns">
+          <a href="#/login" class="btn btn-outline btn-sm" style="border-color:rgba(255,255,255,.4);color:#fff">登入</a>
+          <a href="#/register" class="btn btn-outline btn-sm" style="border-color:rgba(255,255,255,.4);color:#fff">註冊</a>
+        </div>
+        <div id="user-menu" class="hidden" style="display:flex;align-items:center;gap:8px">
+          <a href="#" id="notify-bell" class="notify-bell hidden" title="通知"><i class="fas fa-bell"></i><span class="notify-badge" id="notify-badge">0</span></a>
+          <span class="user-name" id="user-name-display"></span>
+          <a href="#/admin" id="menu-admin-link" class="btn btn-outline btn-sm hidden" style="border-color:rgba(255,255,255,.4);color:#fff">管理後台</a>
+          <a href="#/student" id="menu-student-link" class="btn btn-outline btn-sm hidden" style="border-color:rgba(255,255,255,.4);color:#fff">個人中心</a>
+          <a href="#" id="menu-logout" class="btn btn-outline btn-sm" style="border-color:rgba(255,255,255,.4);color:#fff">退出</a>
+        </div>
+        <button class="nav-toggle" id="nav-toggle"><i class="fas fa-bars"></i></button>
+      </div>
+    </div>
+  </nav>
+
+  <main id="app-main">
+    <div id="page-home" class="page">
+      <section class="hero-banner">
+        <div class="hero-content">
+          <h1 class="hero-title"><small>澳門濠江中學</small>第三十屆田徑運動會</h1>
+          <div class="hero-line"></div>
+          <p class="hero-subtitle">SPEED · STRENGTH · HONOR</p>
+          <div class="countdown">
+            <div class="countdown-item"><div class="countdown-num" id="cd-days">0</div><span>天</span></div>
+            <div class="countdown-item"><div class="countdown-num" id="cd-hours">0</div><span>時</span></div>
+            <div class="countdown-item"><div class="countdown-num" id="cd-mins">0</div><span>分</span></div>
+            <div class="countdown-item"><div class="countdown-num" id="cd-secs">0</div><span>秒</span></div>
+          </div>
+          <p class="hero-date" id="hero-date"></p>
+        </div>
+      </section>
+      <section class="container"><div class="stats-grid"> <div class="stat-card"><i class="fas fa-running"></i><div class="stat-num" id="stat-events">-</div><div class="stat-label">比賽項目</div></div> <div class="stat-card"><i class="fas fa-users"></i><div class="stat-num" id="stat-regs">-</div><div class="stat-label">報名人次</div></div> <div class="stat-card"><i class="fas fa-calendar-check"></i><div class="stat-num" id="stat-done">-</div><div class="stat-label">已完成賽事</div></div> <div class="stat-card"><i class="fas fa-trophy"></i><div class="stat-num" id="stat-awards">-</div><div class="stat-label">獲獎人數</div></div> </div></section>
+      <section class="container"><div class="content-layout"><div class="content-main">
+        <div class="card mb-3"><div class="card-header"><h3>賽事項目總覽</h3><a href="#/events" class="btn-text">全部項目 &raquo;</a></div><div class="card-body" id="home-events"></div></div>
+        <div class="home-grid"><div class="card"><div class="card-header"><h3>最新公告</h3><a href="#/announcements" class="btn-text">更多 &raquo;</a></div><div class="card-body" id="home-announcements"></div></div><div class="card"><div class="card-header"><h3>最新成績</h3><a href="#/results" class="btn-text">更多 &raquo;</a></div><div class="card-body" id="home-results"></div></div></div>
+      </div><div class="content-sidebar">
+        <div class="sidebar-card"><h4>報名須知</h4><ul><li>每人最多報名3個項目</li><li>報名後需管理員審核</li><li>集體項目需組隊參加</li><li>比賽前30分鐘檢錄</li></ul></div>
+      </div></div></section>
+    </div>
+    <div id="page-login" class="page hidden"></div>
+    <div id="page-register" class="page hidden"></div>
+    <div id="page-events" class="page hidden"><div class="container" style="margin-top:80px"><div class="section-title">賽事項目<small>瀏覽所有比賽項目</small></div><div class="filter-bar" id="events-filter"></div><div class="card-grid" id="events-list"></div></div></div>
+    <div id="page-results" class="page hidden"><div class="container" style="margin-top:80px"><div class="section-title">成績公示<small>查看所有項目成績與排名</small></div><div class="filter-bar" id="results-filter"></div><div id="results-table"></div></div></div>
+    <div id="page-announcements" class="page hidden"><div class="container" style="margin-top:80px"><div class="section-title">公告通知<small>賽事通知 · 報名提醒 · 成績公示</small></div><div class="filter-bar" id="announcements-filter"></div><div id="announcements-list"></div></div></div>
+    <div id="page-admin" class="page hidden"></div>
+    <div id="page-student" class="page hidden"></div>
+  </main>
+
+  <div id="toast-container"></div>
+  <div id="modal-overlay" class="modal-overlay hidden"><div class="modal" id="modal-content"></div></div>
+  <div id="search-overlay" class="modal-overlay hidden"><div class="modal modal-lg" id="search-results"></div></div>
+  <div id="loading-overlay" class="hidden"><div class="spinner"></div></div>
+
+  <footer class="footer"><div class="footer-line"></div><p style="color:rgba(255,255,255,.7);font-weight:600">澳門濠江中學</p><p>第三十屆田徑運動會管理系統 &copy; 2026</p></footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
+  <script src="/js/api.js" defer></script>
+  <script src="/js/auth.js" defer></script>
+  <script src="/js/student.js" defer></script>
+  <script src="/js/admin.js" defer></script>
+  <script src="/js/app.js" defer></script>
+</body>
+</html>

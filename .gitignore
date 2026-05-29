@@ -1,0 +1,6 @@
+node_modules/
+database/sports_meet.db
+uploads/*
+!uploads/.gitkeep
+.env
+*.log
