@@ -40,6 +40,13 @@ const Auth = {
     cap.addEventListener('click', () => this._refreshCaptcha('login-captcha', 'login-captcha-img'));
     cap.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._refreshCaptcha('login-captcha', 'login-captcha-img'); } });
     document.getElementById('forgot-link').addEventListener('click', (e) => { e.preventDefault(); this._showForgotPassword(); });
+    const loginEmail = document.getElementById('login-email');
+    loginEmail.addEventListener('blur', () => {
+      let val = loginEmail.value.trim();
+      if (val && !val.includes('@')) {
+        loginEmail.value = val + '@hkms.hktedu.com';
+      }
+    });
   },
 
   renderRegister() {
@@ -112,6 +119,13 @@ const Auth = {
     const cap = document.getElementById('reg-captcha-img');
     cap.addEventListener('click', () => this._refreshCaptcha('reg-captcha', 'reg-captcha-img'));
     cap.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this._refreshCaptcha('reg-captcha', 'reg-captcha-img'); } });
+    const regEmail = document.getElementById('reg-email');
+    regEmail.addEventListener('blur', () => {
+      let val = regEmail.value.trim();
+      if (val && !val.includes('@')) {
+        regEmail.value = val + '@hkms.hktedu.com';
+      }
+    });
   },
 
   _refreshCaptcha(inputId, imgId) {
@@ -230,6 +244,13 @@ const Auth = {
         <button type="button" class="btn btn-primary" id="forgot-submit">取得重置令牌</button>
       </div>
     `);
+    const forgotEmail = document.getElementById('forgot-email');
+    forgotEmail.addEventListener('blur', () => {
+      let val = forgotEmail.value.trim();
+      if (val && !val.includes('@')) {
+        forgotEmail.value = val + '@hkms.hktedu.com';
+      }
+    });
     document.getElementById('forgot-submit').addEventListener('click', async () => {
       const email = document.getElementById('forgot-email')?.value?.trim();
       if (!email || !/^[a-zA-Z0-9._%+-]+@hkms\.hktedu\.com$/i.test(email)) {
