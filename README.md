@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 <p align="center">
   <img src="https://img.shields.io/badge/濠江中學-運動會管理系統-A80000?style=for-the-badge" alt="濠江中學運動會管理系統">
 </p>
@@ -152,3 +153,6 @@ git push origin feature/新功能
   <br>
   <sub>Rua do Comandante João Belo, Macau · 2026</sub>
 </p>
+=======
+
+>>>>>>> 5d734c25e9a5deed18bba6a1e1c2dd14ffc117a1
