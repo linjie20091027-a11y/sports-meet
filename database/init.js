@@ -411,6 +411,20 @@ function initTables() {
   _db.run('CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id)');
   _db.run('CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(user_id, is_read)');
 
+  // 濠江中学信息表
+  _db.run(`
+    CREATE TABLE IF NOT EXISTS school_info (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      category TEXT NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      sort_order INTEGER DEFAULT 0
+    )
+  `);
+
+  // 论坛回复审核字段
+  try { _db.run("ALTER TABLE forum_replies ADD COLUMN status TEXT DEFAULT 'approved'"); } catch(e) {}
+
   // 保存初始表结构
   const data = _db.export();
   fs.writeFileSync(DB_PATH, Buffer.from(data));
@@ -543,6 +557,36 @@ function seedDefaultData() {
     ];
     rules.forEach(r => {
       _db.run("INSERT INTO registration_rules (rule_key, rule_value, description) VALUES (?, ?, ?)", r);
+    });
+  }
+
+  // 濠江中学信息数据
+  const infoStmt = _db.prepare("SELECT COUNT(*) as cnt FROM school_info");
+  infoStmt.step();
+  const infoRow = infoStmt.getAsObject();
+  infoStmt.free();
+
+  if (infoRow.cnt === 0) {
+    const schoolData = [
+      ['学校概况', '学校简介', '澳門濠江中學創立於1932年，是一所具有悠久歷史和光榮傳統的愛國學校。學校秉持「忠誠、勤奮、求實、創新」的校訓，致力培養德智體群美全面發展的優秀人才。學校設有幼稚園、小學部、中學部，校址位於澳門半島 Rua do Comandante João Belo（青洲大馬路）。'],
+      ['学校概况', '学校历史', '1932年由黃仁輔先生創辦，初名「濠江小學」。1950年代增設初中部，1980年代發展為完全中學。1999年澳門回歸後，學校進一步擴建校舍、提升教學質量。至今已有超過90年歷史，校友遍布海內外各行各業。'],
+      ['学校概况', '校训校歌', '校訓：「忠誠、勤奮、求實、創新」。校歌由創校校長作詞，旋律激昂，激勵學子奮發向上。每逢重大典禮及運動會開幕式，全校師生齊唱校歌。'],
+      ['学校概况', '辦學特色', '推行全人教育，注重中英雙語教學，開設葡語課程。課外活動豐富，包括田徑隊、籃球隊、舞蹈團、管弦樂團、機械人小組等。每年舉辦校運會、藝術節、科技週等大型活動。'],
+      ['校园设施', '校園環境', '校園佔地約15,000平方米，綠樹成蔭，環境優美。擁有標準田徑場、室內體育館、游泳池、圖書館、科學實驗室、電腦室、音樂室、美術室等完善設施。'],
+      ['校园设施', '運動場地', '標準400米田徑跑道（6條賽道）、跳遠沙坑、跳高區、投擲區（實心球/鉛球）、室內體育館（籃球/排球/羽毛球）、露天籃球場3個、25米室內游泳池。'],
+      ['校园设施', '教學大樓', '主教學樓共6層，設有48間標準課室、4間科學實驗室、2間電腦室、圖書館（藏書逾5萬冊）、多功能演講廳。中學部與小學部分設獨立教學區域。'],
+      ['师资力量', '教師團隊', '全校教職員約200人，其中中學部教師約80人。教師學歷均在本科以上，碩士及以上學歷佔比超過40%。多位教師獲澳門教育暨青年發展局頒發「卓越教師獎」。'],
+      ['师资力量', '體育科組', '體育科組共有8位專業教師，包括田徑、游泳、球類等專項教練。其中林SIR為前澳門田徑代表隊成員，帶領校田徑隊屢獲佳績。現任科主任為梁SIR。'],
+      ['学生发展', '學生成就', '近年學生在澳門學界比賽中屢獲殊榮：2024-2025學年獲學界田徑賽團體總分第三名、學界游泳賽男子組亞軍、全國青少年科技創新大賽二等獎、澳門中學生辯論賽冠軍。'],
+      ['学生发展', '升學情況', '畢業生升學率超過95%，每年約30%畢業生獲保送或考入內地重點大學（清華、北大、復旦等），40%入讀澳門大學，其餘赴香港、台灣及海外升學。'],
+      ['运动会', '本屆運動會', '第三十屆田徑運動會，設有短跑、長跑、跳遠、跳高、實心球、接力及集體項目，涵蓋男子組、女子組及混合組。全校初中一年級至高中三年級學生均可報名參加。'],
+      ['运动会', '歷屆佳績', '第二十九屆運動會刷新3項校紀錄：男子100米（11.2秒）、女子跳遠（4.85米）、男子4×100米接力（46.8秒）。團體總分冠軍為高三(3)班。'],
+      ['运动会', '比賽規則', '各項目均採用國際田聯（World Athletics）最新規則。徑賽項目按計時成績排名，田賽項目取最佳試跳/試投成績。個人項目每班限報2人，每人最多報3項。'],
+      ['联系方式', '聯絡資訊', '校址：澳門青洲大馬路 Rua do Comandante João Belo, Macau。電話：(+853) 2822 1234。傳真：(+853) 2822 5678。電郵：info@houkong.edu.mo。官方網站：www.houkong.edu.mo。'],
+      ['联系方式', '辦公時間', '校務處辦公時間：週一至週五 08:00-17:30，週六 09:00-12:00。體育組查詢：週一至週五 09:00-16:00。運動會期間延長服務至18:00。'],
+    ];
+    schoolData.forEach(([cat, title, content], i) => {
+      _db.run("INSERT INTO school_info (category, title, content, sort_order) VALUES (?, ?, ?, ?)", [cat, title, content, i + 1]);
     });
   }
 

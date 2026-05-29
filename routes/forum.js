@@ -57,13 +57,14 @@ router.get('/posts/:id', optionalAuth, (req, res) => {
     db.prepare('UPDATE forum_posts SET view_count = view_count + 1 WHERE id = ?').run(req.params.id);
 
     const replies = db.prepare(`
-      SELECT r.id, r.content, r.created_at, r.user_id,
+      SELECT r.id, r.content, r.created_at, r.user_id, r.status,
         u.name as author_name, u.class_name, u.role as author_role
       FROM forum_replies r
       JOIN users u ON r.user_id = u.id
       WHERE r.post_id = ? AND r.is_deleted = 0
+        AND (r.status = 'approved' OR r.user_id = ?)
       ORDER BY r.created_at ASC
-    `).all(req.params.id);
+    `).all(req.params.id, req.user?.id || 0);
 
     res.json({ success: true, data: { post, replies } });
   } catch (e) {
@@ -106,13 +107,17 @@ router.post('/posts/:id/replies', authMiddleware, (req, res) => {
     if (!post) return res.status(404).json({ success: false, error: '帖子不存在' });
 
     db.prepare(
-      'INSERT INTO forum_replies (post_id, user_id, content) VALUES (?, ?, ?)'
-    ).run(post.id, req.user.id, content.trim());
+      'INSERT INTO forum_replies (post_id, user_id, content, status) VALUES (?, ?, ?, ?)'
+    ).run(post.id, req.user.id, content.trim(), req.user.role === 'admin' ? 'approved' : 'pending');
 
-    db.prepare(`
-      UPDATE forum_posts SET reply_count = reply_count + 1,
-        updated_at = datetime('now','localtime') WHERE id = ?
-    `).run(post.id);
+    if (req.user.role === 'admin') {
+      db.prepare(`
+        UPDATE forum_posts SET reply_count = reply_count + 1,
+          updated_at = datetime('now','localtime') WHERE id = ?
+      `).run(post.id);
+    }
+
+    const msg = req.user.role === 'admin' ? '回覆成功' : '回覆已提交，待管理員審核後顯示';
 
     if (post.user_id !== req.user.id) {
       createNotification(db, post.user_id, {
@@ -235,15 +240,18 @@ AI_ROUTER.post('/ai-chat', optionalAuth, async (req, res) => {
       return `${e.name}（${gender}${type}，場地：${e.venue||'待定'}）`;
     }).join('；');
 
-    const context = `【當前運動會實時數據】
+    const context = `【澳門濠江中學資料庫】
+建校於1932年，校訓「忠誠、勤奮、求實、創新」。位於澳門青洲大馬路，設有幼稚園、小學部、中學部。校園約15,000平方米，擁有標準田徑場、室內體育館、游泳池、圖書館等設施。全校約200名教職員，體育科組8位專業教師。畢業生升學率超95%。
+校址：Rua do Comandante João Belo, Macau。電話：(+853) 2822 1234。官網：www.houkong.edu.mo。
+
+【當前運動會實時數據】
 - 運動會名稱：${meet.name||'學校運動會'}
 - 舉辦日期：${meet.start_date||'待定'} 至 ${meet.end_date||'待定'}
 - 報名狀態：${meet.registration_open?'已開放':'已關閉'}
 - 比賽項目總數：${events.length}個
 - 已報名人次：${totalRegs}，待審核：${pendingRegs}
 - 已發布賽程：${schedules}場
-- 每人限報：${maxEvents}個項目
-- 參賽項目列表：${eventList}`;
+- 每人限報：${maxEvents}個項目`;
 
     const systemPrompt = `你是澳門濠江中學運動會的官方AI助手「小濠」🏅。你的設定：
 
@@ -309,6 +317,56 @@ AI_ROUTER.post('/ai-chat', optionalAuth, async (req, res) => {
 // 檢查 API Key 狀態
 AI_ROUTER.get('/ai-status', (req, res) => {
   res.json({ success: true, data: { configured: !!DEEPSEEK_API_KEY } });
+});
+
+// ===== 管理員審核回覆 =====
+router.get('/pending-replies', authMiddleware, adminOnly, (req, res) => {
+  try {
+    const db = getDb();
+    const replies = db.prepare(`
+      SELECT r.id, r.content, r.created_at, r.status,
+        u.name as author_name, u.class_name,
+        p.title as post_title, p.id as post_id
+      FROM forum_replies r
+      JOIN users u ON r.user_id = u.id
+      JOIN forum_posts p ON r.post_id = p.id
+      WHERE r.is_deleted = 0 AND r.status = 'pending'
+      ORDER BY r.created_at ASC
+    `).all();
+    res.json({ success: true, data: replies });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+router.put('/replies/:id/approve', authMiddleware, adminOnly, (req, res) => {
+  try {
+    const db = getDb();
+    const reply = db.prepare('SELECT * FROM forum_replies WHERE id = ?').get(req.params.id);
+    if (!reply) return res.status(404).json({ success: false, error: '回覆不存在' });
+    db.prepare("UPDATE forum_replies SET status = 'approved' WHERE id = ?").run(req.params.id);
+    db.prepare("UPDATE forum_posts SET reply_count = reply_count + 1, updated_at = datetime('now','localtime') WHERE id = ?").run(reply.post_id);
+    createNotification(db, reply.user_id, {
+      type: 'success', title: '論壇回覆已通過審核',
+      content: '您在論壇的回覆已通過管理員審核，現已公開顯示。',
+      target_url: '#/forum/' + reply.post_id
+    });
+    res.json({ success: true, message: '已通過' });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+router.put('/replies/:id/reject', authMiddleware, adminOnly, (req, res) => {
+  try {
+    const db = getDb();
+    const reply = db.prepare('SELECT * FROM forum_replies WHERE id = ?').get(req.params.id);
+    if (!reply) return res.status(404).json({ success: false, error: '回覆不存在' });
+    db.prepare("UPDATE forum_replies SET status = 'rejected' WHERE id = ?").run(req.params.id);
+    res.json({ success: true, message: '已駁回' });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 module.exports = { forumRouter: router, aiRouter: AI_ROUTER };
