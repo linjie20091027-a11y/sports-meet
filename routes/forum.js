@@ -297,7 +297,7 @@ AI_ROUTER.post('/ai-chat', optionalAuth, async (req, res) => {
     });
 
     apiReq.write(JSON.stringify({
-      model: 'deepseek-chat',
+      model: 'deepseek-v4-pro',
       messages: messages,
       max_tokens: 1000,
       temperature: 0.7

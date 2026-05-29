@@ -193,6 +193,7 @@ const Admin = {
       html += '<div class="card__body" style="display:flex;gap:10px;flex-wrap:wrap">';
       html += '<button class="btn btn-primary btn-sm" onclick="Admin._showForumModeration()"><i class="fas fa-comments"></i> 论坛评论审核</button>';
       html += '<button class="btn btn-success btn-sm" onclick="Admin._generateSchedule()"><i class="fas fa-calendar"></i> AI生成赛程表</button>';
+      html += '<button class="btn btn-warning btn-sm" onclick="Admin._generateAward()"><i class="fas fa-medal"></i> AI生成获奖证书</button>';
       html += '<a href="#/forum" class="btn btn-outline btn-sm"><i class="fas fa-robot"></i> 打开论坛AI助手</a>';
       html += '</div></div>';
 
@@ -2165,5 +2166,80 @@ const Admin = {
     days.forEach((d,i) => { (this._currentSchedule[d]||[]).forEach(item => { rows.push([labels[i],item.time||'',item.event||'',item.round||'',item.venue||'',Array.isArray(item.students)?item.students.join('、'):'']); }); });
     if (typeof XLSX !== 'undefined') { const ws=XLSX.utils.aoa_to_sheet(rows);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'赛程表');XLSX.writeFile(wb,'运动会赛程表.xlsx');App.showToast('导出成功','success'); }
     else App.showToast('XLSX库未加载','error');
+  },
+
+  // ==== AI 生成获奖证书 ====
+  async _generateAward() {
+    App.showLoading();
+    try {
+      const res = await API.get('/ai/generate-schedule');
+      App.hideLoading();
+      if (!res.success) return App.showToast(res.error,'error');
+      const schedule = res.data;
+
+      let html = '<div class="modal__header"><h3 class="modal__title">AI生成获奖证书</h3><button class="modal__close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>';
+      html += '<div class="modal__body">';
+      html += '<p class="text-sm text-muted mb-2">输入获奖信息，AI 将自动生成证书内容</p>';
+      html += '<div class="form-group"><label>获奖项目</label><input type="text" id="award-event" class="form__input" placeholder="如：100米男子組"></div>';
+      html += '<div class="form-group"><label>获奖者</label><input type="text" id="award-name" class="form__input" placeholder="如：张三"></div>';
+      html += '<div class="form-row"><div class="form-group"><label>奖项</label><select id="award-level" class="form__select"><option>一等奖</option><option>二等奖</option><option>三等奖</option><option>优秀奖</option></select></div><div class="form-group"><label>班级</label><input type="text" id="award-class" class="form__input" placeholder="如：高一(1)班"></div></div>';
+      html += '<button class="btn btn-primary btn-sm" onclick="Admin._doGenerateAward()">生成证书</button>';
+      html += '<div id="award-result" style="margin-top:16px"></div>';
+      html += '</div><div class="modal__footer"><button class="btn btn-secondary" onclick="App.hideModal()">关闭</button></div>';
+      App.showModal(html);
+    } catch(e) { App.hideLoading(); App.showToast(e.message,'error'); }
+  },
+
+  async _doGenerateAward() {
+    const event = document.getElementById('award-event')?.value?.trim();
+    const name = document.getElementById('award-name')?.value?.trim();
+    const level = document.getElementById('award-level')?.value;
+    const cls = document.getElementById('award-class')?.value?.trim();
+    if (!event || !name) return App.showToast('请填写项目名称和获奖者','warning');
+
+    const result = document.getElementById('award-result');
+    result.innerHTML = '<div class="text-center"><div class="spinner"></div><p class="text-sm text-muted mt-1">AI生成中...</p></div>';
+
+    try {
+      const prompt = `請為澳門濠江中學第三十屆田徑運動會生成一份獲獎證書內容。使用以下格式（繁體中文，正式莊重）：
+
+─────────────────────────────
+          澳門濠江中學
+      第三十屆田徑運動會
+         獲 獎 證 書
+─────────────────────────────
+
+    茲證明 ${cls||''} 班 ${name} 同學
+    在 ${event} 項目中表現優異
+    榮獲 ${level}
+
+    特頒此證，以資鼓勵
+
+    澳門濠江中學
+    第三十屆田徑運動會組委會
+    2026年6月
+─────────────────────────────`;
+
+      const res = await API.post('/ai/ai-chat', { message: prompt, history: [] });
+      if (res.success) {
+        result.innerHTML = `<div style="text-align:center;padding:20px;background:#FFFBF0;border:3px double var(--red);white-space:pre-wrap;font-family:serif;font-size:16px;line-height:2">${res.data.reply}</div><button class="btn btn-success btn-sm mt-2" onclick="Admin._printAward()">打印证书</button>`;
+        this._currentAwardHtml = result.innerHTML;
+      } else {
+        // 直接用模板生成
+        const cert = `\n─────────────────────────────\n          澳門濠江中學\n      第三十屆田徑運動會\n         獲 獎 證 書\n─────────────────────────────\n\n    茲證明 ${cls||''} 班 ${name} 同學\n    在 ${event} 項目中表現優異\n    榮獲 ${level}\n\n    特頒此證，以資鼓勵\n\n    澳門濠江中學\n    第三十屆田徑運動會組委會\n    2026年6月\n─────────────────────────────`;
+        result.innerHTML = `<div style="text-align:center;padding:20px;background:#FFFBF0;border:3px double var(--red);white-space:pre-wrap;font-family:serif;font-size:16px;line-height:2">${cert}</div><button class="btn btn-success btn-sm mt-2" onclick="Admin._printAward()">打印证书</button>`;
+      }
+    } catch(e) {
+      result.innerHTML = `<p class="text-danger">生成失败：${e.message}</p>`;
+    }
+  },
+
+  _printAward() {
+    const result = document.getElementById('award-result');
+    if (!result) return;
+    const win = window.open('','_blank','width=800,height=600');
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>获奖证书</title><style>body{display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#fff}@media print{body{margin:0}}</style></head><body>${result.querySelector('div').outerHTML}</body></html>`);
+    win.document.close();
+    setTimeout(() => win.print(), 500);
   },
 };
