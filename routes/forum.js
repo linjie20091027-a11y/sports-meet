@@ -219,12 +219,49 @@ AI_ROUTER.post('/ai-chat', optionalAuth, async (req, res) => {
     if (!DEEPSEEK_API_KEY) return res.json({ success: false, error: 'AI 助手尚未配置，請管理員設置 API Key' });
 
     const https = require('https');
-    const systemPrompt = `你是澳門濠江中學運動會的智能助手「小濠」。你的職責：
-1. 回答運動會相關問題（比賽規則、報名流程、賽程安排等）
-2. 風格親切友好，像一個熱心的學生會成員
-3. 用繁體中文回答，簡短精煉（200字以內）
-4. 如果問題與運動會無關，禮貌引導回正題
-5. 適當使用 emoji 增加親和力`;
+    const db = getDb();
+
+    // 構建實時上下文
+    const meet = db.prepare("SELECT * FROM meet_info WHERE id=1").get() || {};
+    const events = db.prepare("SELECT name, category, event_type, gender_group, venue, max_participants FROM events WHERE status='active' ORDER BY sort_order LIMIT 20").all();
+    const totalRegs = db.prepare("SELECT COUNT(*) as cnt FROM registrations").get()?.cnt || 0;
+    const pendingRegs = db.prepare("SELECT COUNT(*) as cnt FROM registrations WHERE status='pending'").get()?.cnt || 0;
+    const schedules = db.prepare("SELECT COUNT(*) as cnt FROM schedules WHERE status='published'").get()?.cnt || 0;
+    const maxEvents = db.prepare("SELECT value FROM settings WHERE key='max_events_per_student'").get()?.value || '3';
+
+    const eventList = events.map(e => {
+      const gender = e.gender_group === 'male' ? '男子' : e.gender_group === 'female' ? '女子' : '混合';
+      const type = e.event_type === 'team' ? '集體' : '個人';
+      return `${e.name}（${gender}${type}，場地：${e.venue||'待定'}）`;
+    }).join('；');
+
+    const context = `【當前運動會實時數據】
+- 運動會名稱：${meet.name||'學校運動會'}
+- 舉辦日期：${meet.start_date||'待定'} 至 ${meet.end_date||'待定'}
+- 報名狀態：${meet.registration_open?'已開放':'已關閉'}
+- 比賽項目總數：${events.length}個
+- 已報名人次：${totalRegs}，待審核：${pendingRegs}
+- 已發布賽程：${schedules}場
+- 每人限報：${maxEvents}個項目
+- 參賽項目列表：${eventList}`;
+
+    const systemPrompt = `你是澳門濠江中學運動會的官方AI助手「小濠」🏅。你的設定：
+
+**身份**：濠江中學學生會宣傳部成員，熱心、專業、靠譜，對運動會瞭如指掌。
+
+**能力範圍**：
+1. 回答運動會相關的所有問題（項目規則、報名流程、賽程安排、場地指引、成績查詢等）
+2. 根據上方【實時數據】提供準確的最新資訊
+3. 引導學生正確完成報名、查看成績等操作
+
+**回答風格**：
+- 熱情但專業，像學長學姐般親切
+- 繁體中文，可適當夾雜粵語口語詞（如「唔使擔心」「記得準時」）
+- 每次回答控制在150字以內，重點突出
+- 善用 emoji 增加可讀性但不濫用
+- 如果問題超出運動會範圍，友好提示並引導回來
+
+**重要提醒**：提及數字時務必參照上方【實時數據】，不要憑空編造。`;
 
     const apiReq = https.request(DEEPSEEK_BASE_URL, {
       method: 'POST',
@@ -257,9 +294,10 @@ AI_ROUTER.post('/ai-chat', optionalAuth, async (req, res) => {
       model: 'deepseek-chat',
       messages: [
         { role: 'system', content: systemPrompt },
+        { role: 'user', content: context },
         { role: 'user', content: message }
       ],
-      max_tokens: 500,
+      max_tokens: 600,
       temperature: 0.7
     }));
     apiReq.end();
