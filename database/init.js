@@ -10,7 +10,6 @@ let _sql = null;
 
 // 包装层：将 sql.js API 转换为 better-sqlite3 兼容 API
 function wrapDb(sqlDb) {
-  let saveTimer = null;
 
   function saveDbImmediate() {
     try {
@@ -22,11 +21,8 @@ function wrapDb(sqlDb) {
   }
 
   function saveDb() {
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      saveTimer = null;
-      saveDbImmediate();
-    }, 400);
+    // 立即保存，不延迟
+    saveDbImmediate();
   }
 
   function lastInsertId() {
@@ -112,16 +108,13 @@ async function initDatabase() {
   }
 
   _db.run('PRAGMA foreign_keys = ON');
-  try {
-    _db.run('PRAGMA journal_mode = WAL');
-    _db.run('PRAGMA synchronous = NORMAL');
-    _db.run('PRAGMA cache_size = -64000');
-    _db.run('PRAGMA temp_store = MEMORY');
-  } catch (_) { /* sql.js 部分環境不支援 WAL */ }
 
+  // 只在首次创建数据库时初始化种子数据
+  const isNew = !fs.existsSync(DB_PATH);
   initTables();
-  migrateSchema();
-  seedDefaultData();
+  if (isNew) {
+    seedDefaultData();
+  }
   seedEventDescriptions();
 
   return wrapDb(_db);
