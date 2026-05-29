@@ -2109,9 +2109,11 @@ const Admin = {
 
   // ==== 论坛审核 ====
   async _showForumModeration() {
+    console.log('_showForumModeration called');
     App.showLoading();
     try {
       const res = await API.get('/forum/pending-replies');
+      console.log('pending replies res:', res);
       App.hideLoading();
       const replies = res.data || [];
       let html = '<div class="modal__header"><h3 class="modal__title">论坛评论审核</h3><button class="modal__close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div><div class="modal__body">';
