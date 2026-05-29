@@ -55,7 +55,9 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/public', require('./routes/public'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/student', require('./routes/student'));
-app.use('/api/forum', require('./routes/forum'));
+const forumRoutes = require('./routes/forum');
+app.use('/api/forum', forumRoutes.forumRouter);
+app.use('/api/ai', forumRoutes.aiRouter);
 
 // 前端SPA路由
 app.get('*', (req, res) => {

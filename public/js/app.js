@@ -92,7 +92,10 @@ const App = {
     } else if (hash.startsWith('/forum')) {
       document.getElementById('page-forum')?.classList.remove('hidden');
       document.querySelector('[href="#/forum"]')?.classList.add('active');
-      if (typeof Forum !== 'undefined') Forum.handleRoute(hash);
+      if (typeof Forum !== 'undefined') {
+        Forum.handleRoute(hash);
+        Forum._initAIChat();
+      }
     } else if (hash.startsWith('/announcements/')) {
       this.renderAnnouncements();
       this.renderAnnouncementDetail(hash.split('/')[2]);

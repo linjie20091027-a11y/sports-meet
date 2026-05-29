@@ -174,4 +174,99 @@ const Forum = {
       } else App.showToast(r.error || '發布失敗', 'error');
     });
   },
+
+  // ===== AI 助手 =====
+  _initAIChat() {
+    if (document.getElementById('ai-chat-panel')) return;
+    const html = `
+      <div id="ai-chat-bubble" class="ai-chat-bubble" title="AI 助手小濠">
+        <i class="fas fa-robot"></i>
+        <span class="ai-bubble-dot"></span>
+      </div>
+      <div id="ai-chat-panel" class="ai-chat-panel hidden">
+        <div class="ai-chat-header">
+          <span><i class="fas fa-robot"></i> 小濠 AI 助手</span>
+          <button class="ai-chat-close" id="ai-chat-close">&times;</button>
+        </div>
+        <div class="ai-chat-messages" id="ai-chat-messages">
+          <div class="ai-msg ai-msg-bot">你好！我是運動會助手「小濠」🏃<br>有什麼可以幫你的嗎？</div>
+        </div>
+        <div class="ai-chat-input">
+          <input type="text" id="ai-chat-input" placeholder="輸入問題...">
+          <button id="ai-chat-send"><i class="fas fa-paper-plane"></i></button>
+        </div>
+        ${App.user?.role==='admin'?`<div class="ai-chat-admin"><button class="btn-text" id="ai-key-btn">設定 API Key</button></div>`:''}
+      </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', html);
+
+    document.getElementById('ai-chat-bubble').addEventListener('click', () => {
+      const panel = document.getElementById('ai-chat-panel');
+      panel.classList.toggle('hidden');
+      if (!panel.classList.contains('hidden')) {
+        document.getElementById('ai-chat-input')?.focus();
+      }
+    });
+    document.getElementById('ai-chat-close').addEventListener('click', () => {
+      document.getElementById('ai-chat-panel').classList.add('hidden');
+    });
+    document.getElementById('ai-chat-send').addEventListener('click', () => this._sendAIMessage());
+    document.getElementById('ai-chat-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') this._sendAIMessage();
+    });
+    document.getElementById('ai-key-btn')?.addEventListener('click', () => this._showAIKeyModal());
+  },
+
+  _showAIKeyModal() {
+    App.showModal(`
+      <div class="modal-header"><h3>設定 DeepSeek API Key</h3><button class="modal-close" onclick="App.hideModal()">&times;</button></div>
+      <div class="modal-body">
+        <p class="text-sm text-muted mb-2">請輸入您的 DeepSeek API Key，用於驅動 AI 助手</p>
+        <div class="form-group"><label>API Key</label><input type="text" id="ai-key-input" class="form-input" placeholder="sk-..."></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="App.hideModal()">取消</button>
+        <button class="btn btn-primary" id="ai-key-submit">保存</button>
+      </div>
+    `);
+    document.getElementById('ai-key-submit').addEventListener('click', async () => {
+      const key = document.getElementById('ai-key-input')?.value?.trim();
+      if (!key) return App.showToast('請輸入 API Key', 'warning');
+      try {
+        const r = await API.post('/ai/ai-key', { key });
+        if (r.success) { App.showToast('API Key 已保存', 'success'); App.hideModal(); }
+        else App.showToast(r.error, 'error');
+      } catch(e) { App.showToast(e.message, 'error'); }
+    });
+  },
+
+  async _sendAIMessage() {
+    const input = document.getElementById('ai-chat-input');
+    const msg = input?.value?.trim();
+    if (!msg) return;
+    const msgs = document.getElementById('ai-chat-messages');
+    msgs.innerHTML += `<div class="ai-msg ai-msg-user">${App._escHtml(msg)}</div>`;
+    input.value = '';
+    msgs.scrollTop = msgs.scrollHeight;
+
+    const loading = document.createElement('div');
+    loading.className = 'ai-msg ai-msg-bot ai-typing';
+    loading.innerHTML = '<span>.</span><span>.</span><span>.</span>';
+    msgs.appendChild(loading);
+    msgs.scrollTop = msgs.scrollHeight;
+
+    try {
+      const r = await API.post('/ai/ai-chat', { message: msg });
+      loading.remove();
+      if (r.success) {
+        msgs.innerHTML += `<div class="ai-msg ai-msg-bot">${r.data.reply.replace(/\n/g,'<br>')}</div>`;
+      } else {
+        msgs.innerHTML += `<div class="ai-msg ai-msg-bot" style="color:var(--red)">${r.error}</div>`;
+      }
+    } catch(e) {
+      loading.remove();
+      msgs.innerHTML += `<div class="ai-msg ai-msg-bot" style="color:var(--red)">${e.message}</div>`;
+    }
+    msgs.scrollTop = msgs.scrollHeight;
+  },
 };

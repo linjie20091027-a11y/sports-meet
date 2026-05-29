@@ -427,6 +427,10 @@ function seedDefaultData() {
     const hash = bcrypt.hashSync('admin123', 10);
     _db.run("INSERT INTO users (username, email, password, role, student_id, name) VALUES (?, ?, ?, ?, ?, ?)",
       ['admin', 'admin@hkms.hktedu.com', hash, 'admin', 'ADMIN001', '系统管理员']);
+    _db.run("INSERT INTO users (username, email, password, role, student_id, name) VALUES (?, ?, ?, ?, ?, ?)",
+      ['2100', '2100@hkms.hktedu.com', hash, 'admin', '2100', '曾剑辉']);
+    _db.run("INSERT INTO users (username, email, password, role, student_id, name) VALUES (?, ?, ?, ?, ?, ?)",
+      ['0037', '0037@hkms.hktedu.com', hash, 'admin', '0037', '王诗震']);
   }
 
   // 运动会基本信息

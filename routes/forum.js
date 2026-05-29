@@ -177,3 +177,100 @@ router.delete('/replies/:id', authMiddleware, adminOnly, (req, res) => {
 });
 
 module.exports = router;
+
+// ==================== AI 助手 ====================
+const AI_ROUTER = express.Router();
+
+// DeepSeek API 配置
+let DEEPSEEK_API_KEY = '';
+let DEEPSEEK_API_KEY_LOADED = false;
+let DEEPSEEK_BASE_URL = 'https://api.deepseek.com/chat/completions';
+
+function loadApiKey() {
+  if (DEEPSEEK_API_KEY_LOADED) return;
+  try {
+    const db = getDb();
+    const row = db.prepare("SELECT value FROM settings WHERE key='deepseek_api_key'").get();
+    if (row?.value) DEEPSEEK_API_KEY = row.value;
+    DEEPSEEK_API_KEY_LOADED = true;
+  } catch(e) {}
+}
+
+// 设置 API Key 的路由
+AI_ROUTER.post('/ai-key', authMiddleware, adminOnly, (req, res) => {
+  try {
+    const { key } = req.body;
+    if (!key) return res.json({ success: false, error: '請提供 API Key' });
+    DEEPSEEK_API_KEY = key;
+    const db = getDb();
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('deepseek_api_key', ?)").run(key);
+    res.json({ success: true, message: 'API Key 已保存' });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// AI 对话路由
+AI_ROUTER.post('/ai-chat', optionalAuth, async (req, res) => {
+  try {
+    loadApiKey();
+    const { message } = req.body;
+    if (!message?.trim()) return res.json({ success: false, error: '請輸入問題' });
+    if (!DEEPSEEK_API_KEY) return res.json({ success: false, error: 'AI 助手尚未配置，請管理員設置 API Key' });
+
+    const https = require('https');
+    const systemPrompt = `你是澳門濠江中學運動會的智能助手「小濠」。你的職責：
+1. 回答運動會相關問題（比賽規則、報名流程、賽程安排等）
+2. 風格親切友好，像一個熱心的學生會成員
+3. 用繁體中文回答，簡短精煉（200字以內）
+4. 如果問題與運動會無關，禮貌引導回正題
+5. 適當使用 emoji 增加親和力`;
+
+    const apiReq = https.request(DEEPSEEK_BASE_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${DEEPSEEK_API_KEY}`
+      }
+    }, (apiRes) => {
+      let body = '';
+      apiRes.on('data', c => body += c);
+      apiRes.on('end', () => {
+        try {
+          const result = JSON.parse(body);
+          if (result.choices?.[0]?.message?.content) {
+            res.json({ success: true, data: { reply: result.choices[0].message.content } });
+          } else {
+            res.json({ success: false, error: result.error?.message || 'AI 回應異常' });
+          }
+        } catch (e) {
+          res.json({ success: false, error: 'AI 回應解析失敗' });
+        }
+      });
+    });
+
+    apiReq.on('error', (e) => {
+      res.json({ success: false, error: 'AI 服務暫不可用：' + e.message });
+    });
+
+    apiReq.write(JSON.stringify({
+      model: 'deepseek-chat',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: message }
+      ],
+      max_tokens: 500,
+      temperature: 0.7
+    }));
+    apiReq.end();
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// 檢查 API Key 狀態
+AI_ROUTER.get('/ai-status', (req, res) => {
+  res.json({ success: true, data: { configured: !!DEEPSEEK_API_KEY } });
+});
+
+module.exports = { forumRouter: router, aiRouter: AI_ROUTER };
