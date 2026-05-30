@@ -81,6 +81,9 @@ router.get('/events', (req, res) => {
       "SELECT COUNT(*) as cnt FROM registrations WHERE user_id = ? AND status != 'rejected'"
     ).get(req.user.id);
 
+    const user = db.prepare('SELECT gender FROM users WHERE id = ?').get(req.user.id);
+    const userGender = user?.gender || '';
+
     const events = db.prepare(`
       SELECT e.*,
         COUNT(r.id) as registered_count,
@@ -90,9 +93,10 @@ router.get('/events', (req, res) => {
       FROM events e
       LEFT JOIN registrations r ON e.id = r.event_id AND r.status != 'rejected'
       WHERE e.status = 'active'
+        AND (e.gender_group = 'mixed' OR e.gender_group = ?)
       GROUP BY e.id
       ORDER BY e.sort_order, e.id
-    `).all();
+    `).all(userGender);
 
     res.json({
       success: true,
@@ -128,6 +132,12 @@ router.post('/registrations', (req, res) => {
     const event = db.prepare('SELECT * FROM events WHERE id = ? AND status = ?').get(event_id, 'active');
     if (!event) {
       return res.status(404).json({ success: false, error: '项目不存在或已关闭' });
+    }
+
+    // 性别检查
+    const user = db.prepare('SELECT gender FROM users WHERE id = ?').get(req.user.id);
+    if (event.gender_group !== 'mixed' && user?.gender && event.gender_group !== user.gender) {
+      return res.status(400).json({ success: false, error: '该项目性别组别与您不符，请选择匹配的项目' });
     }
 
     const existing = db.prepare(

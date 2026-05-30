@@ -178,7 +178,9 @@ const Forum = {
   // ===== AI 助手 =====
   _initAIChat() {
     if (document.getElementById('ai-chat-panel')) return;
-    this._chatHistory = [];
+    // 从localStorage恢复历史记录
+    try { this._chatHistory = JSON.parse(localStorage.getItem('ai_chat_history') || '[]'); } catch(e) { this._chatHistory = []; }
+    if (this._chatHistory.length > 40) this._chatHistory = this._chatHistory.slice(-40);
     const html = `
       <div id="ai-chat-bubble" class="ai-chat-bubble" title="AI 助手小濠">
         <i class="fas fa-robot"></i>
@@ -206,6 +208,7 @@ const Forum = {
       panel.classList.toggle('hidden');
       if (!panel.classList.contains('hidden')) {
         document.getElementById('ai-chat-input')?.focus();
+        this._restoreChatHistory();
       }
     });
     document.getElementById('ai-chat-close').addEventListener('click', () => {
@@ -241,6 +244,19 @@ const Forum = {
     });
   },
 
+  _restoreChatHistory() {
+    const msgs = document.getElementById('ai-chat-messages');
+    if (!msgs || !this._chatHistory.length) return;
+    msgs.innerHTML = this._chatHistory.map(h => 
+      `<div class="ai-msg ${h.role==='user'?'ai-msg-user':'ai-msg-bot'}">${App._escHtml(h.content).replace(/\n/g,'<br>')}</div>`
+    ).join('');
+    msgs.scrollTop = msgs.scrollHeight;
+  },
+
+  _saveChatHistory() {
+    try { localStorage.setItem('ai_chat_history', JSON.stringify(this._chatHistory.slice(-40))); } catch(e) {}
+  },
+
   async _sendAIMessage() {
     const input = document.getElementById('ai-chat-input');
     const msg = input?.value?.trim();
@@ -248,6 +264,7 @@ const Forum = {
     const msgs = document.getElementById('ai-chat-messages');
     msgs.innerHTML += `<div class="ai-msg ai-msg-user">${App._escHtml(msg)}</div>`;
     this._chatHistory.push({ role: 'user', content: msg });
+    this._saveChatHistory();
     input.value = '';
     msgs.scrollTop = msgs.scrollHeight;
 
@@ -258,11 +275,12 @@ const Forum = {
     msgs.scrollTop = msgs.scrollHeight;
 
     try {
-      const r = await API.post('/ai/ai-chat', { message: msg, history: this._chatHistory.slice(-10) });
+      const r = await API.post('/ai/ai-chat', { message: msg, history: this._chatHistory.slice(-16) });
       loading.remove();
       if (r.success) {
         msgs.innerHTML += `<div class="ai-msg ai-msg-bot">${r.data.reply.replace(/\n/g,'<br>')}</div>`;
         this._chatHistory.push({ role: 'assistant', content: r.data.reply });
+        this._saveChatHistory();
       } else {
         msgs.innerHTML += `<div class="ai-msg ai-msg-bot" style="color:var(--red)">${r.error}</div>`;
       }

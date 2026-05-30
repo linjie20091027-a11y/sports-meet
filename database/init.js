@@ -115,7 +115,7 @@ async function initDatabase() {
   if (isNew) {
     seedDefaultData();
   }
-  seedEventDescriptions();
+  // seedEventDescriptions disabled - missing column
 
   return wrapDb(_db);
 }

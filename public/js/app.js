@@ -79,6 +79,9 @@ const App = {
     } else if (hash === '/results') {
       document.getElementById('page-results').classList.remove('hidden');
       document.querySelector('[href="#/results"]')?.classList.add('active');
+      // 确保容器可见
+      var c = document.getElementById('results-table');
+      if (c) c.style.display = 'block';
       this.renderResults();
     } else if (hash === '/announcements') {
       document.getElementById('page-announcements').classList.remove('hidden');
@@ -539,41 +542,63 @@ const App = {
 
   // ====== 成绩 ======
   async renderResults() {
-    const filter = document.getElementById('results-filter');
-    const table = document.getElementById('results-table');
-    filter.innerHTML = `<select id="res-event" class="form-select"><option value="">全部项目</option></select><select id="res-grade" class="form-select"><option value="">全部年级</option></select>`;
+    var table = document.getElementById('results-table');
+    if (!table) return;
+    table.innerHTML = '<div class="section-title" style="margin-top:80px">成绩公示</div><div class="text-center p-8"><div class="spinner"></div></div>';
     try {
-      const [ev,gr] = await Promise.all([API.get('/public/events'), API.get('/public/grades')]);
-      const es = document.getElementById('res-event'); (ev.data||[]).forEach(e => { const o=document.createElement('option');o.value=e.id;o.textContent=e.name;es.appendChild(o); });
-      const gs = document.getElementById('res-grade'); (gr.data||[]).forEach(g => { const o=document.createElement('option');o.value=g.name;o.textContent=g.name;gs.appendChild(o); });
-    } catch (e) {}
-    const load = async () => {
-      const eid = document.getElementById('res-event')?.value || '';
-      const gname = document.getElementById('res-grade')?.value || '';
-      let url = '/public/results?';
-      if (eid) url += `event_id=${eid}&`;
-      if (gname) url += `grade=${gname}&`;
-      try {
-        this.showLoading();
-        const res = await API.get(url);
-        const data = res.data || [];
-        const medals = {1:'🥇',2:'🥈',3:'🥉'};
-        table.innerHTML = data.length ? `
-          <div class="table-container"><table class="table"><thead><tr><th>排名</th><th>项目</th><th>姓名</th><th>班级</th><th>成绩</th><th>奖项</th></tr></thead><tbody>
-          ${data.map(r=>`<tr class="${r.rank<=3?'award-row':''}"><td>${medals[r.rank]||r.rank||'-'}</td><td>${r.event_name||'-'}</td><td>${r.name||'-'}</td><td>${r.class_name||'-'}</td><td>${r.performance||'-'}</td><td><span class="badge badge-success">${r.award||'-'}</span></td></tr>`).join('')}
-          </tbody></table></div>
-          <div class="flex" style="gap:.75rem;margin-top:1rem">
-            <button class="btn btn-outline btn-sm" onclick="App.exportResults()">导出Excel</button>
-            <button class="btn btn-outline btn-sm" onclick="App.exportResultsCSV()">导出CSV</button>
-            <button class="btn btn-outline btn-sm" onclick="App.printResults()">打印成绩</button>
-          </div>
-        ` : '<p class="text-muted p-8 text-center">暂无成绩数据</p>';
-      } catch (e) { this.showToast(e.message, 'error'); }
-      finally { this.hideLoading(); }
-    };
-    load();
-    document.getElementById('res-event')?.addEventListener('change', load);
-    document.getElementById('res-grade')?.addEventListener('change', load);
+      this.showLoading();
+      var res = await API.get('/public/results');
+      var data = res.data || [];
+      this.hideLoading();
+      if (!data.length) { table.innerHTML = '<div class="section-title" style="margin-top:80px">成绩公示</div><p class="text-muted p-8 text-center">暂无成绩数据</p>'; return; }
+
+      var groups = {};
+      data.forEach(function(r) {
+        var key = r.event_name || '其他';
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(r);
+      });
+
+      var medals = {1:'🥇',2:'🥈',3:'🥉'};
+      var idx = 0;
+      var html = '<div class="section-title" style="margin-top:80px">成绩公示<small>点击项目查看详细排名</small></div>';
+      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">';
+      
+      Object.keys(groups).sort().forEach(function(eventName) {
+        var results = groups[eventName];
+        var sid = 'rg' + (idx++);
+        var top3 = results.filter(function(r){return r.rank<=3});
+        html += '<div class="card" style="cursor:pointer" onclick="App._toggleResults(\''+sid+'\')">';
+        html += '<div class="card-header"><h3>'+eventName+'</h3><span class="badge badge-success">'+results.length+'人</span></div>';
+        html += '<div class="card-body">';
+        html += '<div id="'+sid+'" style="display:none;margin-top:8px">';
+        html += '<div class="table-container"><table class="table"><thead><tr><th>排名</th><th>姓名</th><th>班级</th><th>成绩</th><th>奖项</th></tr></thead><tbody>';
+        results.sort(function(a,b){return (a.rank||99)-(b.rank||99)});
+        results.forEach(function(r) {
+          html += '<tr class="'+(r.rank<=3?'award-row':'')+'"><td>'+(medals[r.rank]||r.rank||'-')+'</td><td>'+(r.name||'-')+'</td><td>'+(r.class_name||'-')+'</td><td>'+(r.performance||'-')+'</td><td><span class="badge badge-success">'+(r.award||'-')+'</span></td></tr>';
+        });
+        html += '</tbody></table></div></div>';
+        html += '<div style="margin-top:4px;font-size:12px;color:var(--text3)">';
+        if (top3.length) {
+          top3.forEach(function(r,i){ html += medals[i+1]+' '+r.name+' '; });
+        }
+        html += ' | 点击查看全部</div>';
+        html += '</div></div>';
+      });
+      html += '</div>';
+      html += '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-outline btn-sm" onclick="App.exportResults()">导出Excel</button><button class="btn btn-outline btn-sm" onclick="App.exportResultsCSV()">导出CSV</button></div>';
+      table.innerHTML = html;
+    } catch(e) { this.hideLoading(); table.innerHTML = '<p class="text-muted p-8 text-center">加载失败：'+e.message+'</p>'; }
+  },
+
+  _toggleResults(id) {
+    var el = document.getElementById(id);
+    if (el) { el.style.display = el.style.display === 'none' ? 'block' : 'none'; }
+  },
+
+  _toggleResults(id) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
   },
 
   async exportResults() {
