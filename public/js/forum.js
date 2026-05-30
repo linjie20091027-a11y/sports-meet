@@ -15,10 +15,10 @@ const Forum = {
     page.innerHTML = `
       <div class="container page-top">
         <div class="section-title">
-          交流論壇
-          <small>賽事討論 · 經驗分享</small>
+          交流论坛
+          <small>赛事討論 · 經驗分享</small>
         </div>
-        ${user ? `<div class="mb-3"><button type="button" class="btn btn-primary btn-sm" id="forum-new-btn"><i class="fas fa-pen"></i> 發表帖子</button></div>` : `<p class="text-muted mb-3"><a href="#/login">登入</a> 後可發帖與回覆</p>`}
+        ${user ? `<div class="mb-3"><button type="button" class="btn btn-primary btn-sm" id="forum-new-btn"><i class="fas fa-pen"></i> 發表帖子</button></div>` : `<p class="text-muted mb-3"><a href="#/login">登录</a> 後可發帖與回复</p>`}
         <div id="forum-list"><div class="text-center p-8"><div class="spinner"></div></div></div>
         <div id="forum-pagination" class="text-center mt-3"></div>
       </div>
@@ -34,7 +34,7 @@ const Forum = {
       const data = res.data || {};
       const posts = data.list || [];
       if (!posts.length) {
-        list.innerHTML = '<div class="empty-state"><p>暫無帖子，成為第一個發言的人吧</p></div>';
+        list.innerHTML = '<div class="empty-state"><p>暂无帖子，成為第一個發言的人吧</p></div>';
         return;
       }
       list.innerHTML = posts.map(p => `
@@ -63,7 +63,7 @@ const Forum = {
         document.getElementById('forum-next')?.addEventListener('click', () => this._loadList(page + 1));
       }
     } catch (e) {
-      list.innerHTML = `<div class="empty-state"><p>載入失敗：${App._escHtml(e.message)}</p></div>`;
+      list.innerHTML = `<div class="empty-state"><p>加载失败：${App._escHtml(e.message)}</p></div>`;
     }
   },
 
@@ -75,18 +75,18 @@ const Forum = {
     try {
       const res = await API.forum.getPost(id);
       if (!res.success || !res.data?.post) {
-        root.innerHTML = '<div class="empty-state"><p>帖子不存在</p><a href="#/forum" class="btn btn-outline mt-2">返回論壇</a></div>';
+        root.innerHTML = '<div class="empty-state"><p>帖子不存在</p><a href="#/forum" class="btn btn-outline mt-2">返回论坛</a></div>';
         return;
       }
       const { post, replies } = res.data;
       const isAdmin = App.user?.role === 'admin';
 
       root.innerHTML = `
-        <nav class="breadcrumb"><a href="#/forum">論壇</a> <span>/</span> <span>帖子詳情</span></nav>
+        <nav class="breadcrumb"><a href="#/forum">论坛</a> <span>/</span> <span>帖子詳情</span></nav>
         <article class="card">
           <div class="card-header">
             <h2 style="margin:0;font-size:1.25rem">${App._escHtml(post.title)}</h2>
-            ${isAdmin ? `<button type="button" class="btn btn-danger btn-xs" id="forum-del-post">刪除帖子</button>` : ''}
+            ${isAdmin ? `<button type="button" class="btn btn-danger btn-xs" id="forum-del-post">删除帖子</button>` : ''}
           </div>
           <div class="card-body">
             <p class="forum-card__meta mb-2">
@@ -97,50 +97,50 @@ const Forum = {
             <div class="detail-prose">${App._escHtml(post.content).replace(/\n/g, '<br>')}</div>
           </div>
         </article>
-        <h3 class="mt-4 mb-2" style="font-size:1rem">回覆 (${replies.length})</h3>
+        <h3 class="mt-4 mb-2" style="font-size:1rem">回复 (${replies.length})</h3>
         <div id="forum-replies">${replies.length ? replies.map(r => `
           <div class="forum-reply card mb-2">
             <div class="card-body">
               <div class="forum-card__meta mb-1">
                 <strong>${App._escHtml(r.author_name)}</strong>
                 <span>${App.formatDate(r.created_at)}</span>
-                ${isAdmin ? `<button type="button" class="btn btn-danger btn-xs forum-del-reply" data-id="${r.id}">刪除</button>` : ''}
+                ${isAdmin ? `<button type="button" class="btn btn-danger btn-xs forum-del-reply" data-id="${r.id}">删除</button>` : ''}
               </div>
               <p style="margin:0;line-height:1.7">${App._escHtml(r.content).replace(/\n/g, '<br>')}</p>
             </div>
           </div>
-        `).join('') : '<p class="text-muted">暫無回覆</p>'}</div>
+        `).join('') : '<p class="text-muted">暂无回复</p>'}</div>
         ${App.user ? `
           <div class="card mt-3">
             <div class="card-body">
-              <div class="form-group"><label>發表回覆</label><textarea id="forum-reply-text" class="form-input" rows="3" placeholder="輸入回覆內容…"></textarea></div>
-              <button type="button" class="btn btn-primary btn-sm" id="forum-reply-submit">提交回覆</button>
+              <div class="form-group"><label>發表回复</label><textarea id="forum-reply-text" class="form-input" rows="3" placeholder="輸入回复內容…"></textarea></div>
+              <button type="button" class="btn btn-primary btn-sm" id="forum-reply-submit">提交回复</button>
             </div>
           </div>
-        ` : '<p class="text-muted mt-3"><a href="#/login">登入</a> 後可回覆</p>'}
-        <p class="mt-3"><a href="#/forum" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> 返回論壇</a></p>
+        ` : '<p class="text-muted mt-3"><a href="#/login">登录</a> 後可回复</p>'}
+        <p class="mt-3"><a href="#/forum" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> 返回论坛</a></p>
       `;
 
       document.getElementById('forum-del-post')?.addEventListener('click', async () => {
-        if (!await App.confirmDialog('確認刪除此帖子？')) return;
+        if (!await App.confirmDialog('确认删除此帖子？')) return;
         const r = await API.forum.deletePost(id);
-        if (r.success) { App.showToast('已刪除', 'success'); window.location.hash = '#/forum'; }
-        else App.showToast(r.error || '刪除失敗', 'error');
+        if (r.success) { App.showToast('已删除', 'success'); window.location.hash = '#/forum'; }
+        else App.showToast(r.error || '删除失败', 'error');
       });
       root.querySelectorAll('.forum-del-reply').forEach(btn => {
         btn.addEventListener('click', async () => {
-          if (!await App.confirmDialog('確認刪除此回覆？')) return;
+          if (!await App.confirmDialog('确认删除此回复？')) return;
           const r = await API.forum.deleteReply(btn.dataset.id);
-          if (r.success) { App.showToast('已刪除', 'success'); this.renderPost(id); }
-          else App.showToast(r.error || '刪除失敗', 'error');
+          if (r.success) { App.showToast('已删除', 'success'); this.renderPost(id); }
+          else App.showToast(r.error || '删除失败', 'error');
         });
       });
       document.getElementById('forum-reply-submit')?.addEventListener('click', async () => {
         const content = document.getElementById('forum-reply-text')?.value?.trim();
-        if (!content) return App.showToast('請輸入回覆內容', 'warning');
+        if (!content) return App.showToast('请输入回复內容', 'warning');
         const r = await API.forum.reply(id, content);
-        if (r.success) { App.showToast(App.user?.role==='admin'?'回覆成功':'回覆已提交，待管理員審核', 'success'); this.renderPost(id); }
-        else App.showToast(r.error || '回覆失敗', 'error');
+        if (r.success) { App.showToast(App.user?.role==='admin'?'回复成功':'回复已提交，待管理员审核', 'success'); this.renderPost(id); }
+        else App.showToast(r.error || '回复失败', 'error');
       });
     } catch (e) {
       root.innerHTML = `<div class="empty-state"><p>${App._escHtml(e.message)}</p></div>`;
@@ -157,7 +157,7 @@ const Forum = {
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="App.hideModal()">取消</button>
-        <button type="button" class="btn btn-primary" id="forum-post-submit">發布</button>
+        <button type="button" class="btn btn-primary" id="forum-post-submit">发布</button>
       </div>
     `);
     document.getElementById('forum-post-submit').addEventListener('click', async () => {
@@ -167,11 +167,11 @@ const Forum = {
       const r = await API.forum.createPost({ title, content });
       if (r.success) {
         App.hideModal();
-        App.showToast('發布成功', 'success');
+        App.showToast('发布成功', 'success');
         window.location.hash = `#/forum/${r.data?.id || ''}`;
         if (r.data?.id) this.renderPost(r.data.id);
         else this.renderList();
-      } else App.showToast(r.error || '發布失敗', 'error');
+      } else App.showToast(r.error || '发布失败', 'error');
     });
   },
 
@@ -228,7 +228,7 @@ const Forum = {
     App.showModal(`
       <div class="modal-header"><h3>設定 DeepSeek API Key</h3><button class="modal-close" onclick="App.hideModal()">&times;</button></div>
       <div class="modal-body">
-        <p class="text-sm text-muted mb-2">請輸入您的 DeepSeek API Key，用於驅動 AI 助手</p>
+        <p class="text-sm text-muted mb-2">请输入您的 DeepSeek API Key，用於驅動 AI 助手</p>
         <div class="form-group"><label>API Key</label><input type="text" id="ai-key-input" class="form-input" placeholder="sk-..."></div>
       </div>
       <div class="modal-footer">
@@ -238,7 +238,7 @@ const Forum = {
     `);
     document.getElementById('ai-key-submit').addEventListener('click', async () => {
       const key = document.getElementById('ai-key-input')?.value?.trim();
-      if (!key) return App.showToast('請輸入 API Key', 'warning');
+      if (!key) return App.showToast('请输入 API Key', 'warning');
       try {
         const r = await API.post('/ai/ai-key', { key });
         if (r.success) { App.showToast('API Key 已保存', 'success'); App.hideModal(); }

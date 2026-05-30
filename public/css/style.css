@@ -179,3 +179,13 @@ h1{font-family:var(--title-font);font-size:2.2rem}h2{font-size:1.4rem}h3{font-si
 @media(max-width:900px){.stats-grid{grid-template-columns:repeat(2,1fr)}.content-layout,.home-grid{grid-template-columns:1fr}.admin-layout,.student-layout{flex-direction:column}.admin-sidebar,.student-sidebar{width:100%;height:auto;position:static}.admin-menu,.student-menu{display:flex;flex-wrap:wrap;gap:2px}.nav-links{display:none;position:fixed;top:var(--nav-h);left:0;right:0;background:var(--red);flex-direction:column;padding:.5rem;box-shadow:var(--shadow-md);z-index:999}.nav-links.show{display:flex}.nav-toggle{display:flex}}
 @media(max-width:480px){.hero-title{font-size:2rem}.countdown-num{width:48px;height:48px;font-size:1.3rem}.stats-grid{grid-template-columns:1fr}.card-grid{grid-template-columns:1fr}.form-row{grid-template-columns:1fr}.ai-chat-panel{width:calc(100vw-40px);left:20px;right:20px}}
 @media print{.navbar,.footer,#toast-container,#loading-overlay,.btn{display:none!important}}
+
+/* Event Detail Page */
+.breadcrumb{padding:.5rem 0;font-size:.8rem;color:var(--text3)}.breadcrumb a{color:var(--red)}.breadcrumb span{margin:0 4px}
+.detail-page-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;gap:1rem}
+.detail-page-header h1{font-size:1.6rem;margin-bottom:.3rem}.detail-tags{display:flex;gap:6px;margin-top:4px}
+.detail-actions{flex-shrink:0}.detail-stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:1rem}
+.detail-stat{background:var(--gold-light);padding:.7rem;text-align:center;border-radius:var(--radius);border:1px solid var(--gold)}
+.detail-stat .label{display:block;font-size:.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}
+.detail-stat .value{font-size:1.1rem;font-weight:700;color:var(--text)}.detail-prose{font-size:.82rem;line-height:1.9;color:var(--text2)}
+.detail-prose p{margin-bottom:.5rem}

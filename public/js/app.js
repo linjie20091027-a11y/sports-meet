@@ -45,7 +45,7 @@ const App = {
         this.user = null;
       }
     } catch (_) {
-      /* 網路異常時保留本地登入狀態 */
+      /* 網路異常時保留本地登录状态 */
     }
     this.updateNav();
   },
@@ -79,10 +79,11 @@ const App = {
     } else if (hash === '/results') {
       document.getElementById('page-results').classList.remove('hidden');
       document.querySelector('[href="#/results"]')?.classList.add('active');
-      // 确保容器可见
-      var c = document.getElementById('results-table');
-      if (c) c.style.display = 'block';
       this.renderResults();
+    } else if (hash.startsWith('/results/event/')) {
+      document.getElementById('page-results').classList.remove('hidden');
+      document.querySelector('[href="#/results"]')?.classList.add('active');
+      this.renderResultsEventDetail(hash.split('/')[3]);
     } else if (hash === '/announcements') {
       document.getElementById('page-announcements').classList.remove('hidden');
       document.querySelector('[href="#/announcements"]')?.classList.add('active');
@@ -110,7 +111,7 @@ const App = {
     } else if (hash === '/student' || hash.startsWith('/student/')) {
       if (!this.user) { window.location.hash = '#/login'; return; }
       if (this.user.role === 'admin') {
-        this.showToast('管理員帳號無法報名，請使用學生帳號登入', 'warning');
+        this.showToast('管理员帳號無法报名，請使用學生帳號登录', 'warning');
         window.location.hash = '#/';
         return;
       }
@@ -202,7 +203,7 @@ const App = {
           </div>
         `).join('');
       }
-      html += `</div><div class="modal-footer">${data.length>0?`<button class="btn btn-outline btn-sm" onclick="App._markAllRead()">全部標記已讀</button>`:''}<button class="btn btn-primary btn-sm" onclick="App.hideModal()">關閉</button></div>`;
+      html += `</div><div class="modal-footer">${data.length>0?`<button class="btn btn-outline btn-sm" onclick="App._markAllRead()">全部標記已讀</button>`:''}<button class="btn btn-primary btn-sm" onclick="App.hideModal()">关闭</button></div>`;
       this.showModal(html);
       document.querySelectorAll('.notify-item[data-id]').forEach(el => {
         el.addEventListener('click', async () => {
@@ -339,8 +340,8 @@ const App = {
       if (regEl) {
         const open = m.registration_open;
         regEl.innerHTML = open
-          ? '<i class="fas fa-circle" style="color:#34d399;font-size:0.5rem"></i> 報名開放中'
-          : '<i class="fas fa-circle" style="color:#f87171;font-size:0.5rem"></i> 報名已關閉';
+          ? '<i class="fas fa-circle" style="color:#34d399;font-size:0.5rem"></i> 报名開放中'
+          : '<i class="fas fa-circle" style="color:#f87171;font-size:0.5rem"></i> 报名已关闭';
       }
       if (m.start_date) this.startCountdown(m.start_date);
 
@@ -374,12 +375,12 @@ const App = {
             <span class="badge badge-success">${typeL(e.event_type)}</span>
           </div>
           <p class="text-sm text-muted" style="margin-bottom:1rem"><i class="fas fa-location-dot"></i> ${e.venue||'待定'}</p>
-          ${loggedStudent ? (isReg ? '<span class="badge badge-success" style="width:100%;justify-content:center">已報名</span>' : `<button type="button" class="btn btn-primary btn-sm btn-block btn-quick-register" data-event-id="${e.id}" data-event-name="${this._escAttr(e.name)}">提交報名</button>`) : `<a href="#/login" class="btn btn-outline btn-sm btn-block">登入報名</a>`}
+          ${loggedStudent ? (isReg ? '<span class="badge badge-success" style="width:100%;justify-content:center">已报名</span>' : `<button type="button" class="btn btn-primary btn-sm btn-block btn-quick-register" data-event-id="${e.id}" data-event-name="${this._escAttr(e.name)}">提交报名</button>`) : `<a href="#/login" class="btn btn-outline btn-sm btn-block">登录报名</a>`}
         </div>`;
       });
       evH += '</div>';
       const homeEv = document.getElementById('home-events');
-      homeEv.innerHTML = evH || '<p class="text-muted">暫無賽事</p>';
+      homeEv.innerHTML = evH || '<p class="text-muted">暂无赛事</p>';
       homeEv.querySelectorAll('.btn-quick-register').forEach(btn => {
         btn.addEventListener('click', () => {
           const id = parseInt(btn.dataset.eventId, 10);
@@ -388,7 +389,7 @@ const App = {
         });
       });
     } catch (e) {
-      this.showToast('載入首頁失敗', 'error');
+      this.showToast('加载首页失败', 'error');
     }
   },
 
@@ -466,40 +467,40 @@ const App = {
   async renderEventDetailPage(id) {
     const root = document.getElementById('event-detail-root');
     if (!root) return;
-    root.innerHTML = '<div class="text-center p-8"><div class="spinner"></div><p class="text-muted mt-2">載入中…</p></div>';
+    root.innerHTML = '<div class="text-center p-8"><div class="spinner"></div><p class="text-muted mt-2">加载中…</p></div>';
 
     try {
       const res = await API.public.getEvent(id);
       const e = res.data;
       if (!res.success || !e) {
-        root.innerHTML = `<div class="empty-state"><p>項目不存在</p><a href="#/events" class="btn btn-outline mt-2">返回列表</a></div>`;
+        root.innerHTML = `<div class="empty-state"><p>项目不存在</p><a href="#/events" class="btn btn-outline mt-2">返回列表</a></div>`;
         return;
       }
 
       const genderL = g => (g === 'male' ? '男子組' : g === 'female' ? '女子組' : '混合組');
-      const catL = c => ({ track: '徑賽', field: '田賽', relay: '接力', team: '集體' }[c] || c);
-      const typeL = t => (t === 'team' ? '集體項目' : '個人項目');
+      const catL = c => ({ track: '徑賽', field: '田賽', relay: '接力', team: '集体' }[c] || c);
+      const typeL = t => (t === 'team' ? '集体项目' : '个人项目');
       const isStudent = this.user && this.user.role === 'student';
       const name = this._escHtml(e.name || '');
-      const desc = this._escHtml(e.description || e.rules || '暫無詳細說明');
+      const desc = this._escHtml(e.description || e.rules || '暂无详细說明');
       const rules = this._escHtml(e.rules || '');
 
       let scheduleHtml = '';
       if (e.schedules?.length) {
-        scheduleHtml = `<div class="card mt-3"><div class="card-header"><h3>賽程安排</h3></div><div class="card-body"><div class="table-container"><table class="table"><thead><tr><th>輪次</th><th>時間</th><th>場地</th></tr></thead><tbody>${e.schedules.map(s => `<tr><td>${this._escHtml(s.round_name)}</td><td>${this.formatDate(s.start_time)}</td><td>${this._escHtml(s.venue || e.venue || '待定')}</td></tr>`).join('')}</tbody></table></div></div></div>`;
+        scheduleHtml = `<div class="card mt-3"><div class="card-header"><h3>賽程安排</h3></div><div class="card-body"><div class="table-container"><table class="table"><thead><tr><th>輪次</th><th>时间</th><th>场地</th></tr></thead><tbody>${e.schedules.map(s => `<tr><td>${this._escHtml(s.round_name)}</td><td>${this.formatDate(s.start_time)}</td><td>${this._escHtml(s.venue || e.venue || '待定')}</td></tr>`).join('')}</tbody></table></div></div></div>`;
       }
 
       let actionHtml = '';
       if (isStudent) {
-        actionHtml = `<button type="button" class="btn btn-primary" id="event-detail-register">提交報名</button>`;
+        actionHtml = `<button type="button" class="btn btn-primary" id="event-detail-register">提交报名</button>`;
       } else if (!this.user) {
-        actionHtml = `<a href="#/login" class="btn btn-primary">登入後報名</a>`;
+        actionHtml = `<a href="#/login" class="btn btn-primary">登录後报名</a>`;
       } else if (this.user.role === 'admin') {
-        actionHtml = `<span class="text-muted text-sm">管理員帳號請使用學生帳號報名</span>`;
+        actionHtml = `<span class="text-muted text-sm">管理员帳號請使用學生帳號报名</span>`;
       }
 
       root.innerHTML = `
-        <nav class="breadcrumb"><a href="#/events">賽事項目</a> <span>/</span> <span>${name}</span></nav>
+        <nav class="breadcrumb"><a href="#/events">赛事项目</a> <span>/</span> <span>${name}</span></nav>
         <div class="detail-page-header">
           <div>
             <h1>${name}</h1>
@@ -512,25 +513,25 @@ const App = {
           <div class="detail-actions">${actionHtml}</div>
         </div>
         <div class="detail-stats-row">
-          <div class="detail-stat"><span class="label">比賽場地</span><span class="value">${this._escHtml(e.venue || '待定')}</span></div>
-          <div class="detail-stat"><span class="label">人數上限</span><span class="value">${e.max_participants || '不限'}</span></div>
-          <div class="detail-stat"><span class="label">已報名</span><span class="value">${e.registration_count ?? 0} 人</span></div>
-          <div class="detail-stat"><span class="label">已通過</span><span class="value">${e.approved_count ?? 0} 人</span></div>
+          <div class="detail-stat"><span class="label">比赛场地</span><span class="value">${this._escHtml(e.venue || '待定')}</span></div>
+          <div class="detail-stat"><span class="label">人数上限</span><span class="value">${e.max_participants || '不限'}</span></div>
+          <div class="detail-stat"><span class="label">已报名</span><span class="value">${e.registration_count ?? 0} 人</span></div>
+          <div class="detail-stat"><span class="label">已通过</span><span class="value">${e.approved_count ?? 0} 人</span></div>
         </div>
         <div class="card mt-3">
-          <div class="card-header"><h3>項目詳情</h3></div>
+          <div class="card-header"><h3>项目詳情</h3></div>
           <div class="card-body detail-prose">${desc.replace(/\n/g, '<br>')}</div>
         </div>
-        ${rules ? `<div class="card mt-3"><div class="card-header"><h3>比賽規則</h3></div><div class="card-body detail-prose">${rules.replace(/\n/g, '<br>')}</div></div>` : ''}
+        ${rules ? `<div class="card mt-3"><div class="card-header"><h3>比赛规则</h3></div><div class="card-body detail-prose">${rules.replace(/\n/g, '<br>')}</div></div>` : ''}
         ${scheduleHtml}
-        <p class="mt-3"><a href="#/events" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> 返回項目列表</a></p>
+        <p class="mt-3"><a href="#/events" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> 返回项目列表</a></p>
       `;
 
       document.getElementById('event-detail-register')?.addEventListener('click', () => {
         if (typeof Student !== 'undefined') Student._doRegister(parseInt(id, 10), e.name);
       });
     } catch (err) {
-      root.innerHTML = `<div class="empty-state"><p>載入失敗：${this._escHtml(err.message)}</p><a href="#/events" class="btn btn-outline mt-2">返回</a></div>`;
+      root.innerHTML = `<div class="empty-state"><p>加载失败：${this._escHtml(err.message)}</p><a href="#/events" class="btn btn-outline mt-2">返回</a></div>`;
     }
   },
 
@@ -544,13 +545,13 @@ const App = {
   async renderResults() {
     var table = document.getElementById('results-table');
     if (!table) return;
-    table.innerHTML = '<div class="section-title" style="margin-top:80px">成绩公示</div><div class="text-center p-8"><div class="spinner"></div></div>';
+    table.innerHTML = '<div class="text-center p-8"><div class="spinner"></div></div>';
     try {
       this.showLoading();
       var res = await API.get('/public/results');
       var data = res.data || [];
       this.hideLoading();
-      if (!data.length) { table.innerHTML = '<div class="section-title" style="margin-top:80px">成绩公示</div><p class="text-muted p-8 text-center">暂无成绩数据</p>'; return; }
+      if (!data.length) { table.innerHTML = '<p class="text-muted p-8 text-center">暂无成绩数据</p>'; return; }
 
       var groups = {};
       data.forEach(function(r) {
@@ -560,40 +561,55 @@ const App = {
       });
 
       var medals = {1:'🥇',2:'🥈',3:'🥉'};
-      var idx = 0;
-      var html = '<div class="section-title" style="margin-top:80px">成绩公示<small>点击项目查看详细排名</small></div>';
-      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">';
+      var html = '<div class="section-title">成绩公示<small>点击项目查看完整排名</small></div>';
+      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px">';
       
+      var evtIdx = 0;
       Object.keys(groups).sort().forEach(function(eventName) {
         var results = groups[eventName];
-        var sid = 'rg' + (idx++);
-        var top3 = results.filter(function(r){return r.rank<=3});
-        html += '<div class="card" style="cursor:pointer" onclick="App._toggleResults(\''+sid+'\')">';
+        var eid = evtIdx++;
+        var top3 = results.filter(function(r){return r.rank<=3}).sort(function(a,b){return (a.rank||99)-(b.rank||99)});
+        html += '<a href="#/results/event/'+eid+'" class="card" style="text-decoration:none;color:inherit;border-left:3px solid var(--red)">';
         html += '<div class="card-header"><h3>'+eventName+'</h3><span class="badge badge-success">'+results.length+'人</span></div>';
-        html += '<div class="card-body">';
-        html += '<div id="'+sid+'" style="display:none;margin-top:8px">';
-        html += '<div class="table-container"><table class="table"><thead><tr><th>排名</th><th>姓名</th><th>班级</th><th>成绩</th><th>奖项</th></tr></thead><tbody>';
-        results.sort(function(a,b){return (a.rank||99)-(b.rank||99)});
-        results.forEach(function(r) {
-          html += '<tr class="'+(r.rank<=3?'award-row':'')+'"><td>'+(medals[r.rank]||r.rank||'-')+'</td><td>'+(r.name||'-')+'</td><td>'+(r.class_name||'-')+'</td><td>'+(r.performance||'-')+'</td><td><span class="badge badge-success">'+(r.award||'-')+'</span></td></tr>';
-        });
-        html += '</tbody></table></div></div>';
-        html += '<div style="margin-top:4px;font-size:12px;color:var(--text3)">';
+        html += '<div class="card-body" style="padding:12px 16px">';
         if (top3.length) {
-          top3.forEach(function(r,i){ html += medals[i+1]+' '+r.name+' '; });
+          top3.forEach(function(r,i) {
+            html += '<div style="font-size:14px;padding:3px 0">'+medals[r.rank]+' '+r.name+' <span class="text-muted">'+r.performance+'</span></div>';
+          });
         }
-        html += ' | 点击查看全部</div>';
-        html += '</div></div>';
+        html += '<div class="text-sm text-muted mt-1">点击查看全部排名 &raquo;</div>';
+        html += '</div></a>';
+        // 保存数据到sessionStorage
+        sessionStorage.setItem('res_group_'+eid, JSON.stringify({name:eventName, results:results}));
       });
       html += '</div>';
-      html += '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-outline btn-sm" onclick="App.exportResults()">导出Excel</button><button class="btn btn-outline btn-sm" onclick="App.exportResultsCSV()">导出CSV</button></div>';
+      html += '<div style="display:flex;gap:8px;margin-top:16px"><button class="btn btn-outline btn-sm" onclick="App.exportResults()">导出Excel</button><button class="btn btn-outline btn-sm" onclick="App.exportResultsCSV()">导出CSV</button></div>';
       table.innerHTML = html;
-    } catch(e) { this.hideLoading(); table.innerHTML = '<p class="text-muted p-8 text-center">加载失败：'+e.message+'</p>'; }
+    } catch(e) { this.hideLoading(); table.innerHTML = '<p class="text-muted p-8 text-center">加载失败</p>'; }
+  },
+
+  renderResultsEventDetail(eid) {
+    var table = document.getElementById('results-table');
+    if (!table) return;
+    try {
+      var cached = sessionStorage.getItem('res_group_'+eid);
+      if (!cached) { table.innerHTML = '<p class="text-muted p-8 text-center">数据已过期，请返回重新选择</p>'; return; }
+      var g = JSON.parse(cached);
+      var medals = {1:'🥇',2:'🥈',3:'🥉'};
+      var results = g.results.sort(function(a,b){return (a.rank||99)-(b.rank||99)});
+      var html = '<div class="section-title"><a href="#/results" style="color:var(--red)">&larr; 返回</a> '+g.name+'<small>完整排名</small></div>';
+      html += '<div class="table-container"><table class="table"><thead><tr><th>排名</th><th>姓名</th><th>班级</th><th>成绩</th><th>奖项</th></tr></thead><tbody>';
+      results.forEach(function(r) {
+        html += '<tr class="'+(r.rank<=3?'award-row':'')+'"><td>'+ (medals[r.rank]||r.rank||'-') +'</td><td>'+r.name+'</td><td>'+(r.class_name||'-')+'</td><td>'+(r.performance||'-')+'</td><td><span class="badge badge-success">'+(r.award||'-')+'</span></td></tr>';
+      });
+      html += '</tbody></table></div>';
+      table.innerHTML = html;
+    } catch(e) { table.innerHTML = '<p class="text-muted p-8 text-center">加载失败</p>'; }
   },
 
   _toggleResults(id) {
     var el = document.getElementById(id);
-    if (el) { el.style.display = el.style.display === 'none' ? 'block' : 'none'; }
+    if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
   },
 
   _toggleResults(id) {
@@ -689,19 +705,19 @@ const App = {
       window.location.hash = '#/login';
       return;
     }
-    const ok = await this.confirmDialog(`確認報名「${eventName}」？`);
+    const ok = await this.confirmDialog(`确认报名「${eventName}」？`);
     if (!ok) return;
     App.showLoading();
     try {
       const res = await API.student.submitRegistration(eventId);
       if (res.success) {
-        this.showToast(res.message || '報名成功，等待審核', 'success');
+        this.showToast(res.message || '报名成功，等待审核', 'success');
         this.renderHome();
       } else {
-        this.showToast(res.error || '報名失敗', 'error');
+        this.showToast(res.error || '报名失败', 'error');
       }
     } catch (e) {
-      this.showToast(e.message || '報名失敗', 'error');
+      this.showToast(e.message || '报名失败', 'error');
     } finally {
       this.hideLoading();
     }

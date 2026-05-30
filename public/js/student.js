@@ -18,8 +18,8 @@ const Student = {
           </div>
           <ul class="student-menu">
             <li class="student-menu-item active" data-tab="profile"><i class="fas fa-id-card"></i>个人资料</li>
-            <li class="student-menu-item" data-tab="register"><i class="fas fa-pen-to-square"></i>在線報名</li>
-            <li class="student-menu-item" data-tab="my-registrations"><i class="fas fa-list-check"></i>我的報名</li>
+            <li class="student-menu-item" data-tab="register"><i class="fas fa-pen-to-square"></i>在線报名</li>
+            <li class="student-menu-item" data-tab="my-registrations"><i class="fas fa-list-check"></i>我的报名</li>
             <li class="student-menu-item" data-tab="my-schedules"><i class="fas fa-calendar"></i>我的赛程</li>
             <li class="student-menu-item" data-tab="my-results"><i class="fas fa-trophy"></i>我的成绩</li>
             <li class="student-menu-item" data-tab="class-results"><i class="fas fa-users"></i>班级成绩</li>
@@ -207,10 +207,10 @@ const Student = {
     });
   },
 
-  // ===== 2. 在線報名 =====
+  // ===== 2. 在線报名 =====
   async _renderRegister() {
     const c = document.getElementById('student-content');
-    c.innerHTML = '<div class="text-center p-8"><div class="spinner"></div><p class="text-muted mt-2">載入項目中…</p></div>';
+    c.innerHTML = '<div class="text-center p-8"><div class="spinner"></div><p class="text-muted mt-2">加载项目中…</p></div>';
 
     try {
       const evRes = await API.get('/student/events');
@@ -224,32 +224,32 @@ const Student = {
       );
 
       const genderLabel = g => (g === 'male' ? '男子組' : g === 'female' ? '女子組' : '混合組');
-      const catLabel = c => ({ track: '徑賽', field: '田賽', relay: '接力', team: '集體' }[c] || c);
-      const typeLabel = t => (t === 'team' ? '集體' : '個人');
+      const catLabel = c => ({ track: '徑賽', field: '田賽', relay: '接力', team: '集体' }[c] || c);
+      const typeLabel = t => (t === 'team' ? '集体' : '个人');
       const esc = s => this._escape(s);
 
       let banner = '';
       if (!regOpen) {
-        banner = '<div class="reg-banner reg-banner--closed"><span><strong>報名已關閉</strong> — 管理員已暫停線上報名，請留意公告通知。</span></div>';
+        banner = '<div class="reg-banner reg-banner--closed"><span><strong>报名已关闭</strong> — 管理员已暫停線上报名，請留意公告通知。</span></div>';
       } else {
-        banner = `<div class="reg-banner reg-banner--open"><span>報名開放中 · 您已報 <strong>${myN}</strong> / <strong>${maxN}</strong> 項</span>${myN >= maxN ? '<span class="text-sm">已達上限</span>' : ''}</div>`;
+        banner = `<div class="reg-banner reg-banner--open"><span>报名開放中 · 您已報 <strong>${myN}</strong> / <strong>${maxN}</strong> 項</span>${myN >= maxN ? '<span class="text-sm">已達上限</span>' : ''}</div>`;
       }
 
       if (events.length === 0) {
-        c.innerHTML = `<div class="student-section"><h2 class="student-section-title">在線報名</h2>${banner}<div class="empty-state"><div class="empty-state__icon"><i class="fas fa-inbox"></i></div><p class="empty-state__desc">暫無開放報名的項目</p></div></div>`;
+        c.innerHTML = `<div class="student-section"><h2 class="student-section-title">在線报名</h2>${banner}<div class="empty-state"><div class="empty-state__icon"><i class="fas fa-inbox"></i></div><p class="empty-state__desc">暂无開放报名的项目</p></div></div>`;
         return;
       }
 
-      let html = `<div class="student-section"><h2 class="student-section-title">在線報名</h2>${banner}<div class="card-grid" id="register-event-grid">`;
+      let html = `<div class="student-section"><h2 class="student-section-title">在線报名</h2>${banner}<div class="card-grid" id="register-event-grid">`;
       events.forEach(e => {
         const isReg = regIds.has(e.id);
         const full = e.max_participants > 0 && (e.registered_count || 0) >= e.max_participants;
         const atLimit = myN >= maxN;
         const remaining = e.max_participants > 0 ? Math.max(0, e.max_participants - (e.registered_count || 0)) : '不限';
         const btnDisabled = !regOpen || isReg || full || atLimit;
-        let btnText = '提交報名';
-        if (!regOpen) btnText = '報名關閉';
-        else if (isReg) btnText = '已報名';
+        let btnText = '提交报名';
+        if (!regOpen) btnText = '报名关闭';
+        else if (isReg) btnText = '已报名';
         else if (full) btnText = '名額已滿';
         else if (atLimit) btnText = '已達上限';
         const btnClass = btnDisabled ? 'btn-secondary' : 'btn-primary';
@@ -267,7 +267,7 @@ const Student = {
                 <span><i class="fas fa-location-dot" style="width:16px;color:var(--text-muted)"></i> ${esc(e.venue || '待定')}</span>
                 <span><i class="fas fa-users" style="width:16px;color:var(--text-muted)"></i> ${e.registered_count || 0} / ${e.max_participants || '不限'}</span>
               </div>
-              ${e.rules ? `<p class="text-sm mt-2" style="padding:0.75rem;background:var(--surface-2);border-radius:var(--radius);color:var(--text-secondary);line-height:1.6"><strong>規則：</strong>${esc(e.rules)}</p>` : ''}
+              ${e.rules ? `<p class="text-sm mt-2" style="padding:0.75rem;background:var(--surface-2);border-radius:var(--radius);color:var(--text-secondary);line-height:1.6"><strong>规则：</strong>${esc(e.rules)}</p>` : ''}
             </div>
             <div class="card-footer">
               <span class="text-xs text-muted">剩餘名額：<strong style="color:var(--text)">${remaining}</strong></span>
@@ -286,30 +286,30 @@ const Student = {
         this._doRegister(id, name);
       });
     } catch (e) {
-      c.innerHTML = `<div class="empty-state"><div class="empty-state__icon"><i class="fas fa-exclamation-circle"></i></div><p class="empty-state__desc">載入失敗：${this._escape(e.message)}</p><button type="button" class="btn btn-outline mt-2" id="reg-retry-btn">重新載入</button></div>`;
+      c.innerHTML = `<div class="empty-state"><div class="empty-state__icon"><i class="fas fa-exclamation-circle"></i></div><p class="empty-state__desc">加载失败：${this._escape(e.message)}</p><button type="button" class="btn btn-outline mt-2" id="reg-retry-btn">重新加载</button></div>`;
       document.getElementById('reg-retry-btn')?.addEventListener('click', () => this._renderRegister());
     }
   },
 
   async _doRegister(eventId, eventName) {
-    const ok = await App.confirmDialog(`確認報名「${eventName}」？提交後將進入審核流程。`);
+    const ok = await App.confirmDialog(`确认报名「${eventName}」？提交後將進入审核流程。`);
     if (!ok) return;
     App.showLoading();
     try {
       const res = await API.student.submitRegistration(eventId);
       if (res.success) {
-        App.showToast(res.message || '報名成功，等待審核', 'success');
+        App.showToast(res.message || '报名成功，等待审核', 'success');
         this.currentTab = 'my-registrations';
         document.querySelectorAll('.student-menu-item').forEach(i => {
           i.classList.toggle('active', i.dataset.tab === 'my-registrations');
         });
         this.renderTab();
       } else {
-        App.showToast(res.error || '報名失敗', 'error');
+        App.showToast(res.error || '报名失败', 'error');
         if (this.currentTab === 'register') this._renderRegister();
       }
     } catch (e) {
-      App.showToast(e.message || '報名失敗', 'error');
+      App.showToast(e.message || '报名失败', 'error');
     } finally {
       App.hideLoading();
     }

@@ -52,7 +52,7 @@ router.get('/events/:id', (req, res) => {
   try {
     const db = getDb();
     const event = db.prepare(`
-      SELECT id, name, category, event_type, gender_group, max_participants, rules, description, venue, status, sort_order, created_at
+      SELECT id, name, category, event_type, gender_group, max_participants, rules, venue, status, sort_order, created_at
       FROM events WHERE id = ?
     `).get(req.params.id);
     if (!event) {
