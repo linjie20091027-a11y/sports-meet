@@ -178,8 +178,11 @@ const Forum = {
   // ===== AI 助手 =====
   _initAIChat() {
     if (document.getElementById('ai-chat-panel')) return;
-    // 从localStorage恢复历史记录
-    try { this._chatHistory = JSON.parse(localStorage.getItem('ai_chat_history') || '[]'); } catch(e) { this._chatHistory = []; }
+    // 按用户ID隔离历史记录
+    var uid = (App.user && App.user.id) ? App.user.id : 'guest';
+    var key = 'ai_chat_history_' + uid;
+    try { this._chatHistory = JSON.parse(localStorage.getItem(key) || '[]'); } catch(e) { this._chatHistory = []; }
+    this._chatKey = key;
     if (this._chatHistory.length > 40) this._chatHistory = this._chatHistory.slice(-40);
     const html = `
       <div id="ai-chat-bubble" class="ai-chat-bubble" title="AI 助手小濠">
@@ -254,7 +257,7 @@ const Forum = {
   },
 
   _saveChatHistory() {
-    try { localStorage.setItem('ai_chat_history', JSON.stringify(this._chatHistory.slice(-40))); } catch(e) {}
+    try { localStorage.setItem(this._chatKey || 'ai_chat_history', JSON.stringify(this._chatHistory.slice(-40))); } catch(e) {}
   },
 
   async _sendAIMessage() {
