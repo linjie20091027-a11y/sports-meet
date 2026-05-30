@@ -10,6 +10,8 @@ let _sql = null;
 
 // 包装层：将 sql.js API 转换为 better-sqlite3 兼容 API
 function wrapDb(sqlDb) {
+  let transactionDepth = 0;
+  let pendingSave = false;
 
   function saveDbImmediate() {
     try {
@@ -21,7 +23,10 @@ function wrapDb(sqlDb) {
   }
 
   function saveDb() {
-    // 立即保存，不延迟
+    if (transactionDepth > 0) {
+      pendingSave = true;
+      return;
+    }
     saveDbImmediate();
   }
 
@@ -93,6 +98,37 @@ function wrapDb(sqlDb) {
     // pragma 支持
     pragma(sql) {
       sqlDb.run('PRAGMA ' + sql);
+    },
+
+    transaction(fn) {
+      return (...args) => {
+        const isOuterTransaction = transactionDepth === 0;
+        if (isOuterTransaction) {
+          sqlDb.run('BEGIN');
+        }
+        transactionDepth++;
+        try {
+          const result = fn(...args);
+          transactionDepth--;
+          if (isOuterTransaction) {
+            sqlDb.run('COMMIT');
+            if (pendingSave) {
+              pendingSave = false;
+              saveDbImmediate();
+            }
+          }
+          return result;
+        } catch (e) {
+          transactionDepth = Math.max(0, transactionDepth - 1);
+          if (isOuterTransaction) {
+            pendingSave = false;
+            try {
+              sqlDb.run('ROLLBACK');
+            } catch (_) { /* ignore rollback errors */ }
+          }
+          throw e;
+        }
+      };
     }
   };
 }
@@ -120,6 +156,7 @@ async function initDatabase() {
     seedDefaultData();
   }
   // seedEventDescriptions disabled - missing column
+  migrateSchema();
 
   return wrapDb(_db);
 }
@@ -127,10 +164,14 @@ async function initDatabase() {
 function migrateSchema() {
   const alters = [
     "ALTER TABLE events ADD COLUMN description TEXT DEFAULT ''",
+<<<<<<< Updated upstream
     "ALTER TABLE users ADD COLUMN sport_group TEXT DEFAULT 'A'",
     "ALTER TABLE users ADD COLUMN gender TEXT DEFAULT ''",
     "ALTER TABLE users ADD COLUMN age INTEGER DEFAULT 16",
     "ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT ''",
+=======
+    "ALTER TABLE results ADD COLUMN is_school_record INTEGER DEFAULT 0",
+>>>>>>> Stashed changes
   ];
   alters.forEach((sql) => {
     try { _db.run(sql); } catch (_) { /* 欄位已存在 */ }
@@ -324,6 +365,7 @@ function initTables() {
       award TEXT DEFAULT '' CHECK(award IN ('','一等','二等','三等','优秀','团体')),
       is_published INTEGER DEFAULT 0,
       note TEXT DEFAULT '',
+      is_school_record INTEGER DEFAULT 0,
       recorded_by INTEGER,
       created_at TEXT DEFAULT (datetime('now','localtime')),
       updated_at TEXT DEFAULT (datetime('now','localtime')),

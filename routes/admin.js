@@ -27,6 +27,122 @@ function getIp(req) {
   return req.headers['x-forwarded-for'] || req.connection.remoteAddress || '';
 }
 
+const RESULT_AWARDS = new Set(['', '一等', '二等', '三等', '优秀', '团体']);
+const RESULT_ALLOWED_TEXT_REGEX = /^[A-Za-z0-9\u4e00-\u9fa5\s:.,()\-+/（）]*$/;
+const RESULT_ALLOWED_NOTE_REGEX = /^[A-Za-z0-9\u4e00-\u9fa5\s:.,()\-+/，。！？；：“”‘’、（）【】#&]*$/;
+const RESULT_PERFORMANCE_REGEX = /^(?:\d{1,2}:\d{1,2}(?:\.\d{1,3})?|\d{1,5}(?:\.\d{1,3})?|DNS|DNF|DQ|NM)$/i;
+const RESULT_ALLOWED_NAME_REGEX = /^[A-Za-z0-9\u4e00-\u9fa5\s·.．・()（）-]{1,50}$/;
+
+function cleanResultText(value, maxLength, regex) {
+  const text = String(value || '').trim().slice(0, maxLength);
+  return regex.test(text) ? text : '';
+}
+
+function parseSchoolRecordFlag(value) {
+  if (value === true || value === 1 || value === '1') return 1;
+  if (typeof value === 'string' && ['true', 'yes', 'y', '是'].includes(value.trim().toLowerCase())) return 1;
+  return 0;
+}
+
+function isValidPerformance(performance) {
+  if (!performance) return true;
+  if (!RESULT_PERFORMANCE_REGEX.test(performance)) return false;
+  if (performance.includes(':')) {
+    const parts = performance.split(':');
+    const minutes = parseInt(parts[0], 10);
+    const seconds = parseFloat(parts[1]);
+    return minutes >= 0 && minutes <= 99 && seconds >= 0 && seconds < 60;
+  }
+  const upper = performance.toUpperCase();
+  if (['DNS', 'DNF', 'DQ', 'NM'].includes(upper)) return true;
+  const numeric = parseFloat(performance);
+  return !isNaN(numeric) && numeric >= 0 && numeric <= 99999.999;
+}
+
+function normalizeResultPayload(payload, options = {}) {
+  const partial = options.partial === true;
+  const normalized = {};
+
+  if (payload.schedule_id !== undefined) {
+    const scheduleId = parseInt(payload.schedule_id, 10);
+    if (!scheduleId) throw new Error('赛程不能为空');
+    normalized.schedule_id = scheduleId;
+  } else if (!partial) {
+    throw new Error('赛程不能为空');
+  }
+
+  if (payload.user_id !== undefined) {
+    const userId = parseInt(payload.user_id, 10);
+    if (!userId) throw new Error('用户不能为空');
+    normalized.user_id = userId;
+  } else if (!partial && !payload.student_id && !(payload.student_name !== undefined ? String(payload.student_name).trim() : payload.name !== undefined ? String(payload.name).trim() : '')) {
+    throw new Error('用户不能为空');
+  }
+
+  if (payload.performance !== undefined) {
+    const rawPerformance = String(payload.performance || '').trim().toUpperCase();
+    const performance = cleanResultText(rawPerformance, 20, RESULT_ALLOWED_TEXT_REGEX);
+    if (rawPerformance && !performance) throw new Error('成绩包含非法字符');
+    if (!isValidPerformance(performance)) throw new Error('成绩格式不正确，请输入数字、时间格式或 DNS/DNF/DQ/NM');
+    normalized.performance = performance;
+  }
+
+  if (payload.award !== undefined) {
+    const award = String(payload.award || '').trim();
+    if (!RESULT_AWARDS.has(award)) throw new Error('奖项不合法');
+    normalized.award = award;
+  }
+
+  if (payload.note !== undefined) {
+    const note = cleanResultText(payload.note, 500, RESULT_ALLOWED_NOTE_REGEX);
+    if (String(payload.note || '').trim() && !note) throw new Error('备注包含非法字符');
+    normalized.note = note;
+  }
+
+  if (payload.score !== undefined) {
+    const score = Number(payload.score);
+    if (isNaN(score) || score < 0 || score > 99999) throw new Error('积分范围不合法');
+    normalized.score = Number(score.toFixed(2));
+  }
+
+  if (payload.is_school_record !== undefined) {
+    normalized.is_school_record = parseSchoolRecordFlag(payload.is_school_record);
+  }
+
+  return normalized;
+}
+
+function resolveStudentUser(db, payload, options = {}) {
+  const partial = options.partial === true;
+  if (payload.user_id !== undefined) {
+    const userId = parseInt(payload.user_id, 10);
+    if (!userId) throw new Error('学生账号无效');
+    const user = db.prepare("SELECT id, name, student_id, class_name, grade, role FROM users WHERE id = ?").get(userId);
+    if (!user) throw new Error('用户不存在');
+    return user;
+  }
+
+  if (payload.student_id !== undefined && String(payload.student_id).trim()) {
+    const studentId = String(payload.student_id).trim();
+    const user = db.prepare("SELECT id, name, student_id, class_name, grade, role FROM users WHERE student_id = ? AND role = 'student'").get(studentId);
+    if (!user) throw new Error('学号对应的学生不存在');
+    return user;
+  }
+
+  const rawStudentName = payload.student_name !== undefined ? payload.student_name : payload.name;
+  if (rawStudentName !== undefined && String(rawStudentName).trim()) {
+    const studentName = String(rawStudentName).trim();
+    if (!RESULT_ALLOWED_NAME_REGEX.test(studentName)) throw new Error('学生姓名格式不合法');
+    const users = db.prepare("SELECT id, name, student_id, class_name, grade, role FROM users WHERE name = ? AND role = 'student'").all(studentName);
+    if (users.length === 1) return users[0];
+    if (users.length > 1) throw new Error('存在同名学生，请改用学号导入或重新选择具体学生');
+    throw new Error('学生姓名不存在');
+  }
+
+  if (partial) return null;
+  throw new Error('请提供学生姓名、学号或用户ID');
+}
+
 function paginate(query, params, page, limit) {
   const p = Math.max(1, parseInt(page) || 1);
   const l = Math.min(100, Math.max(1, parseInt(limit) || 20));
@@ -87,6 +203,44 @@ router.get('/settings', (req, res) => {
 });
 
 // ==================== 用户管理 ====================
+
+// GET /student-directory - 学生目录（用于成绩录入选择器）
+router.get('/student-directory', (req, res) => {
+  try {
+    const db = getDb();
+    const gradeRows = db.prepare('SELECT id, name, sort_order FROM grades ORDER BY sort_order, id').all();
+    const classRows = db.prepare(`SELECT c.id, c.name, c.sort_order, c.grade_id, g.name as grade_name, g.sort_order as grade_sort_order
+      FROM classes c JOIN grades g ON c.grade_id = g.id
+      ORDER BY g.sort_order, c.sort_order, c.id`).all();
+    const studentRows = db.prepare(`SELECT id, name, student_id, class_name, grade, username, email
+      FROM users WHERE role = 'student' AND status = 'active'
+      ORDER BY grade, class_name, name, id`).all();
+
+    const classes = classRows.map((cls) => {
+      const students = studentRows.filter((student) => student.class_name === cls.name && student.grade === cls.grade_name);
+      return {
+        id: cls.id,
+        name: cls.name,
+        grade_id: cls.grade_id,
+        grade_name: cls.grade_name,
+        sort_order: cls.sort_order || 0,
+        grade_sort_order: cls.grade_sort_order || 0,
+        student_count: students.length
+      };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        grades: gradeRows,
+        classes,
+        students: studentRows
+      }
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
 
 // GET /users - 用户列表
 router.get('/users', (req, res) => {
@@ -713,15 +867,28 @@ router.get('/results', (req, res) => {
 router.post('/results', (req, res) => {
   try {
     const db = getDb();
-    const { schedule_id, user_id, performance, award } = req.body;
-    if (!schedule_id || !user_id) return res.status(400).json({ success: false, error: '赛程和用户必填' });
-    db.prepare(`INSERT INTO results (schedule_id, user_id, performance, award, recorded_by)
-      VALUES (?, ?, ?, ?, ?)`).run(schedule_id, user_id, performance || '', award || '', req.user.id);
-    logOperation(req.user.id, req.user.username, '录入成绩', `赛程ID:${schedule_id} 用户ID:${user_id}`, getIp(req));
+    const data = normalizeResultPayload(req.body);
+    const student = resolveStudentUser(db, req.body);
+    data.user_id = student.id;
+    const schedule = db.prepare('SELECT id FROM schedules WHERE id = ?').get(data.schedule_id);
+    const user = db.prepare('SELECT id FROM users WHERE id = ?').get(data.user_id);
+    if (!schedule) return res.status(400).json({ success: false, error: '赛程不存在' });
+    if (!user) return res.status(400).json({ success: false, error: '用户不存在' });
+    db.prepare(`INSERT INTO results (schedule_id, user_id, performance, award, note, is_school_record, recorded_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
+      data.schedule_id,
+      data.user_id,
+      data.performance || '',
+      data.award || '',
+      data.note || '',
+      data.is_school_record || 0,
+      req.user.id
+    );
+    logOperation(req.user.id, req.user.username, '录入成绩', `赛程ID:${data.schedule_id} 用户ID:${data.user_id}`, getIp(req));
     res.json({ success: true, message: '成绩已录入' });
   } catch (e) {
     if (e.message.includes('UNIQUE')) return res.status(400).json({ success: false, error: '该用户在此赛程已有成绩' });
-    res.status(500).json({ success: false, error: e.message });
+    res.status(400).json({ success: false, error: e.message });
   }
 });
 
@@ -735,22 +902,56 @@ router.post('/results/batch', upload.single('file'), (req, res) => {
     const rows = XLSX.utils.sheet_to_json(sheet);
 
     let success = 0, fail = 0;
-    const insert = db.prepare('INSERT INTO results (schedule_id, user_id, performance, award, recorded_by) VALUES (?, ?, ?, ?, ?)');
+    const insert = db.prepare('INSERT INTO results (schedule_id, user_id, performance, award, note, is_school_record, recorded_by) VALUES (?, ?, ?, ?, ?, ?, ?)');
 
-    const txn = db.transaction(() => {
-      for (const row of rows) {
-        const scheduleId = row['赛程ID'] || row['schedule_id'];
-        const userId = row['用户ID'] || row['user_id'];
-        const performance = String(row['成绩'] || row['performance'] || '');
-        const award = String(row['奖项'] || row['award'] || '');
-        if (!scheduleId || !userId) { fail++; continue; }
-        try {
-          insert.run(scheduleId, userId, performance, award, req.user.id);
-          success++;
-        } catch { fail++; }
+    for (const row of rows) {
+      try {
+        const rawScheduleId = row['赛程ID'] || row['schedule_id'];
+        const rawUserId = row['用户ID'] || row['user_id'];
+        const rawStudentId = row['学号'] || row['student_id'];
+        const rawStudentName = row['学生姓名'] || row['姓名'] || row['name'];
+        const scheduleId = parseInt(rawScheduleId, 10);
+        let userId = rawUserId !== undefined && rawUserId !== '' ? parseInt(rawUserId, 10) : 0;
+        if (!userId && rawStudentId) {
+          const user = db.prepare("SELECT id FROM users WHERE student_id = ? AND role = 'student'").get(String(rawStudentId).trim());
+          userId = user ? user.id : 0;
+        }
+
+        const payload = normalizeResultPayload({
+          schedule_id: scheduleId,
+          user_id: userId,
+          student_id: rawStudentId,
+          student_name: rawStudentName,
+          performance: row['成绩'] || row['performance'],
+          award: row['奖项'] || row['award'],
+          note: row['输入备注'] || row['备注'] || row['note'],
+          is_school_record: row['是否打破学校记录'] || row['打破学校记录'] || row['is_school_record']
+        });
+        const student = resolveStudentUser(db, {
+          user_id: userId,
+          student_id: rawStudentId,
+          student_name: rawStudentName
+        });
+        payload.user_id = student.id;
+
+        const schedule = db.prepare('SELECT id FROM schedules WHERE id = ?').get(payload.schedule_id);
+        const user = db.prepare('SELECT id FROM users WHERE id = ?').get(payload.user_id);
+        if (!schedule || !user) throw new Error('赛程或用户不存在');
+
+        insert.run(
+          payload.schedule_id,
+          payload.user_id,
+          payload.performance || '',
+          payload.award || '',
+          payload.note || '',
+          payload.is_school_record || 0,
+          req.user.id
+        );
+        success++;
+      } catch (_) {
+        fail++;
       }
-    });
-    txn();
+    }
 
     logOperation(req.user.id, req.user.username, '批量导入成绩', `成功${success}条，失败${fail}条`, getIp(req));
     res.json({ success: true, message: `导入完成：成功${success}条，失败${fail}条` });
@@ -766,18 +967,53 @@ router.put('/results/:id', (req, res) => {
     const { id } = req.params;
     const result = db.prepare('SELECT * FROM results WHERE id = ?').get(id);
     if (!result) return res.status(404).json({ success: false, error: '成绩记录不存在' });
+    const data = normalizeResultPayload(req.body, { partial: true });
+    const student = resolveStudentUser(db, req.body, { partial: true });
+    if (student) data.user_id = student.id;
 
-    const fields = ['schedule_id', 'user_id', 'performance', 'award', 'score', 'note'];
+    if (data.schedule_id) {
+      const schedule = db.prepare('SELECT id FROM schedules WHERE id = ?').get(data.schedule_id);
+      if (!schedule) return res.status(400).json({ success: false, error: '赛程不存在' });
+    }
+    if (data.user_id) {
+      const user = db.prepare('SELECT id FROM users WHERE id = ?').get(data.user_id);
+      if (!user) return res.status(400).json({ success: false, error: '用户不存在' });
+    }
+
+    const fields = ['schedule_id', 'user_id', 'performance', 'award', 'score', 'note', 'is_school_record'];
     const sets = [];
     const vals = [];
     fields.forEach(f => {
-      if (req.body[f] !== undefined) { sets.push(`${f} = ?`); vals.push(req.body[f]); }
+      if (data[f] !== undefined) { sets.push(`${f} = ?`); vals.push(data[f]); }
     });
     if (sets.length === 0) return res.json({ success: true, message: '无需更新' });
     vals.push(id);
     db.prepare(`UPDATE results SET ${sets.join(', ')}, updated_at = datetime('now','localtime') WHERE id = ?`).run(...vals);
     logOperation(req.user.id, req.user.username, '修改成绩', `成绩ID:${id}`, getIp(req));
     res.json({ success: true, message: '成绩已更新' });
+  } catch (e) {
+    res.status(400).json({ success: false, error: e.message });
+  }
+});
+
+// DELETE /results - 批量删除成绩
+router.delete('/results', (req, res) => {
+  try {
+    const db = getDb();
+    const { ids } = req.body || {};
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, error: '请提供要删除的成绩ID' });
+    }
+    const stmt = db.prepare('DELETE FROM results WHERE id = ?');
+    let deleted = 0;
+    ids.forEach((id) => {
+      const numericId = parseInt(id, 10);
+      if (!numericId) return;
+      const operation = stmt.run(numericId);
+      deleted += operation.changes || 0;
+    });
+    logOperation(req.user.id, req.user.username, '批量删除成绩', `删除${deleted}条`, getIp(req));
+    res.json({ success: true, message: `已删除${deleted}条成绩` });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
@@ -876,7 +1112,7 @@ router.get('/results/export', (req, res) => {
   try {
     const db = getDb();
     const results = db.prepare(`SELECT r.id, u.student_id, u.name, u.class_name, u.grade,
-      e.name as event_name, e.category, s.round_name, r.performance, r.rank, r.award, r.score, r.is_published
+      e.name as event_name, e.category, s.round_name, r.performance, r.rank, r.award, r.score, r.note, r.is_school_record, r.is_published
       FROM results r
       LEFT JOIN users u ON r.user_id = u.id
       LEFT JOIN schedules s ON r.schedule_id = s.id

@@ -1192,6 +1192,8 @@ const Admin = {
   // ==================== 成绩管理 ====================
   _resultsPage: 1,
   _resultsLimit: 20,
+  _resultDraftStorageKey: 'sportsMeet.admin.resultDrafts',
+  _studentDirectoryCache: null,
 
   async renderResults(container) {
     this._resultsPage = 1;
@@ -1216,6 +1218,7 @@ const Admin = {
       </div>
     `;
     this._renderResultsFilter(container);
+    this._loadResultFilters(container);
     this._loadResults(container);
     this._bindResultsEvents(container);
   },
@@ -1229,6 +1232,28 @@ const Admin = {
       <select id="results-published" class="form__select"><option value="">公示状态</option><option value="1">已公示</option><option value="0">未公示</option></select>
       <button class="btn btn--primary btn--sm" id="btn-results-search"><i class="fas fa-search"></i> 筛选</button>
     `;
+  },
+
+  async _loadResultFilters(container) {
+    try {
+      const gradesRes = await API.public.getGrades();
+      const grades = gradesRes.data && gradesRes.data.grades ? gradesRes.data.grades : [];
+      const classes = gradesRes.data && gradesRes.data.classes ? gradesRes.data.classes : [];
+      const gradeSel = container.querySelector('#results-grade');
+      const classSel = container.querySelector('#results-class');
+      grades.forEach((g) => {
+        const option = document.createElement('option');
+        option.value = g.name;
+        option.textContent = g.name;
+        gradeSel.appendChild(option);
+      });
+      classes.forEach((c) => {
+        const option = document.createElement('option');
+        option.value = c.name;
+        option.textContent = c.name;
+        classSel.appendChild(option);
+      });
+    } catch (e) {}
   },
 
   _bindResultsEvents(container) {
@@ -1262,7 +1287,7 @@ const Admin = {
 
       let html = '';
       if (list.length > 0) {
-        html = '<table class="table table--striped"><thead><tr><th><input type="checkbox" id="results-select-all"></th><th>学号</th><th>姓名</th><th>班级</th><th>项目</th><th>轮次</th><th>成绩</th><th>排名</th><th>奖项</th><th>公示</th><th>操作</th></tr></thead><tbody>';
+        html = '<table class="table table--striped"><thead><tr><th><input type="checkbox" id="results-select-all"></th><th>学号</th><th>姓名</th><th>班级</th><th>项目</th><th>轮次</th><th>成绩</th><th>排名</th><th>奖项</th><th>校纪录</th><th>公示</th><th>操作</th></tr></thead><tbody>';
         list.forEach(r => {
           html += '<tr><td><input type="checkbox" class="result-checkbox" data-id="' + r.id + '"></td>';
           html += '<td>' + (r.student_id || '-') + '</td>';
@@ -1273,6 +1298,7 @@ const Admin = {
           html += '<td>' + (r.performance || '-') + '</td>';
           html += '<td>' + (r.rank || '-') + '</td>';
           html += '<td>' + (r.award || '-') + '</td>';
+          html += '<td>' + (r.is_school_record ? '<span class="badge badge--warning">已刷新</span>' : '-') + '</td>';
           html += '<td>' + (r.is_published ? '<span class="badge badge--success">已公示</span>' : '<span class="badge badge--inactive">未公示</span>') + '</td>';
           html += '<td><div class="table__actions">';
           html += '<button class="btn btn--ghost btn--xs btn-edit-result" data-id="' + r.id + '"><i class="fas fa-edit"></i></button>';
@@ -1310,66 +1336,570 @@ const Admin = {
     }
   },
 
+  _escapeHtml(value) {
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  },
+
+  _getResultDrafts() {
+    try {
+      const drafts = JSON.parse(localStorage.getItem(this._resultDraftStorageKey) || '[]');
+      return Array.isArray(drafts) ? drafts : [];
+    } catch (_) {
+      return [];
+    }
+  },
+
+  _setResultDrafts(drafts) {
+    localStorage.setItem(this._resultDraftStorageKey, JSON.stringify((drafts || []).slice(0, 50)));
+  },
+
+  _collectResultFormData() {
+    return {
+      schedule_id: document.getElementById('result-schedule') ? document.getElementById('result-schedule').value : '',
+      user_id: document.getElementById('result-user-id') ? document.getElementById('result-user-id').value : '',
+      student_name: document.getElementById('result-student-name') ? document.getElementById('result-student-name').value : '',
+      performance: document.getElementById('result-performance') ? document.getElementById('result-performance').value : '',
+      award: document.getElementById('result-award') ? document.getElementById('result-award').value : '',
+      note: document.getElementById('result-note') ? document.getElementById('result-note').value : '',
+      is_school_record: !!(document.getElementById('result-school-record') && document.getElementById('result-school-record').checked)
+    };
+  },
+
+  _applyResultFormData(data) {
+    if (document.getElementById('result-schedule')) document.getElementById('result-schedule').value = data.schedule_id || document.getElementById('result-schedule').value;
+    if (document.getElementById('result-user-id')) document.getElementById('result-user-id').value = data.user_id || '';
+    if (document.getElementById('result-student-name')) document.getElementById('result-student-name').value = data.student_name || '';
+    if (document.getElementById('result-performance')) document.getElementById('result-performance').value = data.performance || '';
+    if (document.getElementById('result-award')) document.getElementById('result-award').value = data.award || '';
+    if (document.getElementById('result-note')) document.getElementById('result-note').value = data.note || '';
+    if (document.getElementById('result-school-record')) document.getElementById('result-school-record').checked = !!data.is_school_record;
+    this._updateSelectedStudentInfo(data);
+    this._updateResultNoteCounter();
+  },
+
+  _serializeResultForm(data) {
+    return JSON.stringify({
+      schedule_id: String(data.schedule_id || ''),
+      user_id: String(data.user_id || ''),
+      student_name: String(data.student_name || ''),
+      performance: String(data.performance || ''),
+      award: String(data.award || ''),
+      note: String(data.note || ''),
+      is_school_record: !!data.is_school_record
+    });
+  },
+
+  _updateResultNoteCounter() {
+    const noteInput = document.getElementById('result-note');
+    const counter = document.getElementById('result-note-counter');
+    if (noteInput && counter) counter.textContent = noteInput.value.length + '/500';
+  },
+
+  _setResultFieldError(field, message) {
+    const input = document.getElementById('result-' + field);
+    const error = document.getElementById('result-' + field + '-error');
+    if (!error) return;
+    error.textContent = message || '';
+    error.style.display = message ? 'block' : 'none';
+    if (input) input.style.borderColor = message ? '#dc2626' : '';
+  },
+
+  _sanitizeResultDraftData(raw) {
+    return {
+      schedule_id: String(raw.schedule_id || '').replace(/[^\d]/g, '').slice(0, 10),
+      user_id: String(raw.user_id || '').replace(/[^\d]/g, '').slice(0, 10),
+      student_name: String(raw.student_name || '').replace(/[<>{}\[\]$^|~`]/g, '').slice(0, 50),
+      student_id: String(raw.student_id || '').replace(/[<>{}\[\]$^|~`]/g, '').slice(0, 30),
+      class_name: String(raw.class_name || '').replace(/[<>{}\[\]$^|~`]/g, '').slice(0, 50),
+      grade: String(raw.grade || '').replace(/[<>{}\[\]$^|~`]/g, '').slice(0, 50),
+      performance: String(raw.performance || '').toUpperCase().replace(/[^0-9A-Z:.]/g, '').slice(0, 20),
+      award: String(raw.award || ''),
+      note: String(raw.note || '').replace(/[<>{}\[\]$^|~`]/g, '').slice(0, 500),
+      is_school_record: !!raw.is_school_record
+    };
+  },
+
+  _validateResultForm(raw, options = {}) {
+    const strict = options.strict !== false;
+    const data = this._sanitizeResultDraftData(raw);
+    const errors = {};
+    const performancePattern = /^(?:\d{1,2}:\d{1,2}(?:\.\d{1,3})?|\d{1,5}(?:\.\d{1,3})?|DNS|DNF|DQ|NM)$/i;
+
+    if (strict && !data.schedule_id) errors.schedule = '请选择赛程';
+    if (strict && !data.student_name) errors['student-name'] = '请输入并选择学生姓名';
+    if (strict && !data.user_id) errors['student-name'] = '请选择有效的学生账号';
+    if (data.user_id && (!/^\d+$/.test(data.user_id) || Number(data.user_id) <= 0)) errors['student-name'] = '学生账号映射无效，请重新选择';
+    if (raw.student_name && raw.student_name !== data.student_name) errors['student-name'] = '学生姓名包含非法字符';
+
+    if (data.performance) {
+      if (!performancePattern.test(data.performance)) {
+        errors.performance = '请输入数字、时间格式或 DNS/DNF/DQ/NM';
+      } else if (data.performance.includes(':')) {
+        const parts = data.performance.split(':');
+        const minutes = parseInt(parts[0], 10);
+        const seconds = parseFloat(parts[1]);
+        if (minutes > 99 || seconds >= 60) errors.performance = '时间格式超出合理范围';
+      } else if (!['DNS', 'DNF', 'DQ', 'NM'].includes(data.performance)) {
+        const score = parseFloat(data.performance);
+        if (isNaN(score) || score < 0 || score > 99999.999) errors.performance = '成绩数值超出合理范围';
+      }
+    } else if (strict) {
+      errors.performance = '请输入成绩';
+    }
+
+    if ((raw.note || '').length > 500) errors.note = '备注最多500字';
+    if (raw.note && raw.note !== data.note) errors.note = '备注已自动过滤非法字符';
+
+    return { data, errors, valid: Object.keys(errors).length === 0 };
+  },
+
+  _updateSelectedStudentInfo(data) {
+    const info = document.getElementById('result-selected-student');
+    if (!info) return;
+    if (data && data.user_id) {
+      const extra = [];
+      if (data.student_id) extra.push('学号: ' + data.student_id);
+      if (data.class_name) extra.push(data.class_name);
+      if (data.grade) extra.push(data.grade);
+      info.textContent = extra.length ? '已绑定学生账号：' + extra.join(' / ') : '已绑定学生账号';
+      info.style.display = 'block';
+    } else {
+      info.textContent = '';
+      info.style.display = 'none';
+    }
+  },
+
+  _sortStudentsByName(students) {
+    return (students || []).slice().sort((a, b) => {
+      const nameCompare = String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hans-CN-u-co-pinyin');
+      if (nameCompare !== 0) return nameCompare;
+      return String(a.student_id || '').localeCompare(String(b.student_id || ''));
+    });
+  },
+
+  async _getStudentDirectory(forceRefresh) {
+    if (!forceRefresh && this._studentDirectoryCache) return this._studentDirectoryCache;
+    const res = await API.get('/admin/student-directory');
+    const data = res.data || {};
+    const classes = (data.classes || []).slice().sort((a, b) => {
+      if ((a.grade_sort_order || 0) !== (b.grade_sort_order || 0)) return (a.grade_sort_order || 0) - (b.grade_sort_order || 0);
+      if ((a.sort_order || 0) !== (b.sort_order || 0)) return (a.sort_order || 0) - (b.sort_order || 0);
+      const gradeCompare = String(a.grade_name || '').localeCompare(String(b.grade_name || ''), 'zh-Hans-CN-u-co-pinyin');
+      if (gradeCompare !== 0) return gradeCompare;
+      return String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hans-CN-u-co-pinyin');
+    });
+    const students = this._sortStudentsByName(data.students || []);
+    this._studentDirectoryCache = { grades: data.grades || [], classes, students };
+    return this._studentDirectoryCache;
+  },
+
+  _closeStudentPicker() {
+    const layer = document.getElementById('result-student-picker-layer');
+    if (layer) layer.remove();
+  },
+
+  _renderStudentPickerShell(title, bodyHtml, options = {}) {
+    this._closeStudentPicker();
+    const layer = document.createElement('div');
+    layer.id = 'result-student-picker-layer';
+    layer.style.position = 'fixed';
+    layer.style.inset = '0';
+    layer.style.background = 'rgba(0,0,0,0.35)';
+    layer.style.zIndex = '1600';
+    layer.style.display = 'flex';
+    layer.style.alignItems = 'center';
+    layer.style.justifyContent = 'center';
+    layer.style.padding = '16px';
+    layer.innerHTML =
+      '<div id="result-student-picker-dialog" style="width:min(680px, calc(100vw - 32px));max-height:min(80vh, 720px);overflow:hidden;background:#fff;border-radius:14px;border:1px solid #e5e7eb;box-shadow:0 20px 40px rgba(0,0,0,0.18);display:flex;flex-direction:column;">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-bottom:1px solid #e5e7eb;background:#faf7ef;">' +
+      '<div style="display:flex;align-items:center;gap:8px;">' +
+      (options.showBack ? '<button type="button" id="btn-student-picker-back" class="btn btn--outline btn--sm"><i class="fas fa-arrow-left"></i> 返回</button>' : '') +
+      '<strong style="color:#7f1d1d;">' + this._escapeHtml(title) + '</strong>' +
+      '</div>' +
+      '<button type="button" id="btn-student-picker-close" class="btn btn--ghost btn--sm"><i class="fas fa-times"></i></button>' +
+      '</div>' +
+      '<div id="result-student-picker-body" style="padding:16px;overflow:auto;">' + bodyHtml + '</div>' +
+      '</div>';
+    document.body.appendChild(layer);
+    layer.addEventListener('click', (e) => {
+      if (e.target === layer) this._closeStudentPicker();
+    });
+    document.getElementById('btn-student-picker-close').addEventListener('click', () => this._closeStudentPicker());
+    if (options.showBack && typeof options.onBack === 'function') {
+      document.getElementById('btn-student-picker-back').addEventListener('click', options.onBack);
+    }
+  },
+
+  async _openStudentClassPicker() {
+    this._renderStudentPickerShell('选择班级', '<div style="padding:24px;text-align:center;color:#6b7280;"><div class="spinner" style="margin:0 auto 12px;"></div><div>正在加载班级列表...</div></div>');
+    try {
+      const directory = await this._getStudentDirectory(false);
+      const classes = directory.classes || [];
+      if (classes.length === 0) {
+        this._renderStudentPickerShell('选择班级', this._emptyState('fas fa-users', '暂无班级', '请先在年级班级管理中添加班级'));
+        return;
+      }
+      let html = '<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:12px;">';
+      classes.forEach((cls) => {
+        html += '<button type="button" class="student-class-option" data-class-name="' + this._escapeHtml(cls.name) + '" data-grade-name="' + this._escapeHtml(cls.grade_name || '') + '" style="text-align:left;padding:14px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;cursor:pointer;transition:.15s;">';
+        html += '<div style="font-weight:700;color:#111827;margin-bottom:6px;">' + this._escapeHtml((cls.grade_name ? cls.grade_name + ' ' : '') + cls.name) + '</div>';
+        html += '<div style="font-size:0.8125rem;color:#6b7280;">学生数：' + (cls.student_count || 0) + '</div>';
+        html += '</button>';
+      });
+      html += '</div>';
+      this._renderStudentPickerShell('选择班级', html);
+      document.querySelectorAll('.student-class-option').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          this._openStudentListPicker({
+            class_name: btn.dataset.className,
+            grade_name: btn.dataset.gradeName
+          });
+        });
+      });
+    } catch (e) {
+      this._renderStudentPickerShell('选择班级', '<div style="padding:24px;text-align:center;color:#dc2626;">加载班级失败：' + this._escapeHtml(e.message || '未知错误') + '</div>');
+    }
+  },
+
+  _filterStudentsForPicker(students, keyword) {
+    const search = String(keyword || '').trim().toLowerCase();
+    if (!search) return this._sortStudentsByName(students);
+    return this._sortStudentsByName((students || []).filter((student) => {
+      const name = String(student.name || '').toLowerCase();
+      const studentId = String(student.student_id || '').toLowerCase();
+      const username = String(student.username || '').toLowerCase();
+      return name.includes(search) || studentId.includes(search) || username.includes(search);
+    }));
+  },
+
+  async _openStudentListPicker(selectedClass) {
+    const classTitle = (selectedClass.grade_name ? selectedClass.grade_name + ' ' : '') + selectedClass.class_name;
+    this._renderStudentPickerShell('选择学生', '<div style="padding:24px;text-align:center;color:#6b7280;"><div class="spinner" style="margin:0 auto 12px;"></div><div>正在加载学生列表...</div></div>', {
+      showBack: true,
+      onBack: () => this._openStudentClassPicker()
+    });
+    const directory = await this._getStudentDirectory(false);
+    const students = (directory.students || []).filter((student) => student.class_name === selectedClass.class_name && student.grade === selectedClass.grade_name);
+    let debounceTimer = null;
+
+    const renderList = (keyword) => {
+      const filtered = this._filterStudentsForPicker(students, keyword);
+      let listHtml = '<div style="margin-bottom:12px;font-size:0.875rem;color:#6b7280;">当前班级：' + this._escapeHtml(classTitle) + '，共 ' + students.length + ' 名学生</div>';
+      listHtml += '<div style="margin-bottom:12px;"><input id="student-picker-search-input" class="form__input" placeholder="搜索学生姓名、学号或账号" value="' + this._escapeHtml(keyword || '') + '"></div>';
+      if (filtered.length === 0) {
+        listHtml += this._emptyState('fas fa-search', '未找到匹配学生', '请尝试其他关键词');
+      } else {
+        listHtml += '<div style="display:flex;flex-direction:column;gap:8px;">';
+        filtered.forEach((student) => {
+          listHtml += '<button type="button" class="student-name-option" data-id="' + student.id + '" data-name="' + this._escapeHtml(student.name || '') + '" data-student-id="' + this._escapeHtml(student.student_id || '') + '" data-class-name="' + this._escapeHtml(student.class_name || '') + '" data-grade="' + this._escapeHtml(student.grade || '') + '" style="text-align:left;padding:12px;border:1px solid #e5e7eb;border-radius:10px;background:#fff;cursor:pointer;">';
+          listHtml += '<div style="font-weight:700;color:#111827;">' + this._escapeHtml(student.name || '-') + '</div>';
+          listHtml += '<div style="font-size:0.8125rem;color:#6b7280;">' + this._escapeHtml(student.student_id || '-') + ' / ' + this._escapeHtml(student.class_name || '-') + ' / ' + this._escapeHtml(student.grade || '-') + '</div>';
+          listHtml += '</button>';
+        });
+        listHtml += '</div>';
+      }
+      this._renderStudentPickerShell('选择学生', listHtml, {
+        showBack: true,
+        onBack: () => this._openStudentClassPicker()
+      });
+
+      const searchInput = document.getElementById('student-picker-search-input');
+      if (searchInput) {
+        searchInput.focus();
+        searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
+        searchInput.addEventListener('input', () => {
+          clearTimeout(debounceTimer);
+          const nextKeyword = searchInput.value;
+          debounceTimer = setTimeout(() => renderList(nextKeyword), 100);
+        });
+      }
+
+      document.querySelectorAll('.student-name-option').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const data = {
+            user_id: btn.dataset.id,
+            student_name: btn.dataset.name,
+            student_id: btn.dataset.studentId,
+            class_name: btn.dataset.className,
+            grade: btn.dataset.grade
+          };
+          if (document.getElementById('result-user-id')) document.getElementById('result-user-id').value = data.user_id;
+          if (document.getElementById('result-student-name')) document.getElementById('result-student-name').value = data.student_name;
+          this._updateSelectedStudentInfo(data);
+          this._closeStudentPicker();
+          this._runResultValidation(false);
+        });
+      });
+    };
+
+    renderList('');
+  },
+
+  _bindResultStudentSearch() {
+    const input = document.getElementById('result-student-name');
+    const hiddenId = document.getElementById('result-user-id');
+    if (!input || !hiddenId) return;
+    input.readOnly = true;
+    input.addEventListener('click', () => this._openStudentClassPicker());
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        this._openStudentClassPicker();
+      }
+    });
+  },
+
+  _renderResultDrafts(state) {
+    const wrap = document.getElementById('result-draft-list');
+    if (!wrap) return;
+    const drafts = this._getResultDrafts();
+    if (drafts.length === 0) {
+      wrap.innerHTML = '<div class="empty-state" style="padding:16px 0;"><div class="empty-state__title">暂无待提交成绩</div><div class="empty-state__desc">可使用“暂存草稿”保存未完成录入内容</div></div>';
+      return;
+    }
+
+    let html = '<table class="table table--striped"><thead><tr><th><input type="checkbox" id="result-draft-select-all"></th><th>赛程</th><th>学生姓名</th><th>成绩</th><th>奖项</th><th>校纪录</th><th>保存时间</th><th>操作</th></tr></thead><tbody>';
+    drafts.forEach((draft) => {
+      html += '<tr>';
+      html += '<td><input type="checkbox" class="result-draft-checkbox" data-id="' + draft.id + '"></td>';
+      html += '<td>' + this._escapeHtml(draft.schedule_label || draft.schedule_id || '-') + '</td>';
+      html += '<td>' + this._escapeHtml(draft.student_name || '-') + '</td>';
+      html += '<td>' + this._escapeHtml(draft.performance || '-') + '</td>';
+      html += '<td>' + this._escapeHtml(draft.award || '-') + '</td>';
+      html += '<td>' + (draft.is_school_record ? '是' : '否') + '</td>';
+      html += '<td>' + this._escapeHtml(draft.saved_at || '-') + '</td>';
+      html += '<td><button class="btn btn--ghost btn--xs btn-load-result-draft" data-id="' + draft.id + '"><i class="fas fa-folder-open"></i> 载入</button></td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    wrap.innerHTML = html;
+
+    const selectAll = document.getElementById('result-draft-select-all');
+    if (selectAll) {
+      selectAll.addEventListener('change', () => {
+        document.querySelectorAll('.result-draft-checkbox').forEach((cb) => { cb.checked = selectAll.checked; });
+      });
+    }
+
+    document.querySelectorAll('.btn-load-result-draft').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const draft = this._getResultDrafts().find((item) => item.id === btn.dataset.id);
+        if (!draft) return;
+        const dirty = this._serializeResultForm(this._collectResultFormData()) !== state.initialSnapshot;
+        if (dirty && !window.confirm('当前输入尚未保存，确认覆盖为选中草稿吗？')) return;
+        this._applyResultFormData(draft);
+        state.activeDraftId = draft.id;
+        state.initialSnapshot = this._serializeResultForm(this._collectResultFormData());
+        this._runResultValidation(false);
+      });
+    });
+  },
+
+  _runResultValidation(strict) {
+    const validation = this._validateResultForm(this._collectResultFormData(), { strict });
+    this._setResultFieldError('schedule', validation.errors.schedule || '');
+    this._setResultFieldError('student-name', validation.errors['student-name'] || '');
+    this._setResultFieldError('performance', validation.errors.performance || '');
+    this._setResultFieldError('note', validation.errors.note || '');
+    this._updateResultNoteCounter();
+    return validation;
+  },
+
   async _showResultModal(result, container) {
     const isEdit = !!result;
+    const schedules = [];
     let schedOpts = '';
     try {
       const schedRes = await API.get('/admin/schedules');
-      const schedules = schedRes.data || [];
+      (schedRes.data || []).forEach((item) => schedules.push(item));
       schedules.forEach(s => {
         const sel = isEdit && result.schedule_id === s.id ? ' selected' : '';
         schedOpts += '<option value="' + s.id + '"' + sel + '>' + s.event_name + ' - ' + s.round_name + ' (' + (s.start_time || '') + ')</option>';
       });
     } catch (e) {}
 
+    const initialData = this._sanitizeResultDraftData({
+      schedule_id: isEdit ? (result.schedule_id || '') : (schedules[0] ? schedules[0].id : ''),
+      user_id: isEdit ? (result.user_id || '') : '',
+      student_name: isEdit ? (result.user_name || '') : '',
+      performance: isEdit ? (result.performance || '') : '',
+      award: isEdit ? (result.award || '') : '',
+      note: isEdit ? (result.note || '') : '',
+      is_school_record: isEdit ? !!result.is_school_record : false,
+      student_id: isEdit ? (result.student_id || '') : '',
+      class_name: isEdit ? (result.class_name || '') : '',
+      grade: isEdit ? (result.grade || '') : ''
+    });
     const title = isEdit ? '编辑成绩' : '录入成绩';
-    let html = '<div class="modal__header"><h3 class="modal__title">' + title + '</h3><button class="modal__close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>';
+    let html = '<div class="modal__header"><h3 class="modal__title">' + title + '</h3><button class="modal__close" id="btn-close-result-modal"><i class="fas fa-times"></i></button></div>';
     html += '<div class="modal__body"><div class="form">';
-    html += '<div class="form__group"><label class="form__label form__label--required">赛程</label><select class="form__select" id="result-schedule">' + schedOpts + '</select></div>';
-    html += '<div class="form__group"><label class="form__label form__label--required">用户ID</label><input class="form__input" id="result-user-id" type="number" value="' + (isEdit ? (result.user_id || '') : '') + '"></div>';
-    html += '<div class="form__group"><label class="form__label">成绩</label><input class="form__input" id="result-performance" placeholder="如: 12.34" value="' + (isEdit ? (result.performance || '') : '') + '"></div>';
-    html += '<div class="form__group"><label class="form__label">奖项</label><select class="form__select" id="result-award"><option value="">无</option><option value="一等"' + (isEdit && result.award === '一等' ? ' selected' : '') + '>一等</option><option value="二等"' + (isEdit && result.award === '二等' ? ' selected' : '') + '>二等</option><option value="三等"' + (isEdit && result.award === '三等' ? ' selected' : '') + '>三等</option></select></div>';
+    html += '<div class="form__group"><label class="form__label form__label--required">赛程</label><select class="form__select" id="result-schedule">' + schedOpts + '</select><div class="form__hint" id="result-schedule-error" style="display:none;color:#dc2626;"></div></div>';
+    html += '<input type="hidden" id="result-user-id" value="' + this._escapeHtml(initialData.user_id) + '">';
+    html += '<div class="form__group"><label class="form__label form__label--required">学生姓名</label><input class="form__input" id="result-student-name" placeholder="点击选择班级和学生" autocomplete="off" readonly value="' + this._escapeHtml(initialData.student_name) + '"><div class="form__hint" id="result-selected-student" style="display:none;"></div><div class="form__hint">点击学生姓名字段后，先选择班级，再选择该班学生</div><div class="form__hint" id="result-student-name-error" style="display:none;color:#dc2626;"></div></div>';
+    html += '<div class="form__group"><label class="form__label form__label--required">成绩</label><input class="form__input" id="result-performance" placeholder="如: 12.34、1:23.45、DNS" value="' + this._escapeHtml(initialData.performance) + '"><div class="form__hint">支持纯数字、时间格式，或 DNS / DNF / DQ / NM</div><div class="form__hint" id="result-performance-error" style="display:none;color:#dc2626;"></div></div>';
+    html += '<div class="form__group"><label class="form__label">奖项</label><select class="form__select" id="result-award"><option value="">无</option><option value="一等"' + (initialData.award === '一等' ? ' selected' : '') + '>一等</option><option value="二等"' + (initialData.award === '二等' ? ' selected' : '') + '>二等</option><option value="三等"' + (initialData.award === '三等' ? ' selected' : '') + '>三等</option><option value="优秀"' + (initialData.award === '优秀' ? ' selected' : '') + '>优秀</option><option value="团体"' + (initialData.award === '团体' ? ' selected' : '') + '>团体</option></select></div>';
+    html += '<div class="form__group"><label class="form__label form__label--required">输入备注</label><textarea class="form__textarea" id="result-note" rows="4" placeholder="请输入补充说明，最多500字">' + this._escapeHtml(initialData.note) + '</textarea><div style="display:flex;justify-content:space-between;gap:12px;"><div class="form__hint">支持中文、英文、数字及常用標點</div><div class="form__hint" id="result-note-counter">0/500</div></div><div class="form__hint" id="result-note-error" style="display:none;color:#dc2626;"></div></div>';
+    html += '<div class="form__group"><label class="form__label form__label--required">是否打破学校记录</label><label style="display:flex;align-items:center;gap:8px;font-weight:500;color:#374151;"><input type="checkbox" id="result-school-record"' + (initialData.is_school_record ? ' checked' : '') + '> 是，已刷新校史记录</label></div>';
+    if (!isEdit) {
+      html += '<div style="margin-top:20px;border-top:1px solid #e5e7eb;padding-top:16px;">';
+      html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;"><strong style="color:#1f2937;">待提交成绩草稿</strong><div style="display:flex;gap:8px;"><button class="btn btn--outline btn--sm" type="button" id="btn-delete-result-drafts"><i class="fas fa-trash"></i> 批量删除待提交成绩</button></div></div>';
+      html += '<div id="result-draft-list"></div>';
+      html += '</div>';
+    }
     html += '</div></div>';
-    html += '<div class="modal__footer"><button class="btn btn--outline" onclick="App.hideModal()">取消</button><button class="btn btn--primary" id="btn-save-result" data-id="' + (isEdit ? result.id : '') + '">保存</button></div>';
+    html += '<div class="modal__footer"><button class="btn btn--outline" type="button" id="btn-cancel-result">取消</button><button class="btn btn--outline" type="button" id="btn-reset-result">重置输入</button>' + (!isEdit ? '<button class="btn btn--warning" type="button" id="btn-save-result-draft"><i class="fas fa-save"></i> 暂存草稿</button>' : '') + '<button class="btn btn--primary" id="btn-save-result" data-id="' + (isEdit ? result.id : '') + '">提交</button></div>';
     App.showModal(html);
+
+    this._applyResultFormData(initialData);
+    const state = {
+      initialSnapshot: this._serializeResultForm(this._collectResultFormData()),
+      activeDraftId: null
+    };
+
+    App._modalBeforeClose = () => {
+      if (document.getElementById('result-student-picker-layer')) {
+        this._closeStudentPicker();
+        return false;
+      }
+      const dirty = this._serializeResultForm(this._collectResultFormData()) !== state.initialSnapshot;
+      if (!dirty) return true;
+      return window.confirm('当前存在未保存的输入内容，确认关闭录入界面吗？');
+    };
+
+    const scheduleInput = document.getElementById('result-schedule');
+    const performanceInput = document.getElementById('result-performance');
+    const noteInput = document.getElementById('result-note');
+
+    const handleLiveInput = () => this._runResultValidation(false);
+    scheduleInput.addEventListener('change', handleLiveInput);
+    this._bindResultStudentSearch();
+    performanceInput.addEventListener('input', () => {
+      const sanitized = performanceInput.value.toUpperCase().replace(/[^0-9A-Z:.]/g, '').slice(0, 20);
+      if (sanitized !== performanceInput.value) performanceInput.value = sanitized;
+      handleLiveInput();
+    });
+    noteInput.addEventListener('input', () => {
+      const sanitized = noteInput.value.replace(/[<>{}\[\]$^|~`]/g, '').slice(0, 500);
+      if (sanitized !== noteInput.value) noteInput.value = sanitized;
+      handleLiveInput();
+    });
+    document.getElementById('result-award').addEventListener('change', handleLiveInput);
+    document.getElementById('result-school-record').addEventListener('change', handleLiveInput);
+    this._runResultValidation(false);
+
+    document.getElementById('btn-close-result-modal').addEventListener('click', () => App.hideModal());
+    document.getElementById('btn-cancel-result').addEventListener('click', () => App.hideModal());
+    document.getElementById('btn-reset-result').addEventListener('click', () => {
+      const dirty = this._serializeResultForm(this._collectResultFormData()) !== state.initialSnapshot;
+      if (dirty && !window.confirm('确认重置当前输入内容吗？未保存的数据将会丢失。')) return;
+      this._applyResultFormData(initialData);
+      state.activeDraftId = null;
+      state.initialSnapshot = this._serializeResultForm(this._collectResultFormData());
+      this._runResultValidation(false);
+    });
+
+    if (!isEdit) {
+      this._renderResultDrafts(state);
+      document.getElementById('btn-save-result-draft').addEventListener('click', () => {
+        const current = this._validateResultForm(this._collectResultFormData(), { strict: false });
+        const data = current.data;
+        const hasContent = data.student_name || data.performance || data.award || data.note || data.is_school_record;
+        if (!hasContent) {
+          App.showToast('请先填写至少一项内容再保存草稿', 'warning');
+          return;
+        }
+        const scheduleText = scheduleInput.options[scheduleInput.selectedIndex] ? scheduleInput.options[scheduleInput.selectedIndex].textContent : '';
+        const drafts = this._getResultDrafts();
+        const draftId = state.activeDraftId || ('draft-' + Date.now());
+        const nextDraft = {
+          id: draftId,
+          ...data,
+          schedule_label: scheduleText,
+          saved_at: new Date().toLocaleString()
+        };
+        const nextDrafts = drafts.filter((item) => item.id !== draftId);
+        nextDrafts.unshift(nextDraft);
+        this._setResultDrafts(nextDrafts);
+        state.activeDraftId = draftId;
+        state.initialSnapshot = this._serializeResultForm(this._collectResultFormData());
+        this._renderResultDrafts(state);
+        App.showToast('草稿已保存', 'success');
+      });
+
+      document.getElementById('btn-delete-result-drafts').addEventListener('click', () => {
+        const selectedIds = [];
+        document.querySelectorAll('.result-draft-checkbox:checked').forEach((cb) => selectedIds.push(cb.dataset.id));
+        if (selectedIds.length === 0) {
+          App.showToast('请先勾选要删除的待提交成绩', 'warning');
+          return;
+        }
+        if (!window.confirm('确认批量删除选中的待提交成绩草稿吗？')) return;
+        const nextDrafts = this._getResultDrafts().filter((item) => !selectedIds.includes(item.id));
+        this._setResultDrafts(nextDrafts);
+        if (state.activeDraftId && selectedIds.includes(state.activeDraftId)) state.activeDraftId = null;
+        this._renderResultDrafts(state);
+        App.showToast('已删除 ' + selectedIds.length + ' 条待提交成绩', 'success');
+      });
+    }
 
     document.getElementById('btn-save-result').addEventListener('click', async () => {
       const id = document.getElementById('btn-save-result').dataset.id;
-      const data = {
-        schedule_id: parseInt(document.getElementById('result-schedule').value),
-        user_id: parseInt(document.getElementById('result-user-id').value),
-        performance: document.getElementById('result-performance').value.trim(),
-        award: document.getElementById('result-award').value
-      };
-      if (!data.schedule_id || !data.user_id) { App.showToast('赛程和用户ID必填', 'warning'); return; }
+      const validation = this._runResultValidation(true);
+      if (!validation.valid) {
+        const firstError = validation.errors.schedule || validation.errors['student-name'] || validation.errors.performance || validation.errors.note;
+        App.showToast(firstError || '请先修正表单错误', 'warning');
+        return;
+      }
       try {
         App.showLoading();
         if (isEdit) {
-          await API.admin.updateResult(id, data);
+          await API.admin.updateResult(id, validation.data);
           App.showToast('成绩已更新', 'success');
         } else {
-          await API.admin.submitResult(data);
+          await API.admin.submitResult(validation.data);
           App.showToast('成绩已录入', 'success');
+          if (state.activeDraftId) {
+            this._setResultDrafts(this._getResultDrafts().filter((item) => item.id !== state.activeDraftId));
+          }
         }
+        this._closeStudentPicker();
+        App._modalBeforeClose = null;
         App.hideModal();
         App.hideLoading();
         this._loadResults(container);
-      } catch (e) { App.hideLoading(); App.showToast(e.message, 'error'); }
+      } catch (e) {
+        App.hideLoading();
+        App.showToast(e.message, 'error');
+      }
     });
   },
 
   _showResultsImport(container) {
-    let html = '<div class="modal__header"><h3 class="modal__title">批量导入成绩</h3><button class="modal__close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>';
-    html += '<div class="modal__body"><button type="button" class="btn btn-outline btn-sm mb-2" onclick="Admin._downloadTemplate(\'results\')"><i class="fas fa-download"></i> 下载Excel模板</button><div class="form"><div class="form__group"><label class="form__label">选择 Excel 文件</label><input type="file" id="results-import-file" class="form__input" accept=".xlsx,.xls,.csv"></div>';
-    html += '<div class="form__hint">表格需包含列：赛程ID(schedule_id)、用户ID(user_id)、成绩(performance)、奖项(award)</div></div></div>';
-    html += '<div class="modal__footer"><button class="btn btn--outline" onclick="App.hideModal()">取消</button><button class="btn btn--primary" id="btn-do-import-results">开始导入</button></div>';
+    let html = '<div class="modal__header"><h3 class="modal__title">批量导入成绩</h3><button class="modal__close" type="button" id="btn-close-results-import"><i class="fas fa-times"></i></button></div>';
+    html += '<div class="modal__body"><button type="button" class="btn btn-outline btn-sm mb-2" id="btn-download-results-template"><i class="fas fa-download"></i> 下载Excel模板</button><div class="form"><div class="form__group"><label class="form__label">选择 Excel 文件</label><input type="file" id="results-import-file" class="form__input" accept=".xlsx,.xls,.csv"></div>';
+    html += '<div class="form__hint">支持列：赛程ID(schedule_id)、学生姓名(name) 或 学号(student_id) 或 用户ID(user_id)、成绩(performance)、奖项(award)、输入备注(note)、是否打破学校记录(is_school_record)</div></div></div>';
+    html += '<div class="modal__footer"><button class="btn btn--outline" type="button" id="btn-cancel-results-import">取消</button><button class="btn btn--primary" id="btn-do-import-results">开始导入</button></div>';
     App.showModal(html);
+    document.getElementById('btn-close-results-import').addEventListener('click', () => App.hideModal());
+    document.getElementById('btn-cancel-results-import').addEventListener('click', () => App.hideModal());
+    document.getElementById('btn-download-results-template').addEventListener('click', () => this._downloadTemplate('results'));
 
     document.getElementById('btn-do-import-results').addEventListener('click', async () => {
       const fileInput = document.getElementById('results-import-file');
       if (!fileInput.files || !fileInput.files[0]) { App.showToast('请选择文件', 'warning'); return; }
+      const file = fileInput.files[0];
+      if (file.size > 10 * 1024 * 1024) { App.showToast('文件大小不能超过10MB', 'warning'); return; }
+      if (!/\.(xlsx|xls|csv)$/i.test(file.name)) { App.showToast('仅支持 Excel 或 CSV 文件', 'warning'); return; }
+      const confirmed = await App.confirmDialog('确认开始批量导入成绩吗？系统将按文件内容写入正式成绩数据。');
+      if (!confirmed) return;
       const formData = new FormData();
-      formData.append('file', fileInput.files[0]);
+      formData.append('file', file);
       try {
         App.showLoading();
         const res = await API.upload('/admin/results/batch', formData);
@@ -2074,7 +2604,7 @@ const Admin = {
       headers = ['学号', '姓名', '班级', '年级'];
       filename = '学生导入模板.xlsx';
     } else if (type === 'results') {
-      headers = ['赛程ID', '学号', '成绩', '奖项'];
+      headers = ['赛程ID', '学生姓名', '学号', '成绩', '奖项', '输入备注', '是否打破学校记录'];
       filename = '成绩导入模板.xlsx';
     } else return;
     const ws = XLSX.utils.aoa_to_sheet([headers]);
@@ -2220,3 +2750,5 @@ const Admin = {
     setTimeout(() => win.print(), 500);
   },
 };
+
+window.Admin = Admin;
