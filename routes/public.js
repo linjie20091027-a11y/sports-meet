@@ -1,58 +1,82 @@
 const express = require('express');
 const router = express.Router();
-const prisma = require('../lib/prisma');
+const { getDb } = require('../database/init');
 
-router.get('/meet-info', async (req, res) => {
+// GET /api/public/meet-info
+router.get('/meet-info', (req, res) => {
   try {
-    const info = await prisma.meetInfo.findFirst();
+    const db = getDb();
+    const info = db.prepare(`SELECT id, name, theme, start_date, end_date, registration_open, site_maintenance, logo_url, created_at FROM meet_info LIMIT 1`).get();
     res.json({ success: true, data: info || null });
   } catch (err) {
     res.status(500).json({ error: '获取运动会信息失败' });
   }
 });
 
-router.get('/events', async (req, res) => {
+// GET /api/public/events
+router.get('/events', (req, res) => {
   try {
-    const where = { status: 'active' };
-    if (req.query.category) where.category = req.query.category;
-    if (req.query.gender_group) where.genderGroup = req.query.gender_group;
-    if (req.query.event_type) where.eventType = req.query.event_type;
+    const db = getDb();
+    let sql = `SELECT id, name, category, event_type, gender_group, max_participants, rules, description, venue, status, sort_order, created_at FROM events WHERE status = 'active'`;
+    const conditions = [];
+    const params = [];
 
-    const events = await prisma.event.findMany({
-      where,
-      orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }]
-    });
+    if (req.query.category) {
+      conditions.push('category = ?');
+      params.push(req.query.category);
+    }
+    if (req.query.gender_group) {
+      conditions.push('gender_group = ?');
+      params.push(req.query.gender_group);
+    }
+    if (req.query.event_type) {
+      conditions.push('event_type = ?');
+      params.push(req.query.event_type);
+    }
+
+    if (conditions.length > 0) {
+      sql += ' AND ' + conditions.join(' AND ');
+    }
+
+    sql += ' ORDER BY sort_order ASC, id ASC';
+
+    const events = db.prepare(sql).all(...params);
     res.json({ success: true, data: events });
   } catch (err) {
     res.status(500).json({ error: '获取项目列表失败' });
   }
 });
 
-router.get('/events/:id', async (req, res) => {
+// GET /api/public/events/:id
+router.get('/events/:id', (req, res) => {
   try {
-    const eventId = parseInt(req.params.id);
-    const event = await prisma.event.findUnique({ where: { id: eventId } });
+    const db = getDb();
+    const event = db.prepare(`
+      SELECT id, name, category, event_type, gender_group, max_participants, rules, description, venue, status, sort_order, created_at
+      FROM events WHERE id = ?
+    `).get(req.params.id);
     if (!event) {
       return res.status(404).json({ success: false, error: '項目不存在' });
     }
 
-    const regCount = await prisma.registration.count({
-      where: { eventId, status: { not: 'rejected' } }
-    });
-    const approvedCount = await prisma.registration.count({
-      where: { eventId, status: 'approved' }
-    });
-    const schedules = await prisma.schedule.findMany({
-      where: { eventId, status: 'published' },
-      orderBy: { startTime: 'asc' }
-    });
+    const regCount = db.prepare(
+      `SELECT COUNT(*) as cnt FROM registrations WHERE event_id = ? AND status != 'rejected'`
+    ).get(req.params.id);
+    const approvedCount = db.prepare(
+      `SELECT COUNT(*) as cnt FROM registrations WHERE event_id = ? AND status = 'approved'`
+    ).get(req.params.id);
+    const schedules = db.prepare(`
+      SELECT s.id, s.round_name, s.start_time, s.end_time, s.venue, s.status
+      FROM schedules s WHERE s.event_id = ? AND s.status = 'published'
+      ORDER BY s.start_time
+    `).all(req.params.id);
 
     res.json({
       success: true,
       data: {
         ...event,
-        registration_count: regCount,
-        approved_count: approvedCount,
+        registration_count: regCount.cnt,
+        approved_count: approvedCount.cnt,
         schedules
       }
     });
@@ -61,169 +85,137 @@ router.get('/events/:id', async (req, res) => {
   }
 });
 
-router.get('/schedules', async (req, res) => {
+// GET /api/public/schedules
+router.get('/schedules', (req, res) => {
   try {
-    const where = { status: 'published' };
+    const db = getDb();
+    let sql = `SELECT s.id, s.event_id, e.name AS event_name, s.round_name, s.start_time, s.end_time, s.venue, s.max_heats, s.status, s.note, s.created_at FROM schedules s LEFT JOIN events e ON s.event_id = e.id WHERE s.status = 'published'`;
+    const conditions = [];
+    const params = [];
+
     if (req.query.date) {
-      where.startTime = { startsWith: req.query.date };
+      conditions.push('date(s.start_time) = date(?)');
+      params.push(req.query.date);
     }
     if (req.query.venue) {
-      where.venue = { contains: req.query.venue };
+      conditions.push('s.venue LIKE ?');
+      params.push(`%${req.query.venue}%`);
     }
     if (req.query.event_id) {
-      where.eventId = parseInt(req.query.event_id);
+      conditions.push('s.event_id = ?');
+      params.push(req.query.event_id);
     }
 
-    const schedules = await prisma.schedule.findMany({
-      where,
-      include: { event: true },
-      orderBy: { startTime: 'asc' }
-    });
+    if (conditions.length > 0) {
+      sql += ' AND ' + conditions.join(' AND ');
+    }
 
-    const data = schedules.map(s => ({
-      id: s.id,
-      event_id: s.eventId,
-      event_name: s.event?.name,
-      round_name: s.roundName,
-      start_time: s.startTime,
-      end_time: s.endTime,
-      venue: s.venue,
-      max_heats: s.maxHeats,
-      status: s.status,
-      note: s.note,
-      created_at: s.createdAt
-    }));
+    sql += ' ORDER BY s.start_time ASC';
 
-    res.json({ success: true, data });
+    const schedules = db.prepare(sql).all(...params);
+    res.json({ success: true, data: schedules });
   } catch (err) {
     res.status(500).json({ error: '获取赛程列表失败' });
   }
 });
 
-router.get('/results', async (req, res) => {
+// GET /api/public/results
+router.get('/results', (req, res) => {
   try {
-    const where = { isPublished: 1 };
-    const userWhere = {};
-    if (req.query.grade) userWhere.grade = req.query.grade;
-    if (req.query.class_name) userWhere.className = { contains: req.query.class_name };
-    if (Object.keys(userWhere).length > 0) where.user = userWhere;
+    const db = getDb();
+    let sql = `SELECT r.id, r.schedule_id, r.user_id, u.name AS user_name, u.name, u.student_id, u.class_name, u.grade, r.performance, r.rank, r.score, r.award, r.note, r.created_at, r.updated_at, e.name AS event_name, e.category, s.round_name FROM results r LEFT JOIN users u ON r.user_id = u.id LEFT JOIN schedules s ON r.schedule_id = s.id LEFT JOIN events e ON s.event_id = e.id WHERE r.is_published = 1`;
+    const conditions = [];
+    const params = [];
+
     if (req.query.event_id) {
-      where.schedule = { eventId: parseInt(req.query.event_id) };
+      conditions.push('r.schedule_id IN (SELECT id FROM schedules WHERE event_id = ?)');
+      params.push(req.query.event_id);
+    }
+    if (req.query.grade) {
+      conditions.push('u.grade = ?');
+      params.push(req.query.grade);
+    }
+    if (req.query.class_name) {
+      conditions.push('u.class_name LIKE ?');
+      params.push(`%${req.query.class_name}%`);
     }
 
-    const results = await prisma.result.findMany({
-      where,
-      include: {
-        user: { select: { id: true, name: true, studentId: true, className: true, grade: true } },
-        schedule: { include: { event: true } }
-      },
-      orderBy: { createdAt: 'desc' }
-    });
+    if (conditions.length > 0) {
+      sql += ' AND ' + conditions.join(' AND ');
+    }
 
-    const data = results.map(r => ({
-      id: r.id,
-      schedule_id: r.scheduleId,
-      user_id: r.userId,
-      performance: r.performance,
-      rank: r.rank,
-      score: r.score,
-      award: r.award,
-      note: r.note,
-      created_at: r.createdAt,
-      updated_at: r.updatedAt,
-      user_name: r.user?.name,
-      student_id: r.user?.studentId,
-      class_name: r.user?.className,
-      grade: r.user?.grade,
-      event_name: r.schedule?.event?.name,
-      category: r.schedule?.event?.category,
-      round_name: r.schedule?.roundName
-    }));
+    sql += ' ORDER BY r.created_at DESC';
 
-    res.json({ success: true, data });
+    const results = db.prepare(sql).all(...params);
+    res.json({ success: true, data: results });
   } catch (err) {
     res.status(500).json({ error: '获取成绩列表失败' });
   }
 });
 
-router.get('/results/export', async (req, res) => {
+// GET /api/public/results/export
+router.get('/results/export', (req, res) => {
   try {
-    const where = { isPublished: 1 };
-    const userWhere = {};
-    const eventWhere = {};
-    if (req.query.grade) userWhere.grade = req.query.grade;
-    if (req.query.class_name) userWhere.className = { contains: req.query.class_name };
-    if (Object.keys(userWhere).length > 0) where.user = userWhere;
+    const db = getDb();
+    let sql = `SELECT r.id, r.performance, r.rank, r.score, r.award, r.note, u.name AS user_name, u.student_id, u.class_name, u.grade, e.name AS event_name, e.category, e.event_type, e.gender_group, s.round_name, s.start_time FROM results r LEFT JOIN users u ON r.user_id = u.id LEFT JOIN schedules s ON r.schedule_id = s.id LEFT JOIN events e ON s.event_id = e.id WHERE r.is_published = 1`;
+    const conditions = [];
+    const params = [];
+
     if (req.query.event_id) {
-      eventWhere.id = parseInt(req.query.event_id);
-      where.event = eventWhere;
+      conditions.push('e.id = ?');
+      params.push(req.query.event_id);
+    }
+    if (req.query.grade) {
+      conditions.push('u.grade = ?');
+      params.push(req.query.grade);
+    }
+    if (req.query.class_name) {
+      conditions.push('u.class_name LIKE ?');
+      params.push(`%${req.query.class_name}%`);
     }
 
-    const results = await prisma.result.findMany({
-      where,
-      include: {
-        user: { select: { name: true, studentId: true, className: true, grade: true } },
-        schedule: { select: { roundName: true, startTime: true } },
-        event: { select: { name: true, category: true, eventType: true, genderGroup: true } }
-      },
-      orderBy: [{ event: { name: 'asc' } }, { rank: 'asc' }]
-    });
+    if (conditions.length > 0) {
+      sql += ' AND ' + conditions.join(' AND ');
+    }
 
-    const data = results.map(r => ({
-      id: r.id,
-      performance: r.performance,
-      rank: r.rank,
-      score: r.score,
-      award: r.award,
-      note: r.note,
-      user_name: r.user?.name,
-      student_id: r.user?.studentId,
-      class_name: r.user?.className,
-      grade: r.user?.grade,
-      event_name: r.event?.name,
-      category: r.event?.category,
-      event_type: r.event?.eventType,
-      gender_group: r.event?.genderGroup,
-      round_name: r.schedule?.roundName,
-      start_time: r.schedule?.startTime
-    }));
+    sql += ' ORDER BY e.name ASC, r.rank ASC';
 
-    res.json({ success: true, data });
+    const results = db.prepare(sql).all(...params);
+    res.json({ success: true, data: results });
   } catch (err) {
     res.status(500).json({ error: '导出成绩数据失败' });
   }
 });
 
-router.get('/results/rankings', async (req, res) => {
+// GET /api/public/results/rankings
+router.get('/results/rankings', (req, res) => {
   try {
-    const where = { isPublished: 1, rank: { gt: 0 } };
+    const db = getDb();
+    let sql = `SELECT e.id AS event_id, e.name AS event_name, e.category, e.gender_group, r.rank, r.score, r.award, r.performance, u.id AS user_id, u.name AS user_name, u.student_id, u.class_name, u.grade FROM results r LEFT JOIN users u ON r.user_id = u.id LEFT JOIN schedules s ON r.schedule_id = s.id LEFT JOIN events e ON s.event_id = e.id WHERE r.is_published = 1 AND r.rank > 0`;
+    const params = [];
+
     if (req.query.event_id) {
-      where.schedule = { eventId: parseInt(req.query.event_id) };
+      sql += ' AND e.id = ?';
+      params.push(req.query.event_id);
     }
     if (req.query.grade) {
-      where.user = { grade: req.query.grade };
+      sql += ' AND u.grade = ?';
+      params.push(req.query.grade);
     }
 
-    const rows = await prisma.result.findMany({
-      where,
-      include: {
-        user: { select: { id: true, name: true, studentId: true, className: true, grade: true } },
-        schedule: { include: { event: { select: { id: true, name: true, category: true, genderGroup: true, sortOrder: true } } } }
-      },
-      orderBy: [{ schedule: { event: { sortOrder: 'asc' } } }, { schedule: { event: { id: 'asc' } } }, { rank: 'asc' }]
-    });
+    sql += ' ORDER BY e.sort_order ASC, e.id ASC, r.rank ASC';
+
+    const rows = db.prepare(sql).all(...params);
 
     const grouped = {};
     rows.forEach(row => {
-      const event = row.schedule?.event;
-      if (!event) return;
-      const key = `${event.id}_${event.genderGroup || ''}`;
+      const key = `${row.event_id}_${row.gender_group || ''}`;
       if (!grouped[key]) {
         grouped[key] = {
-          event_id: event.id,
-          event_name: event.name,
-          category: event.category,
-          gender_group: event.genderGroup,
+          event_id: row.event_id,
+          event_name: row.event_name,
+          category: row.category,
+          gender_group: row.gender_group,
           rankings: []
         };
       }
@@ -232,11 +224,11 @@ router.get('/results/rankings', async (req, res) => {
         score: row.score,
         award: row.award,
         performance: row.performance,
-        user_id: row.user.id,
-        user_name: row.user.name,
-        student_id: row.user.studentId,
-        class_name: row.user.className,
-        grade: row.user.grade
+        user_id: row.user_id,
+        user_name: row.user_name,
+        student_id: row.student_id,
+        class_name: row.class_name,
+        grade: row.grade
       });
     });
 
@@ -246,81 +238,57 @@ router.get('/results/rankings', async (req, res) => {
   }
 });
 
-router.get('/announcements', async (req, res) => {
+// GET /api/public/announcements
+router.get('/announcements', (req, res) => {
   try {
-    const where = { status: 'published' };
+    const db = getDb();
+    let sql = `SELECT a.id, a.title, a.category, a.is_pinned, a.publish_time, a.expire_time, a.view_count, a.created_at, u.name AS publisher_name FROM announcements a LEFT JOIN users u ON a.published_by = u.id WHERE a.status = 'published' AND (a.expire_time IS NULL OR a.expire_time >= datetime('now','localtime'))`;
+    const params = [];
+
     if (req.query.category) {
-      where.category = req.query.category;
+      sql += ' AND a.category = ?';
+      params.push(req.query.category);
     }
 
-    const announcements = await prisma.announcement.findMany({
-      where,
-      include: { publisher: { select: { name: true } } },
-      orderBy: [{ isPinned: 'desc' }, { publishTime: 'desc' }]
-    });
+    sql += ' ORDER BY a.is_pinned DESC, a.publish_time DESC';
 
-    const data = announcements.map(a => ({
-      ...a,
-      publisher_name: a.publisher?.name
-    }));
-
-    res.json({ success: true, data });
+    const announcements = db.prepare(sql).all(...params);
+    res.json({ success: true, data: announcements });
   } catch (err) {
     res.status(500).json({ error: '获取公告列表失败' });
   }
 });
 
-router.get('/announcements/:id', async (req, res) => {
+// GET /api/public/announcements/:id
+router.get('/announcements/:id', (req, res) => {
   try {
-    const announcementId = parseInt(req.params.id);
-    const announcement = await prisma.announcement.findFirst({
-      where: { id: announcementId, status: 'published' },
-      include: { publisher: { select: { name: true } } }
-    });
+    const db = getDb();
+    const announcement = db.prepare(`SELECT a.id, a.title, a.content, a.category, a.is_pinned, a.publish_time, a.expire_time, a.view_count, a.created_at, u.name AS publisher_name FROM announcements a LEFT JOIN users u ON a.published_by = u.id WHERE a.id = ? AND a.status = 'published'`).get(req.params.id);
     if (!announcement) {
       return res.status(404).json({ error: '公告不存在或已下架' });
     }
 
-    await prisma.announcement.update({
-      where: { id: announcementId },
-      data: { viewCount: { increment: 1 } }
-    });
+    db.prepare(`UPDATE announcements SET view_count = view_count + 1 WHERE id = ?`).run(req.params.id);
 
     res.json({
       success: true,
-      data: {
-        ...announcement,
-        publisher_name: announcement.publisher?.name,
-        view_count: announcement.viewCount + 1
-      }
+      data: { ...announcement, view_count: announcement.view_count + 1 }
     });
   } catch (err) {
     res.status(500).json({ error: '获取公告详情失败' });
   }
 });
 
-router.get('/grades', async (req, res) => {
+// GET /api/public/grades
+router.get('/grades', (req, res) => {
   try {
-    const gradeNames = ['初一', '初二', '初三', '高一', '高二', '高三'];
-    const classes = [
-      ['1班', '2班', '3班', '4班', '5班'],
-      ['1班', '2班', '3班', '4班', '5班'],
-      ['1班', '2班', '3班', '4班', '5班'],
-      ['1班', '2班', '3班', '4班'],
-      ['1班', '2班', '3班', '4班'],
-      ['1班', '2班', '3班', '4班'],
-    ];
+    const db = getDb();
+    const grades = db.prepare(`SELECT id, name, sort_order FROM grades ORDER BY sort_order ASC`).all();
+    const classStmt = db.prepare(`SELECT id, grade_id, name, sort_order FROM classes WHERE grade_id = ? ORDER BY sort_order ASC`);
 
-    const data = gradeNames.map((name, i) => ({
-      id: i + 1,
-      name,
-      sort_order: i + 1,
-      classes: classes[i].map((c, j) => ({
-        id: i * 10 + j + 1,
-        grade_id: i + 1,
-        name: c,
-        sort_order: j + 1
-      }))
+    const data = grades.map(g => ({
+      ...g,
+      classes: classStmt.all(g.id)
     }));
 
     res.json({ success: true, data });
@@ -329,70 +297,49 @@ router.get('/grades', async (req, res) => {
   }
 });
 
-router.get('/search', async (req, res) => {
+// GET /api/public/search
+router.get('/search', (req, res) => {
   try {
+    const db = getDb();
     const q = req.query.q;
     if (!q || !q.trim()) {
       return res.json({ success: true, data: { events: [], students: [], announcements: [] } });
     }
 
-    const keyword = q.trim();
+    const keyword = `%${q.trim()}%`;
 
-    const [events, students, announcements] = await Promise.all([
-      prisma.event.findMany({
-        where: { name: { contains: keyword }, status: 'active' },
-        select: { id: true, name: true, category: true, eventType: true, genderGroup: true, venue: true },
-        take: 10
-      }),
-      prisma.user.findMany({
-        where: {
-          OR: [{ name: { contains: keyword } }, { className: { contains: keyword } }],
-          role: 'student',
-          status: 'active'
-        },
-        select: { id: true, name: true, studentId: true, className: true, grade: true },
-        take: 10
-      }),
-      prisma.announcement.findMany({
-        where: { title: { contains: keyword }, status: 'published' },
-        include: { publisher: { select: { name: true } } },
-        orderBy: [{ isPinned: 'desc' }, { publishTime: 'desc' }],
-        take: 10
-      })
-    ]);
+    const events = db.prepare(`SELECT id, name, category, event_type, gender_group, venue FROM events WHERE name LIKE ? AND status = 'active' LIMIT 10`).all(keyword);
+
+    const students = db.prepare(`SELECT id, name, student_id, class_name, grade FROM users WHERE (name LIKE ? OR class_name LIKE ?) AND role = 'student' AND status = 'active' LIMIT 10`).all(keyword, keyword);
+
+    const announcements = db.prepare(`SELECT a.id, a.title, a.category, a.is_pinned, a.publish_time, u.name AS publisher_name FROM announcements a LEFT JOIN users u ON a.published_by = u.id WHERE a.title LIKE ? AND a.status = 'published' AND (a.expire_time IS NULL OR a.expire_time >= datetime('now','localtime')) ORDER BY a.is_pinned DESC, a.publish_time DESC LIMIT 10`).all(keyword);
 
     res.json({
       success: true,
-      data: {
-        events,
-        students,
-        announcements: announcements.map(a => ({
-          ...a,
-          publisher_name: a.publisher?.name
-        }))
-      }
+      data: { events, students, announcements }
     });
   } catch (err) {
     res.status(500).json({ error: '搜索失败' });
   }
 });
 
-router.get('/stats/overview', async (req, res) => {
+// GET /api/public/stats/overview
+router.get('/stats/overview', (req, res) => {
   try {
-    const [totalEvents, totalReg, completedSchedules, publishedResults] = await Promise.all([
-      prisma.event.count({ where: { status: 'active' } }),
-      prisma.registration.count({ where: { status: 'approved' } }),
-      prisma.schedule.count({ where: { status: 'published' } }),
-      prisma.result.count({ where: { isPublished: 1 } })
-    ]);
+    const db = getDb();
+
+    const totalReg = db.prepare(`SELECT COUNT(*) AS cnt FROM registrations WHERE status = 'approved'`).get();
+    const totalEvents = db.prepare(`SELECT COUNT(*) AS cnt FROM events WHERE status = 'active'`).get();
+    const completedSchedules = db.prepare(`SELECT COUNT(*) AS cnt FROM schedules WHERE status = 'published'`).get();
+    const publishedResults = db.prepare(`SELECT COUNT(*) AS cnt FROM results WHERE is_published = 1`).get();
 
     res.json({
       success: true,
       data: {
-        total_registrations: totalReg,
-        total_events: totalEvents,
-        completed_schedules: completedSchedules,
-        published_results: publishedResults
+        total_registrations: totalReg.cnt,
+        total_events: totalEvents.cnt,
+        completed_schedules: completedSchedules.cnt,
+        published_results: publishedResults.cnt
       }
     });
   } catch (err) {

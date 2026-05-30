@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const prisma = require('../lib/prisma');
+const { getDb } = require('../database/init');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'sports_meet_secret_key_2026';
 
@@ -39,11 +39,11 @@ function adminOnly(req, res, next) {
   next();
 }
 
-async function logOperation(userId, username, action, detail, ip) {
+function logOperation(userId, username, action, detail, ip) {
   try {
-    await prisma.operationLog.create({
-      data: { userId, username, action, detail, ipAddress: ip || '' }
-    });
+    const db = getDb();
+    db.prepare(`INSERT INTO operation_logs (user_id, username, action, detail, ip_address)
+      VALUES (?, ?, ?, ?, ?)`).run(userId, username, action, detail, ip || '');
   } catch (e) {
     console.error('日志记录失败:', e.message);
   }

@@ -1,32 +1,24 @@
 {
   "name": "sports-meet-manager",
-  "version": "2.0.0",
-  "description": "澳门濠江中学运动会管理系统 - Prisma ORM版",
+  "version": "1.0.0",
+  "description": "学校运动会管理网站",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js",
-    "db:migrate": "npx prisma migrate dev --name init",
-    "db:seed": "node prisma/seed.js",
-    "db:studio": "npx prisma studio",
-    "db:reset": "npx prisma migrate reset --force"
+    "dev": "node server.js"
   },
   "dependencies": {
-    "@prisma/client": "^6.0.0",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "express": "^4.18.2",
     "express-rate-limit": "^7.1.5",
+    "express-session": "^1.17.3",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
     "sql.js": "^1.14.1",
     "svg-captcha": "^1.4.0",
-    "uuid": "^9.0.0",
     "xlsx": "^0.18.5"
-  },
-  "devDependencies": {
-    "prisma": "^6.0.0"
   }
 }

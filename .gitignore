@@ -1,6 +1,12 @@
 node_modules/
 database/sports_meet.db
+prisma/dev.db
+prisma/migrations/*.sql
 uploads/*
 !uploads/.gitkeep
 .env
 *.log
+dist/
+*.tar.gz
+data/
+logs/
