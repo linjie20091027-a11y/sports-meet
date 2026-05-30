@@ -80,10 +80,10 @@ const App = {
       document.getElementById('page-results').classList.remove('hidden');
       document.querySelector('[href="#/results"]')?.classList.add('active');
       this.renderResults();
-    } else if (hash.startsWith('/results/event/')) {
+    } else if (hash.startsWith('/results/group/')) {
       document.getElementById('page-results').classList.remove('hidden');
       document.querySelector('[href="#/results"]')?.classList.add('active');
-      this.renderResultsEventDetail(hash.split('/')[3]);
+      this.renderResultsGroup(hash.split('/')[3]);
     } else if (hash === '/announcements') {
       document.getElementById('page-announcements').classList.remove('hidden');
       document.querySelector('[href="#/announcements"]')?.classList.add('active');
@@ -554,59 +554,68 @@ const App = {
       this.hideLoading();
       if (!data.length) { table.innerHTML = '<p class="text-muted p-8 text-center">暂无成绩数据</p>'; return; }
 
-      var medals = {1:'🥇',2:'🥈',3:'🥉'};
       var groups = ['A','B','C','D','E'];
-      var genders = ['male','female'];
-      var genderLabels = {male:'男子组',female:'女子组'};
       
-      var html = '<div class="section-title">成绩公示<small>按组别 → 性别 → 项目查看</small></div>';
+      var html = '<div class="section-title">成绩公示<small>点击组别查看详情</small></div>';
+      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px">';
       
-      // 按组别+性别+项目三级分组
-      var tree = {};
-      data.forEach(function(r){
-        var sg = r.sport_group || r.user_sport_group || 'A';
-        var g = r.gender || r.user_gender || 'male';
-        var en = r.event_name || '其他';
-        if(!tree[sg])tree[sg]={};
-        if(!tree[sg][g])tree[sg][g]={};
-        if(!tree[sg][g][en])tree[sg][g][en]=[];
-        tree[sg][g][en].push(r);
+      groups.forEach(function(sg) {
+        // 统计该组人数
+        var count = 0;
+        data.forEach(function(r){ if((r.user_sport_group||'A')===sg) count++; });
+        if (count === 0) return;
+        html += '<a href="#/results/group/'+sg+'" class="card" style="text-decoration:none;text-align:center;padding:1.5rem;border-left:4px solid var(--red)">';
+        html += '<div style="font-size:2rem;font-weight:900;color:var(--red);font-family:var(--title-font)">'+sg+'</div>';
+        html += '<div style="font-size:1.2rem;font-weight:700;margin:4px 0">'+sg+'组</div>';
+        html += '<div class="text-sm text-muted">'+count+'条成绩</div>';
+        html += '</a>';
       });
-
-      groups.forEach(function(sg){
-        if(!tree[sg])return;
-        html += '<div class="card mb-3" style="border-left:4px solid var(--red)">';
-        html += '<div class="card-header"><h3>'+sg+'组</h3></div>';
-        html += '<div class="card-body" style="padding:0">';
-        
-        genders.forEach(function(g){
-          if(!tree[sg][g])return;
-          var evtKeys = Object.keys(tree[sg][g]).sort();
-          var totalResults = 0;
-          evtKeys.forEach(function(k){totalResults+=tree[sg][g][k].length});
-          
-          html += '<div class="card" style="margin:8px;cursor:pointer;border-left:3px solid '+(g==='male'?'var(--blue)':'#e91e63')+'" onclick="App._toggleResults(\'sg_'+sg+g+'\')">';
-          html += '<div class="card-header"><h4>'+genderLabels[g]+' <span class="badge badge-sm badge-success">'+evtKeys.length+'个项目</span></h4></div>';
-          html += '<div id="sg_'+sg+g+'" style="display:none;padding:0">';
-          
-          evtKeys.forEach(function(en){
-            var results = tree[sg][g][en].sort(function(a,b){return (a.rank||99)-(b.rank||99)});
-            html += '<div class="card" style="margin:4px 8px;cursor:pointer" onclick="event.stopPropagation();App._toggleResults(\'sg_'+sg+g+en.replace(/[^a-z0-9]/gi,'')+'\')">';
-            html += '<div class="card-header" style="font-size:.85rem"><strong>'+en+'</strong> <span class="text-sm text-muted">'+results.length+'人</span></div>';
-            html += '<div id="sg_'+sg+g+en.replace(/[^a-z0-9]/gi,'')+'" style="display:none">';
-            html += '<div class="table-container" style="border:none"><table class="table"><thead><tr><th>排名</th><th>姓名</th><th>班级</th><th>成绩</th><th>奖项</th></tr></thead><tbody>';
-            results.forEach(function(r){html += '<tr class="'+(r.rank<=3?'award-row':'')+'"><td>'+(medals[r.rank]||r.rank||'-')+'</td><td>'+(r.name||'-')+'</td><td>'+(r.class_name||'-')+'</td><td>'+(r.performance||'-')+'</td><td><span class="badge badge-success">'+(r.award||'-')+'</span></td></tr>'});
-            html += '</tbody></table></div></div></div>';
-          });
-          html += '</div></div>';
-        });
-        
-        html += '</div></div>';
-      });
-      
+      html += '</div>';
       html += '<div style="display:flex;gap:8px;margin-top:16px"><button class="btn btn-outline btn-sm" onclick="App.exportResults()">导出Excel</button><button class="btn btn-outline btn-sm" onclick="App.exportResultsCSV()">导出CSV</button></div>';
       table.innerHTML = html;
     } catch(e) { this.hideLoading(); table.innerHTML = '<p class="text-muted p-8 text-center">加载失败</p>'; }
+  },
+
+  renderResultsGroup(sg) {
+    var table = document.getElementById('results-table');
+    if (!table) return;
+    table.innerHTML = '<div class="text-center p-8"><div class="spinner"></div></div>';
+    API.get('/public/results').then(function(res) {
+      var data = (res.data||[]).filter(function(r){ return (r.user_sport_group||'A') === sg; });
+      if (!data.length) { table.innerHTML = '<p class="text-muted p-8 text-center">该组暂无成绩</p>'; return; }
+
+      var medals = {1:'🥇',2:'🥈',3:'🥉'};
+      var genderLabels = {male:'男子组',female:'女子组'};
+      var genders = ['male','female'];
+
+      var html = '<div class="section-title"><a href="#/results" style="color:var(--red)">← 返回</a> '+sg+'组成绩</div>';
+      
+      genders.forEach(function(g) {
+        var gData = data.filter(function(r){ return (r.user_gender||'male') === g; });
+        if (!gData.length) return;
+
+        // 按项目分组
+        var evtGroups = {};
+        gData.forEach(function(r) {
+          var en = r.event_name || '其他';
+          if (!evtGroups[en]) evtGroups[en] = [];
+          evtGroups[en].push(r);
+        });
+
+        html += '<div class="card mb-3"><div class="card-header"><h3>'+genderLabels[g]+'</h3></div><div class="card-body" style="padding:0">';
+        Object.keys(evtGroups).sort().forEach(function(en) {
+          var results = evtGroups[en].sort(function(a,b){return (a.rank||99)-(b.rank||99)});
+          html += '<div class="card" style="margin:6px 8px;border-left:3px solid '+(g==='male'?'#1e6091':'#e91e63')+'"><div class="card-header" style="font-size:.85rem"><strong>'+en+'</strong> <span class="text-sm text-muted">'+results.length+'人</span></div>';
+          html += '<div class="table-container" style="border:none"><table class="table"><thead><tr><th>排名</th><th>姓名</th><th>班级</th><th>成绩</th><th>奖项</th></tr></thead><tbody>';
+          results.forEach(function(r){
+            html += '<tr class="'+(r.rank<=3?'award-row':'')+'"><td>'+(medals[r.rank]||r.rank||'-')+'</td><td>'+(r.name||'-')+'</td><td>'+(r.class_name||'-')+'</td><td>'+(r.performance||'-')+'</td><td><span class="badge badge-success">'+(r.award||'-')+'</span></td></tr>';
+          });
+          html += '</tbody></table></div></div>';
+        });
+        html += '</div></div>';
+      });
+      table.innerHTML = html;
+    }).catch(function(){ table.innerHTML = '<p class="text-muted p-8 text-center">加载失败</p>'; });
   },
 
   renderResultsEventDetail(eid) {
