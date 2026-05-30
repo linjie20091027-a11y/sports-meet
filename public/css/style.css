@@ -266,3 +266,72 @@ body::before {
 .hero-banner {
   animation: heroDrift 20s ease-in-out infinite;
 }
+
+/* ═══════════════════════════════════════
+   典藏级交互 · 光标 · 3D · 进度条
+   ═══════════════════════════════════════ */
+
+/* 滚动进度指示器 */
+.scroll-progress {
+  position: fixed; top: 0; left: 0; height: 3px;
+  background: linear-gradient(90deg, var(--red), var(--gold));
+  z-index: 10000; width: 100%;
+  transform-origin: left; transform: scaleX(0);
+  transition: transform .1s linear;
+}
+
+/* 自定义光标 */
+.custom-cursor {
+  position: fixed; top: 0; left: 0; z-index: 10001; pointer-events: none;
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 1.5px solid var(--red); opacity: .5;
+  transition: width .3s var(--ease-smooth), height .3s, opacity .3s, border-color .3s;
+}
+.custom-cursor.cursor-hover {
+  width: 48px; height: 48px; opacity: .8; border-color: var(--gold);
+  mix-blend-mode: difference; background: rgba(201,168,76,.1);
+}
+.custom-cursor-dot {
+  position: fixed; top: 0; left: 0; z-index: 10002; pointer-events: none;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--red);
+  transition: width .2s, height .2s, background .2s;
+}
+.custom-cursor-dot.cursor-hover { width: 14px; height: 14px; background: var(--gold) }
+
+/* 3D Tilt 卡片 */
+.card-3d {
+  transition: transform .15s ease-out;
+  transform-style: preserve-3d;
+}
+.card-3d:hover { transition: transform .1s ease-out }
+
+/* 首屏stagger */
+.hero-stagger-item {
+  animation: heroScaleIn .5s var(--ease-spring) both;
+  opacity: 0;
+}
+
+/* 视差增强 */
+.parallax-section {
+  transition: background-position .8s var(--ease-smooth);
+}
+
+/* 移动端隐藏光标（触屏设备不适用） */
+@media (hover: none) and (pointer: coarse) {
+  .custom-cursor, .custom-cursor-dot { display: none }
+}
+
+/* 低端设备降级 */
+@media (prefers-reduced-motion: reduce) {
+  .card-3d { transform: none !important; transition: none !important }
+  .scroll-progress { display: none }
+  .hero-banner { animation: none }
+}
+
+/* 按钮增强hover */
+.btn:hover { 
+  transform: translateY(-2px) scale(1.03);
+  box-shadow: 0 8px 24px rgba(139,69,19,.15);
+}
+.btn:active { transform: scale(.96) }
