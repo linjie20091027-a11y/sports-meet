@@ -555,36 +555,56 @@ const App = {
       this.hideLoading();
       if (!data.length) { table.innerHTML = '<p class="text-muted p-8 text-center">暂无成绩数据</p>'; return; }
 
-      var groups = {};
-      data.forEach(function(r) {
-        var key = r.event_name || '其他';
-        if (!groups[key]) groups[key] = [];
-        groups[key].push(r);
+      var medals = {1:'🥇',2:'🥈',3:'🥉'};
+      var groups = ['A','B','C','D','E'];
+      var genders = ['male','female'];
+      var genderLabels = {male:'男子组',female:'女子组'};
+      
+      var html = '<div class="section-title">成绩公示<small>按组别 → 性别 → 项目查看</small></div>';
+      
+      // 按组别+性别+项目三级分组
+      var tree = {};
+      data.forEach(function(r){
+        var sg = r.sport_group || r.user_sport_group || 'A';
+        var g = r.gender || r.user_gender || 'male';
+        var en = r.event_name || '其他';
+        if(!tree[sg])tree[sg]={};
+        if(!tree[sg][g])tree[sg][g]={};
+        if(!tree[sg][g][en])tree[sg][g][en]=[];
+        tree[sg][g][en].push(r);
       });
 
-      var medals = {1:'🥇',2:'🥈',3:'🥉'};
-      var html = '<div class="section-title">成绩公示<small>点击项目查看完整排名</small></div>';
-      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px">';
-      
-      var evtIdx = 0;
-      Object.keys(groups).sort().forEach(function(eventName) {
-        var results = groups[eventName];
-        var eid = evtIdx++;
-        var top3 = results.filter(function(r){return r.rank<=3}).sort(function(a,b){return (a.rank||99)-(b.rank||99)});
-        html += '<a href="#/results/event/'+eid+'" class="card" style="text-decoration:none;color:inherit;border-left:3px solid var(--red)">';
-        html += '<div class="card-header"><h3>'+eventName+'</h3><span class="badge badge-success">'+results.length+'人</span></div>';
-        html += '<div class="card-body" style="padding:12px 16px">';
-        if (top3.length) {
-          top3.forEach(function(r,i) {
-            html += '<div style="font-size:14px;padding:3px 0">'+medals[r.rank]+' '+r.name+' <span class="text-muted">'+r.performance+'</span></div>';
+      groups.forEach(function(sg){
+        if(!tree[sg])return;
+        html += '<div class="card mb-3" style="border-left:4px solid var(--red)">';
+        html += '<div class="card-header"><h3>'+sg+'组</h3></div>';
+        html += '<div class="card-body" style="padding:0">';
+        
+        genders.forEach(function(g){
+          if(!tree[sg][g])return;
+          var evtKeys = Object.keys(tree[sg][g]).sort();
+          var totalResults = 0;
+          evtKeys.forEach(function(k){totalResults+=tree[sg][g][k].length});
+          
+          html += '<div class="card" style="margin:8px;cursor:pointer;border-left:3px solid '+(g==='male'?'var(--blue)':'#e91e63')+'" onclick="App._toggleResults(\'sg_'+sg+g+'\')">';
+          html += '<div class="card-header"><h4>'+genderLabels[g]+' <span class="badge badge-sm badge-success">'+evtKeys.length+'个项目</span></h4></div>';
+          html += '<div id="sg_'+sg+g+'" style="display:none;padding:0">';
+          
+          evtKeys.forEach(function(en){
+            var results = tree[sg][g][en].sort(function(a,b){return (a.rank||99)-(b.rank||99)});
+            html += '<div class="card" style="margin:4px 8px;cursor:pointer" onclick="event.stopPropagation();App._toggleResults(\'sg_'+sg+g+en.replace(/[^a-z0-9]/gi,'')+'\')">';
+            html += '<div class="card-header" style="font-size:.85rem"><strong>'+en+'</strong> <span class="text-sm text-muted">'+results.length+'人</span></div>';
+            html += '<div id="sg_'+sg+g+en.replace(/[^a-z0-9]/gi,'')+'" style="display:none">';
+            html += '<div class="table-container" style="border:none"><table class="table"><thead><tr><th>排名</th><th>姓名</th><th>班级</th><th>成绩</th><th>奖项</th></tr></thead><tbody>';
+            results.forEach(function(r){html += '<tr class="'+(r.rank<=3?'award-row':'')+'"><td>'+(medals[r.rank]||r.rank||'-')+'</td><td>'+(r.name||'-')+'</td><td>'+(r.class_name||'-')+'</td><td>'+(r.performance||'-')+'</td><td><span class="badge badge-success">'+(r.award||'-')+'</span></td></tr>'});
+            html += '</tbody></table></div></div></div>';
           });
-        }
-        html += '<div class="text-sm text-muted mt-1">点击查看全部排名 &raquo;</div>';
-        html += '</div></a>';
-        // 保存数据到sessionStorage
-        sessionStorage.setItem('res_group_'+eid, JSON.stringify({name:eventName, results:results}));
+          html += '</div></div>';
+        });
+        
+        html += '</div></div>';
       });
-      html += '</div>';
+      
       html += '<div style="display:flex;gap:8px;margin-top:16px"><button class="btn btn-outline btn-sm" onclick="App.exportResults()">导出Excel</button><button class="btn btn-outline btn-sm" onclick="App.exportResultsCSV()">导出CSV</button></div>';
       table.innerHTML = html;
     } catch(e) { this.hideLoading(); table.innerHTML = '<p class="text-muted p-8 text-center">加载失败</p>'; }
