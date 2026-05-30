@@ -335,3 +335,97 @@ body::before {
   box-shadow: 0 8px 24px rgba(139,69,19,.15);
 }
 .btn:active { transform: scale(.96) }
+
+/* ═══════════════════════════════════════
+   典藏级入场动画 · 叙事序列
+   ═══════════════════════════════════════ */
+
+/* Hero背景缓慢缩放 + 漂移 */
+.hero-banner {
+  animation: heroBgReveal 2s cubic-bezier(0.16,1,0.3,1) both, heroDrift 20s ease-in-out 2s infinite;
+}
+@keyframes heroBgReveal {
+  from { transform: scale(1.15); filter: brightness(.25) saturate(.5) }
+  to { transform: scale(1); filter: brightness(1) saturate(1) }
+}
+
+/* 标题clip-path揭幕 */
+.hero-title {
+  animation: heroTitleReveal 1.2s cubic-bezier(0.16,1,0.3,1) both;
+  animation-delay: .3s;
+}
+@keyframes heroTitleReveal {
+  0% { opacity: 0; clip-path: inset(0 100% 0 0); filter: blur(12px) }
+  40% { opacity: 1; filter: blur(4px) }
+  100% { opacity: 1; clip-path: inset(0 0 0 0); filter: blur(0) }
+}
+
+/* 副标题 */
+.hero-subtitle {
+  animation: heroSubIn .7s cubic-bezier(0.16,1,0.3,1) both;
+  animation-delay: .8s;
+  opacity: 0;
+}
+@keyframes heroSubIn {
+  from { opacity: 0; transform: translateY(20px); letter-spacing: .5em }
+  to { opacity: 1; transform: translateY(0); letter-spacing: .15em }
+}
+
+/* 分割线 */
+.hero-line {
+  animation: heroLineIn .8s cubic-bezier(0.16,1,0.3,1) both;
+  animation-delay: .9s;
+}
+@keyframes heroLineIn {
+  from { width: 0; opacity: 0 }
+  to { width: 80px; opacity: .6 }
+}
+
+/* 倒计时3D翻转入场 */
+.countdown-item {
+  animation: countdownIn .6s cubic-bezier(0.175,0.885,0.32,1.275) both;
+  opacity: 0;
+}
+.countdown-item:nth-child(1) { animation-delay: 1.1s }
+.countdown-item:nth-child(2) { animation-delay: 1.25s }
+.countdown-item:nth-child(3) { animation-delay: 1.4s }
+.countdown-item:nth-child(4) { animation-delay: 1.55s }
+@keyframes countdownIn {
+  from { opacity: 0; transform: scale(.5) rotateY(40deg); filter: blur(4px) }
+  to { opacity: 1; transform: scale(1) rotateY(0); filter: blur(0) }
+}
+
+/* 统计卡片按序入场 */
+.stat-card {
+  animation: statCardIn .6s cubic-bezier(0.16,1,0.3,1) both;
+  opacity: 0;
+}
+.stat-card:nth-child(1) { animation-delay: .15s }
+.stat-card:nth-child(2) { animation-delay: .3s }
+.stat-card:nth-child(3) { animation-delay: .45s }
+.stat-card:nth-child(4) { animation-delay: .6s }
+@keyframes statCardIn {
+  from { opacity: 0; transform: translateY(40px) scale(.88); filter: blur(6px) }
+  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0) }
+}
+
+/* 页面切换淡入 */
+.page:not(.hidden) {
+  animation: pageFadeIn .45s cubic-bezier(0.16,1,0.3,1) both;
+}
+@keyframes pageFadeIn {
+  from { opacity: 0; transform: translateY(14px) }
+  to { opacity: 1; transform: translateY(0) }
+}
+
+/* 视差风景文字渐入 */
+.parallax-section .parallax-text {
+  animation: parallaxTextIn .8s cubic-bezier(0.16,1,0.3,1) both;
+  animation-timeline: view();
+  animation-range: entry 20% cover 40%;
+  opacity: 0;
+}
+@keyframes parallaxTextIn {
+  from { opacity: 0; transform: translateY(30px); filter: blur(4px) }
+  to { opacity: 1; transform: translateY(0); filter: blur(0) }
+}
