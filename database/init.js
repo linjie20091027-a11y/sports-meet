@@ -415,8 +415,39 @@ function initTables() {
     )
   `);
 
-  // 论坛回复审核字段
-  try { _db.run("ALTER TABLE forum_replies ADD COLUMN status TEXT DEFAULT 'approved'"); } catch(e) {}
+  // 论坛表
+  _db.run(`
+    CREATE TABLE IF NOT EXISTS forum_posts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      is_pinned INTEGER DEFAULT 0,
+      view_count INTEGER DEFAULT 0,
+      reply_count INTEGER DEFAULT 0,
+      is_deleted INTEGER DEFAULT 0,
+      deleted_by INTEGER,
+      deleted_at TEXT,
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      updated_at TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `);
+  _db.run(`
+    CREATE TABLE IF NOT EXISTS forum_replies (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      post_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      status TEXT DEFAULT 'pending',
+      is_deleted INTEGER DEFAULT 0,
+      deleted_by INTEGER,
+      deleted_at TEXT,
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (post_id) REFERENCES forum_posts(id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `);
 
   // 保存初始表结构
   const data = _db.export();
