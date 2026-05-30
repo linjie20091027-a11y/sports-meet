@@ -123,7 +123,7 @@ router.get('/schedules', (req, res) => {
 router.get('/results', (req, res) => {
   try {
     const db = getDb();
-    let sql = `SELECT r.id, r.schedule_id, r.user_id, u.name AS user_name, u.name, u.student_id, u.class_name, u.grade, u.gender AS user_gender, u.sport_group AS user_sport_group, r.performance, r.rank, r.score, r.award, r.note, r.created_at, r.updated_at, e.name AS event_name, e.category, s.round_name FROM results r LEFT JOIN users u ON r.user_id = u.id LEFT JOIN schedules s ON r.schedule_id = s.id LEFT JOIN events e ON s.event_id = e.id WHERE r.is_published = 1`;
+    let sql = `SELECT r.id, r.schedule_id, r.user_id, u.name AS user_name, u.name, u.student_id, u.class_name, u.grade, COALESCE(u.gender, 'male') AS user_gender, COALESCE(u.sport_group, 'A') AS user_sport_group, r.performance, r.rank, r.score, r.award, r.note, r.created_at, r.updated_at, e.name AS event_name, e.category, s.round_name FROM results r LEFT JOIN users u ON r.user_id = u.id LEFT JOIN schedules s ON r.schedule_id = s.id LEFT JOIN events e ON s.event_id = e.id WHERE r.is_published = 1`;
     const conditions = [];
     const params = [];
 
@@ -157,7 +157,7 @@ router.get('/results', (req, res) => {
 router.get('/results/export', (req, res) => {
   try {
     const db = getDb();
-    let sql = `SELECT r.id, r.performance, r.rank, r.score, r.award, r.note, u.name AS user_name, u.student_id, u.class_name, u.grade, u.gender AS user_gender, u.sport_group AS user_sport_group, e.name AS event_name, e.category, e.event_type, e.gender_group, s.round_name, s.start_time FROM results r LEFT JOIN users u ON r.user_id = u.id LEFT JOIN schedules s ON r.schedule_id = s.id LEFT JOIN events e ON s.event_id = e.id WHERE r.is_published = 1`;
+    let sql = `SELECT r.id, r.performance, r.rank, r.score, r.award, r.note, u.name AS user_name, u.student_id, u.class_name, u.grade, COALESCE(u.gender, 'male') AS user_gender, COALESCE(u.sport_group, 'A') AS user_sport_group, e.name AS event_name, e.category, e.event_type, e.gender_group, s.round_name, s.start_time FROM results r LEFT JOIN users u ON r.user_id = u.id LEFT JOIN schedules s ON r.schedule_id = s.id LEFT JOIN events e ON s.event_id = e.id WHERE r.is_published = 1`;
     const conditions = [];
     const params = [];
 

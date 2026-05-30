@@ -115,6 +115,7 @@ async function initDatabase() {
   // 只在首次创建数据库时初始化种子数据
   const isNew = !fs.existsSync(DB_PATH);
   initTables();
+  migrateSchema();
   if (isNew) {
     seedDefaultData();
   }
@@ -126,6 +127,10 @@ async function initDatabase() {
 function migrateSchema() {
   const alters = [
     "ALTER TABLE events ADD COLUMN description TEXT DEFAULT ''",
+    "ALTER TABLE users ADD COLUMN sport_group TEXT DEFAULT 'A'",
+    "ALTER TABLE users ADD COLUMN gender TEXT DEFAULT ''",
+    "ALTER TABLE users ADD COLUMN age INTEGER DEFAULT 16",
+    "ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT ''",
   ];
   alters.forEach((sql) => {
     try { _db.run(sql); } catch (_) { /* 欄位已存在 */ }
