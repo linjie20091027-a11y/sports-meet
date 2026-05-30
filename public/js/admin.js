@@ -163,99 +163,76 @@ const Admin = {
 
   // ==================== 控制台 ====================
   async renderDashboard(container) {
-    container.innerHTML = '<div style="text-align:center;padding:60px;color:#9ca3af;">加载中...</div>';
+    container.innerHTML = '<div class="text-center p-8"><div class="spinner"></div><p class="text-muted mt-2">加载中...</p></div>';
     try {
-      App.showLoading();
-      const dashData = await API.admin.getDashboard();
-      const logsData = await API.get('/admin/logs?limit=10');
-      App.hideLoading();
+      // 并行获取所有数据
+      const [dashRes, logsRes] = await Promise.allSettled([
+        API.admin.getDashboard().catch(() => ({ data: {} })),
+        API.get('/admin/logs?limit=5').catch(() => ({ data: { list: [] } }))
+      ]);
+      const d = (dashRes.value && dashRes.value.data) ? dashRes.value.data : {};
+      const logs = (logsRes.value && logsRes.value.data) ? (logsRes.value.data.list || logsRes.value.data || []) : [];
 
-      const d = dashData.data || dashData;
-      const totalUsers = d.total_users || d.totalUsers || 0;
-      const totalRegs = d.total_registrations || d.totalRegs || 0;
-      const totalEvents = d.total_events || d.totalEvents || 0;
-      const totalResults = d.total_results || d.totalResults || 0;
-
-      let html = '<div class="card-grid card-grid--4" style="margin-bottom:24px;">';
-      html += '<div class="stat-card"><div class="stat-card__icon stat-card__icon--blue"><i class="fas fa-users"></i></div><div class="stat-card__number">' + totalUsers + '</div><div class="stat-card__label">总用户数</div></div>';
-      html += '<div class="stat-card"><div class="stat-card__icon stat-card__icon--green"><i class="fas fa-clipboard-list"></i></div><div class="stat-card__number">' + totalRegs + '</div><div class="stat-card__label">总报名数</div></div>';
-      html += '<div class="stat-card"><div class="stat-card__icon stat-card__icon--orange"><i class="fas fa-running"></i></div><div class="stat-card__number">' + totalEvents + '</div><div class="stat-card__label">总项目数</div></div>';
-      html += '<div class="stat-card"><div class="stat-card__icon stat-card__icon--gold"><i class="fas fa-medal"></i></div><div class="stat-card__number">' + totalResults + '</div><div class="stat-card__label">总成绩数</div></div>';
-      html += '<div class="stat-card"><div class="stat-card__icon stat-card__icon--purple"><i class="fas fa-clock"></i></div><div class="stat-card__number">' + (d.pending_registrations || 0) + '</div><div class="stat-card__label">待审核报名</div></div>';
-      html += '<div class="stat-card"><div class="stat-card__icon stat-card__icon--teal"><i class="fas fa-calendar-check"></i></div><div class="stat-card__number">' + (d.today_schedules || 0) + '</div><div class="stat-card__label">今日赛程</div></div>';
-      html += '<div class="stat-card"><div class="stat-card__icon stat-card__icon--pink"><i class="fas fa-trophy"></i></div><div class="stat-card__number">' + (d.awarded_count || 0) + '</div><div class="stat-card__label">获奖人数</div></div>';
-      html += '<div class="stat-card"><div class="stat-card__icon stat-card__icon--indigo"><i class="fas fa-check-circle"></i></div><div class="stat-card__number">' + (d.published_results || 0) + '</div><div class="stat-card__label">已公示成绩</div></div>';
+      let html = '';
+      
+      // 统计卡片
+      html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">';
+      const cards = [
+        { icon: 'fa-users', label: '学生总数', value: d.total_users || 0, color: '#2d6a4f' },
+        { icon: 'fa-running', label: '比赛项目', value: d.total_events || 0, color: '#1e6091' },
+        { icon: 'fa-clipboard-list', label: '待审核报名', value: d.pending_registrations || 0, color: '#e07a5f' },
+        { icon: 'fa-trophy', label: '获奖人数', value: d.awarded_count || 0, color: '#b8860b' },
+        { icon: 'fa-calendar-check', label: '今日赛程', value: d.today_schedules || 0, color: '#a51d2d' },
+        { icon: 'fa-check-double', label: '已通过报名', value: d.approved_registrations || 0, color: '#52b788' },
+        { icon: 'fa-bullhorn', label: '已发布赛程', value: d.published_schedules || 0, color: '#7c3aed' },
+        { icon: 'fa-chart-bar', label: '已公示成绩', value: d.published_results || 0, color: '#0284c7' },
+      ];
+      cards.forEach(c => {
+        html += `<div class="stat-card"><i class="fas ${c.icon}" style="color:${c.color}"></i><div class="stat-num">${c.value}</div><div class="stat-label">${c.label}</div></div>`;
+      });
       html += '</div>';
 
       // 快捷操作
-      html += '<div class="card" style="margin-bottom:24px;border-left:4px solid var(--red)">';
-      html += '<div class="card__header"><h3 class="card__title">快捷操作</h3></div>';
-      html += '<div class="card__body" style="display:flex;gap:10px;flex-wrap:wrap">';
+      html += '<div class="card mb-3" style="border-left:3px solid #2d6a4f">';
+      html += '<div class="card-header"><h3>快捷操作</h3></div>';
+      html += '<div class="card-body" style="display:flex;gap:8px;flex-wrap:wrap">';
       html += '<button class="btn btn-primary btn-sm" onclick="Admin._showForumModeration()"><i class="fas fa-comments"></i> 论坛评论审核</button>';
       html += '<button class="btn btn-success btn-sm" onclick="Admin._generateSchedule()"><i class="fas fa-calendar"></i> AI生成赛程表</button>';
-      html += '<button class="btn btn-warning btn-sm" onclick="Admin._generateAward()"><i class="fas fa-medal"></i> AI生成获奖证书</button>';
-      html += '<a href="#/forum" class="btn btn-outline btn-sm"><i class="fas fa-robot"></i> 打开论坛AI助手</a>';
+      html += '<button class="btn btn-warning btn-sm" onclick="Admin._generateAward()"><i class="fas fa-medal"></i> AI生成证书</button>';
+      html += '<a href="#/forum" class="btn btn-outline btn-sm"><i class="fas fa-robot"></i> AI助手</a>';
       html += '</div></div>';
 
-      // 报名趋势图表
-      html += '<div class="card" style="margin-bottom:24px;">';
-      html += '<div class="card__header"><h3 class="card__title">报名趋势</h3></div>';
-      html += '<div class="card__body">';
-      const eventRegs = d.event_registrations || d.eventRegs || [];
-      if (eventRegs.length > 0) {
-        html += '<canvas id="chart-reg-trend" style="max-height:300px;"></canvas>';
-      } else {
-        html += this._emptyState('fas fa-chart-bar', '暂无报名数据');
-      }
-      html += '</div></div>';
+      // 报名统计图表
+      html += '<div class="card mb-3"><div class="card-header"><h3>报名统计</h3></div><div class="card-body"><canvas id="dash-chart" style="max-height:280px"></canvas></div></div>';
 
-      // 最近操作日志
-      html += '<div class="card">';
-      html += '<div class="card__header"><h3 class="card__title">最近操作日志</h3></div>';
-      html += '<div class="card__body"><div class="table-container"><table class="table table--striped"><thead><tr><th>时间</th><th>用户</th><th>操作</th><th>详情</th><th>IP</th></tr></thead><tbody>';
-      const logs = (logsData.data && logsData.data.list) ? logsData.data.list : (logsData.list || []);
+      // 最近日志
+      html += '<div class="card"><div class="card-header"><h3>最近日志</h3></div><div class="card-body">';
       if (logs.length > 0) {
-        logs.forEach(l => {
-          html += '<tr><td>' + (l.created_at || '') + '</td><td>' + (l.username || '') + '</td><td>' + (l.action || '') + '</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (l.detail || '') + '</td><td>' + (l.ip_address || l.ip || '') + '</td></tr>';
-        });
-      } else {
-        html += '<tr><td colspan="5">' + this._emptyState('fas fa-history', '暂无操作日志') + '</td></tr>';
-      }
-      html += '</tbody></table></div></div></div>';
+        html += '<div class="table-container"><table class="table"><thead><tr><th>时间</th><th>用户</th><th>操作</th><th>IP</th></tr></thead><tbody>';
+        logs.forEach(l => html += '<tr><td>'+App.formatDate(l.created_at)+'</td><td>'+l.username+'</td><td>'+l.action+'</td><td>'+l.ip_address+'</td></tr>');
+        html += '</tbody></table></div>';
+      } else { html += '<p class="text-muted">暂无日志</p>'; }
+      html += '</div></div>';
 
       container.innerHTML = html;
 
       // 渲染图表
-      if (eventRegs.length > 0) {
-        const labels = eventRegs.map(e => e.name || e.event_name || '');
-        const data = eventRegs.map(e => e.count || e.reg_count || 0);
-        const ctx = document.getElementById('chart-reg-trend');
-        if (ctx) {
-          const chart = new Chart(ctx, {
+      const eventRegs = d.event_registrations || [];
+      if (eventRegs.length > 0 && typeof Chart !== 'undefined') {
+        setTimeout(() => {
+          const ctx = document.getElementById('dash-chart');
+          if (ctx) new Chart(ctx, {
             type: 'bar',
-            data: {
-              labels: labels,
-              datasets: [{
-                label: '报名人数',
-                data: data,
-                backgroundColor: 'rgba(26, 115, 232, 0.6)',
-                borderColor: 'rgba(26, 115, 232, 1)',
-                borderWidth: 1
-              }]
-            },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              plugins: { legend: { display: false } },
-              scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
-            }
+            data: { labels: eventRegs.map(e=>e.name), datasets: [{label:'报名数',data:eventRegs.map(e=>e.count||0),backgroundColor:'#2d6a4f',borderRadius:4}] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
           });
-          this._chartInstances.push(chart);
-        }
+        }, 200);
+      } else {
+        const chartEl = document.getElementById('dash-chart');
+        if (chartEl) chartEl.parentElement.innerHTML = '<p class="text-muted text-center">暂无报名数据</p>';
       }
-    } catch (e) {
-      App.hideLoading();
-      container.innerHTML = '<div class="empty-state"><div class="empty-state__icon"><i class="fas fa-exclamation-triangle"></i></div><div class="empty-state__title">加载失败</div><div class="empty-state__desc">' + e.message + '</div></div>';
+    } catch(e) {
+      container.innerHTML = '<div class="empty-state"><p class="empty-state__desc">加载失败：' + e.message + '</p><button class="btn btn-outline mt-2" onclick="Admin.render()">重新加载</button></div>';
     }
   },
 
@@ -2109,31 +2086,29 @@ const Admin = {
 
   // ==== 论坛审核 ====
   async _showForumModeration() {
-    console.log('_showForumModeration called');
-    App.showLoading();
     try {
+      App.showLoading();
       const res = await API.get('/forum/pending-replies');
-      console.log('pending replies res:', res);
       App.hideLoading();
       const replies = res.data || [];
-      let html = '<div class="modal__header"><h3 class="modal__title">论坛评论审核</h3><button class="modal__close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div><div class="modal__body">';
+      let html = '<div class="modal-header"><h3>论坛评论审核</h3><button class="modal-close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div><div class="modal-body">';
       if (replies.length === 0) {
         html += '<p class="text-muted text-center">暂無待審核评论</p>';
       } else {
         replies.forEach(r => {
-          html += `<div style="border:1px solid var(--border-light);padding:12px;margin-bottom:8px"><div style="display:flex;justify-content:space-between;margin-bottom:6px"><strong>${r.author_name} (${r.class_name||''})</strong><span class="text-sm text-muted">帖子：${r.post_title}</span></div><p style="margin-bottom:8px;color:var(--text2)">${r.content}</p><div style="display:flex;gap:6px"><button class="btn btn-success btn-xs" onclick="Admin._approveReply(${r.id})">通过</button><button class="btn btn-danger btn-xs" onclick="Admin._rejectReply(${r.id})">驳回</button></div></div>`;
+          html += '<div style="border:1px solid var(--border);padding:10px;margin-bottom:8px;border-radius:var(--radius)"><div style="display:flex;justify-content:space-between;margin-bottom:6px"><strong>'+r.author_name+'</strong><span class="text-sm text-muted">'+r.post_title+'</span></div><p style="margin-bottom:8px">'+r.content+'</p><div style="display:flex;gap:6px"><button class="btn btn-success btn-xs" onclick="Admin._approveReply('+r.id+')">通过</button><button class="btn btn-danger btn-xs" onclick="Admin._rejectReply('+r.id+')">驳回</button></div></div>';
         });
       }
-      html += '</div><div class="modal__footer"><button class="btn btn-secondary" onclick="App.hideModal()">关闭</button></div>';
+      html += '</div><div class="modal-footer"><button class="btn btn-secondary" onclick="App.hideModal()">关闭</button></div>';
       App.showModal(html);
     } catch(e) { App.hideLoading(); App.showToast(e.message,'error'); }
   },
   async _approveReply(id) {
-    try { await API.put('/forum/replies/'+id+'/approve'); App.showToast('已通过','success'); this._showForumModeration(); }
+    try { await API.put('/forum/replies/'+id+'/approve'); App.showToast('已通过','success'); this.currentTab='dashboard'; Admin.render(); }
     catch(e) { App.showToast(e.message,'error'); }
   },
   async _rejectReply(id) {
-    try { await API.put('/forum/replies/'+id+'/reject'); App.showToast('已驳回','success'); this._showForumModeration(); }
+    try { await API.put('/forum/replies/'+id+'/reject'); App.showToast('已驳回','success'); this.currentTab='dashboard'; Admin.render(); }
     catch(e) { App.showToast(e.message,'error'); }
   },
 

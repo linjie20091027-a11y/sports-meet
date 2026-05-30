@@ -171,9 +171,9 @@ const App = {
       const unread = res.data?.unread || 0;
       const badge = document.getElementById('notify-badge');
       const bell = document.getElementById('notify-bell');
-      if (badge) { badge.textContent = unread; badge.dataset.count = unread; }
+      if (badge) { badge.textContent = unread > 99 ? '99+' : unread; badge.dataset.count = unread; }
       if (bell) bell.classList.toggle('has-unread', unread > 0);
-    } catch(e) {}
+    } catch(e) { /* 静默失败 */ }
   },
 
   async _showNotifications() {
