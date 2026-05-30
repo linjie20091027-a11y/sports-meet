@@ -83,7 +83,70 @@ h1{font-family:var(--title-font);font-size:2.2rem}h2{font-size:1.4rem}h3{font-si
 .event-mini-card h4{font-size:.85rem;font-weight:700;margin-bottom:.2rem;color:var(--text)}.event-mini-card p{font-size:.7rem;color:var(--text2);margin-top:.2rem}
 .event-card .card-body p,.event-card .card__body p{font-size:.75rem;color:var(--text2);margin-bottom:3px}.event-card .card-body i,.event-card .card__body i{width:16px;color:var(--gold)}
 
-/* Tables */
+/* ═══ 首页横向赛事卡片 ═══ */
+.events-horiz-row {
+  display: flex;
+  gap: .75rem;
+  overflow-x: auto;
+  padding: .25rem 0 .5rem;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+.events-horiz-row::-webkit-scrollbar { height: 4px; }
+.events-horiz-row::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.events-horiz-row::-webkit-scrollbar-thumb:hover { background: var(--gold); }
+.event-horiz-card {
+  flex: 0 0 180px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.1rem 1rem;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: all .25s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: .4rem;
+}
+.event-horiz-card:hover {
+  border-color: var(--gold);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-3px);
+  background: var(--gold-light);
+}
+.event-horiz-card:active { transform: scale(.97); }
+.event-horiz-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--gold-light);
+  color: var(--red);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+.event-horiz-card h4 {
+  font-size: .88rem;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+  line-height: 1.3;
+}
+.event-horiz-tags {
+  display: flex;
+  gap: .3rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.event-horiz-tags .badge { font-size: .68rem; }
+.event-horiz-card > small { font-size: .72rem; }
+
+/* ═══ Tables ═══ */
 .table-container{width:100%;overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--white)}
 .table{width:100%;border-collapse:collapse;font-size:.78rem}
 .table thead th{padding:.6rem .8rem;text-align:left;font-weight:700;color:var(--white);font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;background:var(--red);border-bottom:2px solid var(--gold);white-space:nowrap}

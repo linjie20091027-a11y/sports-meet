@@ -337,7 +337,7 @@ router.get('/stats/overview', (req, res) => {
     const totalReg = db.prepare(`SELECT COUNT(*) AS cnt FROM registrations WHERE status = 'approved'`).get();
     const totalEvents = db.prepare(`SELECT COUNT(*) AS cnt FROM events WHERE status = 'active'`).get();
     const completedSchedules = db.prepare(`SELECT COUNT(*) AS cnt FROM schedules WHERE status = 'published'`).get();
-    const publishedResults = db.prepare(`SELECT COUNT(*) AS cnt FROM results WHERE is_published = 1`).get();
+    const awardedCount = db.prepare(`SELECT COUNT(DISTINCT user_id) AS cnt FROM results WHERE is_published = 1 AND award != '' AND award IS NOT NULL`).get();
 
     res.json({
       success: true,
@@ -345,7 +345,7 @@ router.get('/stats/overview', (req, res) => {
         total_registrations: totalReg.cnt,
         total_events: totalEvents.cnt,
         completed_schedules: completedSchedules.cnt,
-        published_results: publishedResults.cnt
+        awarded_count: awardedCount.cnt
       }
     });
   } catch (err) {

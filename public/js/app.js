@@ -350,49 +350,58 @@ const App = {
       }
       if (m.start_date) this.startCountdown(m.start_date);
 
+      // ── 数据看板 ──
       const s = stats.value?.data || {};
       document.getElementById('stat-events').textContent = s.total_events || 0;
       document.getElementById('stat-regs').textContent = s.total_registrations || 0;
       document.getElementById('stat-done').textContent = s.completed_schedules || 0;
-      document.getElementById('stat-awards').textContent = s.published_results || 0;
+      document.getElementById('stat-awards').textContent = s.awarded_count || 0;
 
-      const catL = {event:'赛事通知',registration:'报名截止',result:'成绩公示',urgent:'紧急通知',general:'一般'};
-      let annH = '';
-      (ann.value?.data || []).forEach(a => annH += `<div class="announcement-item"><span class="badge badge-${a.category||'general'}">${catL[a.category]||a.category}</span>${a.is_pinned?'<span class="badge badge-pin">置顶</span>':''}<a href="#/announcements/${a.id}" class="announcement-title">${a.title}</a><span class="announcement-time">${this.formatDate(a.publish_time)}</span></div>`);
-      document.getElementById('home-announcements').innerHTML = annH || '<p class="text-muted">暂无公告</p>';
-
-      const medals = {1:'🥇',2:'🥈',3:'🥉'};
-      let resH = '';
-      (results.value?.data || []).forEach(r => resH += `<div class="result-item"><span class="rank-medal">${medals[r.rank]||r.rank}</span><span>${r.name||'-'} (${r.class_name||'-'})</span><span>${r.event_name||'-'}</span><span>${r.performance||'-'}</span></div>`);
-      document.getElementById('home-results').innerHTML = resH || '<p class="text-muted">暂无成绩</p>';
-
-      const genderL = g => g==='male'?'男子':g==='female'?'女子':'混合';
-      const typeL = t => t==='team'?'集体':'个人';
-      let evH = '<div class="events-mini-grid">';
-      const loggedStudent = this.user && this.user.role === 'student';
-      const myRegs = loggedStudent ? await this._getMyRegIds() : new Set();
-      (events.value?.data||[]).slice(0,8).forEach(e => {
-        const isReg = myRegs.has(e.id);
-        evH += `<div class="card event-mini-card" style="padding:1.25rem">
-          <h4 style="margin-bottom:0.5rem"><a href="#/events/${e.id}">${e.name}</a></h4>
-          <div style="margin-bottom:0.75rem">
-            <span class="badge badge-info">${genderL(e.gender_group)}</span>
-            <span class="badge badge-success">${typeL(e.event_type)}</span>
-          </div>
-          <p class="text-sm text-muted" style="margin-bottom:1rem"><i class="fas fa-location-dot"></i> ${e.venue||'待定'}</p>
-          ${loggedStudent ? (isReg ? '<span class="badge badge-success" style="width:100%;justify-content:center">已報名</span>' : `<button type="button" class="btn btn-primary btn-sm btn-block btn-quick-register" data-event-id="${e.id}" data-event-name="${this._escAttr(e.name)}">提交報名</button>`) : `<a href="#/login" class="btn btn-outline btn-sm btn-block">登入報名</a>`}
-        </div>`;
-      });
-      evH += '</div>';
+      // ── 赛事项目总览：横向卡片行，5个 ──
       const homeEv = document.getElementById('home-events');
-      homeEv.innerHTML = evH || '<p class="text-muted">暫無賽事</p>';
-      homeEv.querySelectorAll('.btn-quick-register').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const id = parseInt(btn.dataset.eventId, 10);
-          const name = btn.dataset.eventName || '';
-          this._quickRegister(id, name);
+      const genderL = g => g === 'male' ? '男子' : g === 'female' ? '女子' : '混合';
+      const typeL = t => t === 'team' ? '集体' : '个人';
+      const eventList = (events.value?.data || []);
+      if (eventList.length) {
+        let evH = '<div class="events-horiz-row">';
+        eventList.slice(0, 5).forEach(e => {
+          evH += `<a href="#/events/${e.id}" class="event-horiz-card">
+            <div class="event-horiz-icon"><i class="fas fa-running"></i></div>
+            <h4>${e.name}</h4>
+            <div class="event-horiz-tags">
+              <span class="badge badge-info">${genderL(e.gender_group)}</span>
+              <span class="badge badge-success">${typeL(e.event_type)}</span>
+            </div>
+            <small class="text-muted"><i class="fas fa-location-dot"></i> ${e.venue || '待定'}</small>
+          </a>`;
         });
-      });
+        evH += '</div>';
+        homeEv.innerHTML = evH;
+      } else {
+        homeEv.innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无更多信息</p>';
+      }
+
+      // ── 最新公告 ──
+      const catL = { event: '赛事通知', registration: '报名截止', result: '成绩公示', urgent: '紧急通知', general: '一般' };
+      const annData = ann.value?.data || [];
+      let annH = '';
+      if (annData.length) {
+        annData.forEach(a => annH += `<div class="announcement-item"><span class="badge badge-${a.category || 'general'}">${catL[a.category] || a.category}</span>${a.is_pinned ? '<span class="badge badge-pin">置顶</span>' : ''}<a href="#/announcements/${a.id}" class="announcement-title">${a.title}</a><span class="announcement-time">${this.formatDate(a.publish_time)}</span></div>`);
+        document.getElementById('home-announcements').innerHTML = annH;
+      } else {
+        document.getElementById('home-announcements').innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无更多信息</p>';
+      }
+
+      // ── 最新成绩 ──
+      const resData = results.value?.data || [];
+      let resH = '';
+      if (resData.length) {
+        const medals = { 1: '🥇', 2: '🥈', 3: '🥉' };
+        resData.forEach(r => resH += `<div class="result-item"><span class="rank-medal">${medals[r.rank] || r.rank}</span><span>${r.name || '-'} (${r.class_name || '-'})</span><span>${r.event_name || '-'}</span><span>${r.performance || '-'}</span></div>`);
+        document.getElementById('home-results').innerHTML = resH;
+      } else {
+        document.getElementById('home-results').innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无更多信息</p>';
+      }
     } catch (e) {
       this.showToast('載入首頁失敗', 'error');
     }
