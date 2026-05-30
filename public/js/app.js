@@ -101,7 +101,6 @@ const App = {
         Forum._initAIChat();
       }
     } else if (hash.startsWith('/announcements/')) {
-      document.getElementById('page-announcements').classList.remove('hidden');
       document.getElementById('page-announcement-detail').classList.remove('hidden');
       document.querySelector('[href="#/announcements"]')?.classList.add('active');
       this.renderAnnouncementDetailPage(hash.split('/')[2]);
@@ -631,11 +630,6 @@ const App = {
 
   _toggleResults(id) {
     var el = document.getElementById(id);
-    if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
-  },
-
-  _toggleResults(id) {
-    const el = document.getElementById(id);
     if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
   },
 
