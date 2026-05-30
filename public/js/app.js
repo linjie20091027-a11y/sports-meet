@@ -576,7 +576,7 @@ const App = {
       });
       html += '</div>';
       table.innerHTML = html;
-    } catch(e) { table.innerHTML = '<p class="text-muted p-8 text-center">加载失败</p>'; }
+    } catch(e) { this.hideLoading(); table.innerHTML = '<p class="text-muted p-8 text-center">加载失败</p>'; }
   },
 
   // 第二级：选择性别
