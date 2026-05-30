@@ -1,25 +1,22 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
-const { getDb } = require('../database/init');
+const prisma = require('../lib/prisma');
 const { authMiddleware } = require('../middleware/auth');
-const { createNotification } = require('../utils/notify');
 
 router.use(authMiddleware);
 
 // ==================== 个人中心 ====================
 
 // GET /profile - 获取个人资料
-router.get('/profile', (req, res) => {
+router.get('/profile', async (req, res) => {
   try {
-    const db = getDb();
-    const user = db.prepare(
-      'SELECT id, name, student_id, class_name, grade, email, avatar, created_at FROM users WHERE id = ?'
-    ).get(req.user.id);
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { id: true, name: true, studentId: true, className: true, grade: true, email: true, avatarUrl: true, createdAt: true }
+    });
 
-    if (!user) {
-      return res.status(404).json({ error: '用户不存在' });
-    }
+    if (!user) return res.status(404).json({ error: '用户不存在' });
 
     res.json({ success: true, data: user });
   } catch (e) {
@@ -29,32 +26,19 @@ router.get('/profile', (req, res) => {
 });
 
 // PUT /profile/password - 修改密码
-router.put('/profile/password', (req, res) => {
+router.put('/profile/password', async (req, res) => {
   try {
     const { oldPassword, newPassword } = req.body;
 
-    if (!oldPassword || !newPassword) {
-      return res.status(400).json({ error: '请提供旧密码和新密码' });
-    }
+    if (!oldPassword || !newPassword) return res.status(400).json({ error: '请提供旧密码和新密码' });
+    if (newPassword.length < 6) return res.status(400).json({ error: '新密码长度不能少于6位' });
 
-    if (newPassword.length < 6) {
-      return res.status(400).json({ error: '新密码长度不能少于6位' });
-    }
-
-    const db = getDb();
-    const user = db.prepare('SELECT password FROM users WHERE id = ?').get(req.user.id);
-
-    if (!user) {
-      return res.status(404).json({ error: '用户不存在' });
-    }
-
-    if (!bcrypt.compareSync(oldPassword, user.password)) {
-      return res.status(400).json({ error: '旧密码不正确' });
-    }
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    if (!user) return res.status(404).json({ error: '用户不存在' });
+    if (!bcrypt.compareSync(oldPassword, user.password)) return res.status(400).json({ error: '旧密码不正确' });
 
     const hashed = bcrypt.hashSync(newPassword, 10);
-    db.prepare('UPDATE users SET password = ?, updated_at = datetime("now","localtime") WHERE id = ?')
-      .run(hashed, req.user.id);
+    await prisma.user.update({ where: { id: req.user.id }, data: { password: hashed } });
 
     res.json({ success: true, data: { message: '密码修改成功' } });
   } catch (e) {
@@ -63,44 +47,62 @@ router.put('/profile/password', (req, res) => {
   }
 });
 
+// PUT /profile/avatar - 更新头像
+router.put('/profile/avatar', async (req, res) => {
+  try {
+    const { avatar } = req.body;
+    if (avatar === undefined || avatar === null) return res.status(400).json({ success: false, error: '請提供頭像資料' });
+
+    await prisma.user.update({ where: { id: req.user.id }, data: { avatarUrl: String(avatar) } });
+    res.json({ success: true, message: avatar ? '頭像已更新' : '頭像已移除' });
+  } catch (e) {
+    console.error('更新頭像失敗:', e.message);
+    res.status(500).json({ success: false, error: '更新頭像失敗' });
+  }
+});
+
 // ==================== 在线报名 ====================
 
 // GET /events - 获取可报名项目
-router.get('/events', (req, res) => {
+router.get('/events', async (req, res) => {
   try {
-    const db = getDb();
-    const meet = db.prepare('SELECT registration_open FROM meet_info LIMIT 1').get();
-    const registrationOpen = meet ? !!meet.registration_open : true;
+    const meet = await prisma.meetInfo.findFirst();
+    const registrationOpen = meet ? !!meet.registrationOpen : true;
 
-    const maxRule = db.prepare(
-      "SELECT rule_value as value FROM registration_rules WHERE rule_key = 'max_events_per_student'"
-    ).get();
-    const maxEventsPerStudent = parseInt(maxRule?.value || '3', 10);
+    let maxEventsPerStudent = 3;
+    try {
+      const rows = await prisma.$queryRawUnsafe(
+        `SELECT rule_value FROM registration_rules WHERE rule_key = 'max_events_per_student'`
+      );
+      if (rows && rows.length > 0) maxEventsPerStudent = parseInt(rows[0].rule_value, 10) || 3;
+    } catch (_) { /* table may not exist */ }
 
-    const myCount = db.prepare(
-      "SELECT COUNT(*) as cnt FROM registrations WHERE user_id = ? AND status != 'rejected'"
-    ).get(req.user.id);
+    const myCount = await prisma.registration.count({
+      where: { userId: req.user.id, status: { not: 'rejected' } }
+    });
 
-    const events = db.prepare(`
-      SELECT e.*,
-        COUNT(r.id) as registered_count,
-        CASE WHEN e.max_participants > 0
-          THEN MAX(0, e.max_participants - COUNT(r.id))
-          ELSE -1 END as remaining
-      FROM events e
-      LEFT JOIN registrations r ON e.id = r.event_id AND r.status != 'rejected'
-      WHERE e.status = 'active'
-      GROUP BY e.id
-      ORDER BY e.sort_order, e.id
-    `).all();
+    const events = await prisma.event.findMany({
+      where: { status: 'active' },
+      include: {
+        _count: { select: { registrations: { where: { status: { not: 'rejected' } } } } }
+      },
+      orderBy: { sortOrder: 'asc' }
+    });
+
+    const data = events.map(e => ({
+      ...e,
+      registered_count: e._count.registrations,
+      remaining: e.maxParticipants > 0 ? Math.max(0, e.maxParticipants - e._count.registrations) : -1,
+      _count: undefined
+    }));
 
     res.json({
       success: true,
-      data: events,
+      data,
       meta: {
         registration_open: registrationOpen,
         max_events_per_student: maxEventsPerStudent,
-        my_registration_count: myCount.cnt
+        my_registration_count: myCount
       }
     });
   } catch (e) {
@@ -110,63 +112,58 @@ router.get('/events', (req, res) => {
 });
 
 // POST /registrations - 提交报名
-router.post('/registrations', (req, res) => {
+router.post('/registrations', async (req, res) => {
   try {
     const { event_id } = req.body;
+    if (!event_id) return res.status(400).json({ success: false, error: '請選擇報名項目' });
 
-    if (!event_id) {
-      return res.status(400).json({ success: false, error: '請選擇報名項目' });
-    }
+    const meet = await prisma.meetInfo.findFirst();
+    if (meet && !meet.registrationOpen) return res.status(400).json({ success: false, error: '報名通道已關閉，請留意學校公告' });
 
-    const db = getDb();
+    const event = await prisma.event.findFirst({ where: { id: parseInt(event_id), status: 'active' } });
+    if (!event) return res.status(404).json({ success: false, error: '项目不存在或已关闭' });
 
-    const meet = db.prepare('SELECT registration_open FROM meet_info LIMIT 1').get();
-    if (meet && !meet.registration_open) {
-      return res.status(400).json({ success: false, error: '報名通道已關閉，請留意學校公告' });
-    }
+    const existing = await prisma.registration.findFirst({
+      where: { userId: req.user.id, eventId: parseInt(event_id) }
+    });
+    if (existing) return res.status(400).json({ success: false, error: '您已报名该项目，请勿重复报名' });
 
-    const event = db.prepare('SELECT * FROM events WHERE id = ? AND status = ?').get(event_id, 'active');
-    if (!event) {
-      return res.status(404).json({ success: false, error: '项目不存在或已关闭' });
-    }
+    let maxEventsPerStudent = 3;
+    try {
+      const rows = await prisma.$queryRawUnsafe(
+        `SELECT rule_value FROM registration_rules WHERE rule_key = 'max_events_per_student'`
+      );
+      if (rows && rows.length > 0) maxEventsPerStudent = parseInt(rows[0].rule_value, 10) || 3;
+    } catch (_) {}
 
-    const existing = db.prepare(
-      'SELECT id FROM registrations WHERE user_id = ? AND event_id = ?'
-    ).get(req.user.id, event_id);
-    if (existing) {
-      return res.status(400).json({ success: false, error: '您已报名该项目，请勿重复报名' });
-    }
-
-    const maxEventsSetting = db.prepare(
-      "SELECT rule_value as value FROM registration_rules WHERE rule_key = 'max_events_per_student'"
-    ).get();
-    const maxEventsPerStudent = parseInt(maxEventsSetting?.value || '3', 10);
-
-    const currentCount = db.prepare(
-      "SELECT COUNT(*) as cnt FROM registrations WHERE user_id = ? AND status != 'rejected'"
-    ).get(req.user.id);
-    if (currentCount.cnt >= maxEventsPerStudent) {
+    const currentCount = await prisma.registration.count({
+      where: { userId: req.user.id, status: { not: 'rejected' } }
+    });
+    if (currentCount >= maxEventsPerStudent) {
       return res.status(400).json({ success: false, error: `每位学生最多可报${maxEventsPerStudent}个项目` });
     }
 
-    if (event.max_participants > 0) {
-      const registeredCount = db.prepare(
-        "SELECT COUNT(*) as cnt FROM registrations WHERE event_id = ? AND status != 'rejected'"
-      ).get(event_id);
-      if (registeredCount.cnt >= event.max_participants) {
+    if (event.maxParticipants > 0) {
+      const registeredCount = await prisma.registration.count({
+        where: { eventId: parseInt(event_id), status: { not: 'rejected' } }
+      });
+      if (registeredCount >= event.maxParticipants) {
         return res.status(400).json({ success: false, error: '该项目名额已满' });
       }
     }
 
-    db.prepare(
-      'INSERT INTO registrations (user_id, event_id, status) VALUES (?, ?, ?)'
-    ).run(req.user.id, event_id, 'pending');
+    await prisma.registration.create({
+      data: { userId: req.user.id, eventId: parseInt(event_id), status: 'pending' }
+    });
 
-    createNotification(db, req.user.id, {
-      type: 'info',
-      title: '報名已提交',
-      content: `您已報名「${event.name}」，請等待管理員審核。`,
-      target_url: '#/student'
+    await prisma.notification.create({
+      data: {
+        userId: req.user.id,
+        type: 'info',
+        title: '報名已提交',
+        content: `您已報名「${event.name}」，請等待管理員審核。`,
+        targetUrl: '#/student'
+      }
     });
 
     res.json({ success: true, message: '報名成功，等待審核' });
@@ -177,17 +174,13 @@ router.post('/registrations', (req, res) => {
 });
 
 // GET /registrations - 查看个人报名记录
-router.get('/registrations', (req, res) => {
+router.get('/registrations', async (req, res) => {
   try {
-    const db = getDb();
-    const registrations = db.prepare(`
-      SELECT r.*, e.name as event_name, e.category, e.event_type,
-        e.gender_group, e.venue, e.max_participants
-      FROM registrations r
-      JOIN events e ON r.event_id = e.id
-      WHERE r.user_id = ?
-      ORDER BY r.created_at DESC
-    `).all(req.user.id);
+    const registrations = await prisma.registration.findMany({
+      where: { userId: req.user.id },
+      include: { event: true },
+      orderBy: { createdAt: 'desc' }
+    });
 
     res.json({ success: true, data: registrations });
   } catch (e) {
@@ -197,23 +190,17 @@ router.get('/registrations', (req, res) => {
 });
 
 // DELETE /registrations/:id - 取消报名
-router.delete('/registrations/:id', (req, res) => {
+router.delete('/registrations/:id', async (req, res) => {
   try {
-    const db = getDb();
+    const id = parseInt(req.params.id);
 
-    const registration = db.prepare(
-      'SELECT * FROM registrations WHERE id = ? AND user_id = ?'
-    ).get(req.params.id, req.user.id);
+    const registration = await prisma.registration.findFirst({
+      where: { id, userId: req.user.id }
+    });
+    if (!registration) return res.status(404).json({ success: false, error: '报名记录不存在' });
+    if (registration.status !== 'pending') return res.status(400).json({ success: false, error: '仅待审核状态的报名可以取消' });
 
-    if (!registration) {
-      return res.status(404).json({ success: false, error: '报名记录不存在' });
-    }
-
-    if (registration.status !== 'pending') {
-      return res.status(400).json({ success: false, error: '仅待审核状态的报名可以取消' });
-    }
-
-    db.prepare('DELETE FROM registrations WHERE id = ?').run(req.params.id);
+    await prisma.registration.delete({ where: { id } });
 
     res.json({ success: true, message: '已取消报名' });
   } catch (e) {
@@ -225,18 +212,21 @@ router.delete('/registrations/:id', (req, res) => {
 // ==================== 赛事查看 ====================
 
 // GET /my-schedules - 查看个人参赛赛程
-router.get('/my-schedules', (req, res) => {
+router.get('/my-schedules', async (req, res) => {
   try {
-    const db = getDb();
-    const schedules = db.prepare(`
-      SELECT s.*, e.name as event_name, e.category, e.event_type,
-        e.venue as event_venue, e.gender_group
-      FROM schedules s
-      JOIN events e ON s.event_id = e.id
-      JOIN registrations r ON r.event_id = e.id AND r.user_id = ?
-      WHERE r.status = 'approved' AND s.status = 'published'
-      ORDER BY s.start_time, e.sort_order
-    `).all(req.user.id);
+    const approvedRegs = await prisma.registration.findMany({
+      where: { userId: req.user.id, status: 'approved' },
+      select: { eventId: true }
+    });
+    const eventIds = approvedRegs.map(r => r.eventId);
+
+    const schedules = eventIds.length > 0
+      ? await prisma.schedule.findMany({
+          where: { status: 'published', eventId: { in: eventIds } },
+          include: { event: true },
+          orderBy: [{ startTime: 'asc' }, { event: { sortOrder: 'asc' } }]
+        })
+      : [];
 
     res.json({ success: true, data: schedules });
   } catch (e) {
@@ -246,17 +236,13 @@ router.get('/my-schedules', (req, res) => {
 });
 
 // GET /schedules - 查看全校完整赛程
-router.get('/schedules', (req, res) => {
+router.get('/schedules', async (req, res) => {
   try {
-    const db = getDb();
-    const schedules = db.prepare(`
-      SELECT s.*, e.name as event_name, e.category, e.event_type,
-        e.gender_group, e.venue as event_venue
-      FROM schedules s
-      JOIN events e ON s.event_id = e.id
-      WHERE s.status = 'published'
-      ORDER BY s.start_time, e.sort_order
-    `).all();
+    const schedules = await prisma.schedule.findMany({
+      where: { status: 'published' },
+      include: { event: true },
+      orderBy: [{ startTime: 'asc' }, { event: { sortOrder: 'asc' } }]
+    });
 
     res.json({ success: true, data: schedules });
   } catch (e) {
@@ -268,18 +254,13 @@ router.get('/schedules', (req, res) => {
 // ==================== 成绩查询 ====================
 
 // GET /my-results - 查看个人成绩
-router.get('/my-results', (req, res) => {
+router.get('/my-results', async (req, res) => {
   try {
-    const db = getDb();
-    const results = db.prepare(`
-      SELECT res.*, s.round_name, s.start_time, s.venue as schedule_venue,
-        e.name as event_name, e.category, e.event_type
-      FROM results res
-      JOIN schedules s ON res.schedule_id = s.id
-      JOIN events e ON s.event_id = e.id
-      WHERE res.user_id = ? AND res.is_published = 1
-      ORDER BY res.created_at DESC
-    `).all(req.user.id);
+    const results = await prisma.result.findMany({
+      where: { userId: req.user.id, isPublished: 1 },
+      include: { schedule: { include: { event: true } } },
+      orderBy: { createdAt: 'desc' }
+    });
 
     res.json({ success: true, data: results });
   } catch (e) {
@@ -289,20 +270,31 @@ router.get('/my-results', (req, res) => {
 });
 
 // GET /results/class - 查看班级成绩排名
-router.get('/results/class', (req, res) => {
+router.get('/results/class', async (req, res) => {
   try {
-    const db = getDb();
-    const rankings = db.prepare(`
-      SELECT u.class_name, u.grade,
-        COUNT(res.id) as result_count,
-        COALESCE(SUM(res.score), 0) as total_score,
-        COUNT(DISTINCT u.id) as student_count
-      FROM results res
-      JOIN users u ON res.user_id = u.id
-      WHERE res.is_published = 1
-      GROUP BY u.class_name
-      ORDER BY total_score DESC, u.class_name
-    `).all();
+    const results = await prisma.result.findMany({
+      where: { isPublished: 1 },
+      include: { user: { select: { className: true, grade: true } } }
+    });
+
+    const classMap = {};
+    results.forEach(r => {
+      const cn = r.user.className || '未知班级';
+      if (!classMap[cn]) {
+        classMap[cn] = { class_name: cn, grade: r.user.grade || '', result_count: 0, total_score: 0, student_ids: new Set() };
+      }
+      classMap[cn].result_count++;
+      classMap[cn].total_score += r.score;
+      classMap[cn].student_ids.add(r.userId);
+    });
+
+    const rankings = Object.values(classMap).map(c => ({
+      class_name: c.class_name,
+      grade: c.grade,
+      result_count: c.result_count,
+      total_score: c.total_score,
+      student_count: c.student_ids.size
+    })).sort((a, b) => b.total_score - a.total_score || a.class_name.localeCompare(b.class_name));
 
     res.json({ success: true, data: rankings });
   } catch (e) {
@@ -312,21 +304,32 @@ router.get('/results/class', (req, res) => {
 });
 
 // GET /results/grade - 查看年级成绩排名
-router.get('/results/grade', (req, res) => {
+router.get('/results/grade', async (req, res) => {
   try {
-    const db = getDb();
-    const rankings = db.prepare(`
-      SELECT u.grade,
-        COUNT(res.id) as result_count,
-        COALESCE(SUM(res.score), 0) as total_score,
-        COUNT(DISTINCT u.id) as student_count,
-        COUNT(DISTINCT u.class_name) as class_count
-      FROM results res
-      JOIN users u ON res.user_id = u.id
-      WHERE res.is_published = 1
-      GROUP BY u.grade
-      ORDER BY total_score DESC, u.grade
-    `).all();
+    const results = await prisma.result.findMany({
+      where: { isPublished: 1 },
+      include: { user: { select: { grade: true, className: true } } }
+    });
+
+    const gradeMap = {};
+    results.forEach(r => {
+      const g = r.user.grade || '未知年级';
+      if (!gradeMap[g]) {
+        gradeMap[g] = { grade: g, result_count: 0, total_score: 0, student_ids: new Set(), class_ids: new Set() };
+      }
+      gradeMap[g].result_count++;
+      gradeMap[g].total_score += r.score;
+      gradeMap[g].student_ids.add(r.userId);
+      gradeMap[g].class_ids.add(r.user.className);
+    });
+
+    const rankings = Object.values(gradeMap).map(g => ({
+      grade: g.grade,
+      result_count: g.result_count,
+      total_score: g.total_score,
+      student_count: g.student_ids.size,
+      class_count: g.class_ids.size
+    })).sort((a, b) => b.total_score - a.total_score || a.grade.localeCompare(b.grade));
 
     res.json({ success: true, data: rankings });
   } catch (e) {
@@ -338,20 +341,34 @@ router.get('/results/grade', (req, res) => {
 // ==================== 公告 ====================
 
 // GET /announcements - 查看全校公告
-router.get('/announcements', (req, res) => {
+router.get('/announcements', async (req, res) => {
   try {
-    const db = getDb();
-    const announcements = db.prepare(`
-      SELECT a.*, u.name as publisher_name,
-        CASE WHEN ar.id IS NOT NULL THEN 1 ELSE 0 END as is_read
-      FROM announcements a
-      JOIN users u ON a.published_by = u.id
-      LEFT JOIN announcement_reads ar ON ar.announcement_id = a.id AND ar.user_id = ?
-      WHERE a.status = 'published'
-      ORDER BY a.is_pinned DESC, a.created_at DESC
-    `).all(req.user.id);
+    const announcements = await prisma.announcement.findMany({
+      where: { status: 'published' },
+      include: { publisher: { select: { name: true } } },
+      orderBy: [{ isPinned: 'desc' }, { createdAt: 'desc' }]
+    });
 
-    res.json({ success: true, data: announcements });
+    let readMap = {};
+    if (announcements.length > 0) {
+      const ids = announcements.map(a => a.id);
+      const placeholders = ids.map(() => '?').join(',');
+      try {
+        const reads = await prisma.$queryRawUnsafe(
+          `SELECT announcement_id FROM announcement_reads WHERE user_id = ? AND announcement_id IN (${placeholders})`,
+          req.user.id, ...ids
+        );
+        reads.forEach(r => { readMap[r.announcement_id] = true; });
+      } catch (_) { /* table may not exist */ }
+    }
+
+    const data = announcements.map(a => ({
+      ...a,
+      publisher_name: a.publisher?.name,
+      is_read: readMap[a.id] ? 1 : 0
+    }));
+
+    res.json({ success: true, data });
   } catch (e) {
     console.error('获取公告列表失败:', e.message);
     res.status(500).json({ error: '服务器内部错误' });
@@ -359,27 +376,29 @@ router.get('/announcements', (req, res) => {
 });
 
 // GET /announcements/:id - 查看公告详情
-router.get('/announcements/:id', (req, res) => {
+router.get('/announcements/:id', async (req, res) => {
   try {
-    const db = getDb();
+    const id = parseInt(req.params.id);
 
-    db.prepare('UPDATE announcements SET view_count = view_count + 1 WHERE id = ?')
-      .run(req.params.id);
+    await prisma.announcement.update({ where: { id }, data: { viewCount: { increment: 1 } } });
 
-    const announcement = db.prepare(`
-      SELECT a.*, u.name as publisher_name,
-        CASE WHEN ar.id IS NOT NULL THEN 1 ELSE 0 END as is_read
-      FROM announcements a
-      JOIN users u ON a.published_by = u.id
-      LEFT JOIN announcement_reads ar ON ar.announcement_id = a.id AND ar.user_id = ?
-      WHERE a.id = ?
-    `).get(req.user.id, req.params.id);
+    const announcement = await prisma.announcement.findUnique({
+      where: { id },
+      include: { publisher: { select: { name: true } } }
+    });
 
-    if (!announcement) {
-      return res.status(404).json({ error: '公告不存在' });
-    }
+    if (!announcement) return res.status(404).json({ error: '公告不存在' });
 
-    res.json({ success: true, data: announcement });
+    let isRead = 0;
+    try {
+      const rows = await prisma.$queryRawUnsafe(
+        `SELECT id FROM announcement_reads WHERE announcement_id = ? AND user_id = ?`,
+        id, req.user.id
+      );
+      isRead = rows && rows.length > 0 ? 1 : 0;
+    } catch (_) {}
+
+    res.json({ success: true, data: { ...announcement, publisher_name: announcement.publisher?.name, is_read: isRead } });
   } catch (e) {
     console.error('获取公告详情失败:', e.message);
     res.status(500).json({ error: '服务器内部错误' });
@@ -387,21 +406,19 @@ router.get('/announcements/:id', (req, res) => {
 });
 
 // PUT /announcements/:id/read - 标记已读
-router.put('/announcements/:id/read', (req, res) => {
+router.put('/announcements/:id/read', async (req, res) => {
   try {
-    const db = getDb();
+    const id = parseInt(req.params.id);
 
-    const announcement = db.prepare(
-      'SELECT id FROM announcements WHERE id = ? AND status = ?'
-    ).get(req.params.id, 'published');
+    const announcement = await prisma.announcement.findFirst({ where: { id, status: 'published' } });
+    if (!announcement) return res.status(404).json({ error: '公告不存在' });
 
-    if (!announcement) {
-      return res.status(404).json({ error: '公告不存在' });
-    }
-
-    db.prepare(
-      'INSERT OR IGNORE INTO announcement_reads (announcement_id, user_id, read_at) VALUES (?, ?, datetime("now","localtime"))'
-    ).run(req.params.id, req.user.id);
+    try {
+      await prisma.$executeRawUnsafe(
+        `INSERT OR IGNORE INTO announcement_reads (announcement_id, user_id, read_at) VALUES (?, ?, datetime('now','localtime'))`,
+        id, req.user.id
+      );
+    } catch (_) { /* table may not exist */ }
 
     res.json({ success: true, data: { message: '已标记为已读' } });
   } catch (e) {
@@ -413,28 +430,30 @@ router.put('/announcements/:id/read', (req, res) => {
 // ==================== 站内通知 ====================
 
 // GET /notifications
-router.get('/notifications', (req, res) => {
+router.get('/notifications', async (req, res) => {
   try {
-    const db = getDb();
-    const limit = parseInt(req.query.limit) || 50;
-    const notifications = db.prepare(`
-      SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT ?
-    `).all(req.user.id, limit);
-    const unread = db.prepare(
-      'SELECT COUNT(*) as cnt FROM notifications WHERE user_id = ? AND is_read = 0'
-    ).get(req.user.id);
-    res.json({ success: true, data: { list: notifications, unread: unread.cnt } });
+    const limit = Math.min(100, parseInt(req.query.limit) || 50);
+    const [list, unreadCount] = await Promise.all([
+      prisma.notification.findMany({
+        where: { userId: req.user.id },
+        orderBy: { createdAt: 'desc' },
+        take: limit
+      }),
+      prisma.notification.count({ where: { userId: req.user.id, isRead: 0 } })
+    ]);
+    res.json({ success: true, data: { list, unread: unreadCount } });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
 // PUT /notifications/:id/read
-router.put('/notifications/:id/read', (req, res) => {
+router.put('/notifications/:id/read', async (req, res) => {
   try {
-    const db = getDb();
-    db.prepare('UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?')
-      .run(req.params.id, req.user.id);
+    await prisma.notification.updateMany({
+      where: { id: parseInt(req.params.id), userId: req.user.id },
+      data: { isRead: 1 }
+    });
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -442,33 +461,15 @@ router.put('/notifications/:id/read', (req, res) => {
 });
 
 // PUT /notifications/read-all
-router.put('/notifications/read-all', (req, res) => {
+router.put('/notifications/read-all', async (req, res) => {
   try {
-    const db = getDb();
-    db.prepare('UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0')
-      .run(req.user.id);
+    await prisma.notification.updateMany({
+      where: { userId: req.user.id, isRead: 0 },
+      data: { isRead: 1 }
+    });
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
-  }
-});
-
-// PUT /profile/avatar - 更新头像
-router.put('/profile/avatar', (req, res) => {
-  try {
-    const { avatar } = req.body;
-    if (avatar === undefined || avatar === null) {
-      return res.status(400).json({ success: false, error: '請提供頭像資料' });
-    }
-    const db = getDb();
-    try {
-      db.prepare('ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT \'\'').run();
-    } catch (_) { /* column exists */ }
-    db.prepare('UPDATE users SET avatar = ? WHERE id = ?').run(String(avatar), req.user.id);
-    res.json({ success: true, message: avatar ? '頭像已更新' : '頭像已移除' });
-  } catch (e) {
-    console.error('更新頭像失敗:', e.message);
-    res.status(500).json({ success: false, error: '更新頭像失敗' });
   }
 });
 

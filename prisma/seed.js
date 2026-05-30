@@ -20,6 +20,18 @@ async function main() {
     }
   });
 
+  // 学生
+  const students = ['甘子軒','朱嘉誠','何政熙','何衍禧','吳子琪','吳燦','宋子謙','李力','李靖汐','周佳妮','林杰','林俊淘','徐振華','張秦坤','梁倩','陳天澤','陳宇軒','陳妙燃','麥君權','馮梓雯','馮淽健','黃子鵬','黃廣晉','董兆威','廖浚良','劉嘉裕','鄭詠心','陳威羽'];
+  for (let i = 0; i < students.length; i++) {
+    const sid = '2025' + String(i + 1).padStart(4, '0');
+    await prisma.user.upsert({
+      where: { email: sid + '@hkms.hktedu.com' },
+      update: {},
+      create: { username: sid, email: sid + '@hkms.hktedu.com', password: stuHash, role: 'student', studentId: sid, name: students[i] }
+    });
+  }
+  console.log(`  ✓ 已创建 ${students.length} 名学生`);
+
   // 运动会信息
   await prisma.meetInfo.upsert({
     where: { id: 1 },
