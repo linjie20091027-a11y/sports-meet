@@ -34,6 +34,9 @@ function wrapDb(sqlDb) {
   }
 
   return {
+    // sql.js 兼容：模拟 transaction
+    transaction(fn) { return fn; },
+    
     // exec 用于多语句或不需要返回结果的语句
     exec(sql) {
       sqlDb.run(sql);
@@ -190,6 +193,9 @@ function initTables() {
       name TEXT NOT NULL,
       class_name TEXT DEFAULT '',
       grade TEXT DEFAULT '',
+      gender TEXT DEFAULT '',
+      age INTEGER DEFAULT 16,
+      avatar TEXT DEFAULT '',
       status TEXT DEFAULT 'active' CHECK(status IN ('active','disabled')),
       failed_attempts INTEGER DEFAULT 0,
       locked_until TEXT,
@@ -480,6 +486,42 @@ function seedDefaultData() {
   if (meetRow.cnt === 0) {
     _db.run("INSERT INTO meet_info (name, theme, start_date, end_date, registration_open) VALUES (?, ?, ?, ?, ?)",
       ['学校运动会', '活力校园·运动青春', '2026-06-01', '2026-06-03', 1]);
+  }
+
+  // 种子学生数据（仅在首次创建时）
+  const stuStmt = _db.prepare("SELECT COUNT(*) as cnt FROM users WHERE role='student'");
+  stuStmt.step();
+  const stuRow = stuStmt.getAsObject();
+  stuStmt.free();
+
+  if (stuRow.cnt === 0) {
+    const stuHash = bcrypt.hashSync('123456', 10);
+    const original = ['甘子轩','朱嘉诚','何政熙','何衍禧','吴子琪','吴灿','宋子谦','李力','李靖汐','周佳妮','林杰','林俊淘','徐振华','张秦坤','梁倩','陈天泽','陈宇轩','陈妙燃','麦君权','冯梓雯','冯淽健','黄子鹏','黄广晋','董兆威','廖浚良','刘嘉裕','郑咏心','陈威羽'];
+    let sid = 20250001;
+    original.forEach(n => {
+      const s = String(sid++);
+      _db.run("INSERT INTO users (username, email, password, role, student_id, name, class_name, grade, gender, age) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        [s, s+'@hkms.hktedu.com', stuHash, 'student', s, n, '高一(11)班', '高一', Math.random()>0.5?'male':'female', 15+Math.floor(Math.random()*3)]);
+    });
+  }
+
+  // 种子公告
+  const annStmt = _db.prepare("SELECT COUNT(*) as cnt FROM announcements");
+  annStmt.step();
+  const annRow = annStmt.getAsObject();
+  annStmt.free();
+
+  if (annRow.cnt === 0) {
+    const adminId = _db.prepare("SELECT id FROM users WHERE role='admin' LIMIT 1").get()?.id || 1;
+    const announcements = [
+      ['欢迎参加第三十届田径运动会！', '各位同学，第三十届田径运动会即将开幕！请抓紧时间报名参赛，报名截止日期为5月28日。每人最多可报3个项目，请大家根据自身特长合理选择。', 'event', 1],
+      ['报名须知', '1. 每人最多报名3个项目；2. 集体项目以班级为单位；3. 报名后需管理员审核通过方可参赛；4. 比赛前30分钟请到检录处检录。', 'registration', 0],
+      ['运动会日程安排', '本次运动会定于2026年6月1日至6月3日举行。开幕式于6月1日上午8:00在田径场举行，请全体师生准时参加。', 'event', 1],
+    ];
+    announcements.forEach(a => {
+      _db.run("INSERT INTO announcements (title, content, category, is_pinned, published_by, publish_time, status) VALUES (?, ?, ?, ?, ?, datetime('now','localtime'), 'published')",
+        a.concat([adminId]));
+    });
   }
 
   // 系统设置
