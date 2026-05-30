@@ -294,6 +294,7 @@ const App = {
     const overlay = document.getElementById('modal-overlay');
     const content = document.getElementById('modal-content');
     if (!overlay || !content) return;
+    this.hideLoading();
     content.innerHTML = html;
     overlay.classList.remove('hidden');
     document.body.style.overflow = 'hidden'; // 防止背景滚动
@@ -575,7 +576,7 @@ const App = {
       });
       html += '</div>';
       table.innerHTML = html;
-    } catch(e) { table.innerHTML = '<p class="text-muted p-8 text-center">加载失败</p>'; }
+    } catch(e) { this.hideLoading(); table.innerHTML = '<p class="text-muted p-8 text-center">加载失败</p>'; }
   },
 
   // 第二级：选择性别
