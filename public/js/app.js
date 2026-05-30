@@ -294,6 +294,7 @@ const App = {
     const overlay = document.getElementById('modal-overlay');
     const content = document.getElementById('modal-content');
     if (!overlay || !content) return;
+    this.hideLoading();
     content.innerHTML = html;
     overlay.classList.remove('hidden');
     document.body.style.overflow = 'hidden'; // 防止背景滚动
