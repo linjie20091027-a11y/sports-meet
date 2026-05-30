@@ -164,14 +164,11 @@ async function initDatabase() {
 function migrateSchema() {
   const alters = [
     "ALTER TABLE events ADD COLUMN description TEXT DEFAULT ''",
-<<<<<<< Updated upstream
     "ALTER TABLE users ADD COLUMN sport_group TEXT DEFAULT 'A'",
     "ALTER TABLE users ADD COLUMN gender TEXT DEFAULT ''",
     "ALTER TABLE users ADD COLUMN age INTEGER DEFAULT 16",
     "ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT ''",
-=======
     "ALTER TABLE results ADD COLUMN is_school_record INTEGER DEFAULT 0",
->>>>>>> Stashed changes
   ];
   alters.forEach((sql) => {
     try { _db.run(sql); } catch (_) { /* 欄位已存在 */ }
