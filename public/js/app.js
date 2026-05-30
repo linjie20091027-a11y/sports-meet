@@ -248,7 +248,10 @@ const App = {
     const btn = document.getElementById('nav-search-btn');
     const doSearch = async () => {
       const q = input?.value?.trim();
-      if (!q) return;
+      if (!q) {
+        this._showSearchResults(null);
+        return;
+      }
       try {
         this.showLoading();
         const res = await API.get(`/public/search?q=${encodeURIComponent(q)}`);
@@ -256,17 +259,149 @@ const App = {
       } catch (e) { this.showToast(e.message, 'error'); }
       finally { this.hideLoading(); }
     };
-    btn?.addEventListener('click', doSearch);
-    input?.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
+    const quickSearch = () => {
+      const q = input?.value?.trim();
+      if (!q) { this._showSearchResults(null); return; }
+      doSearch();
+    };
+    btn?.addEventListener('click', quickSearch);
+    input?.addEventListener('keydown', (e) => { if (e.key === 'Enter') quickSearch(); });
+    input?.addEventListener('input', () => {
+      const q = input.value.trim();
+      if (!q) this.hideSearch();
+      else if (q.length >= 1) quickSearch();
+    });
+  },
+
+  _quickCards() {
+    const cards = [
+      { icon: 'fa-calendar-alt', cls: 'schedule', label: '赛程总览', desc: '查看比赛日程', href: '#/events' },
+      { icon: 'fa-trophy', cls: 'result', label: '成绩公示', desc: '查看成绩排名', href: '#/results' },
+      { icon: 'fa-bullhorn', cls: 'announce', label: '最新公告', desc: '查看通知与更新', href: '#/announcements' },
+      { icon: 'fa-comments', cls: 'forum', label: '论坛交流', desc: '参与讨论与互动', href: '#/forum' },
+    ];
+    if (this.user?.role === 'admin') {
+      cards.push({ icon: 'fa-cogs', cls: 'func', label: '管理后台', desc: '系统管理与配置', href: '#/admin' });
+    }
+    if (this.user?.role === 'student') {
+      cards.push({ icon: 'fa-user-graduate', cls: 'student', label: '学生中心', desc: '个人报名与成绩', href: '#/student' });
+    }
+    return cards;
+  },
+
+  _makeCard(item) {
+    return '<a class="search-card" href="' + item.href + '" onclick="App.hideSearch()">' +
+      '<div class="search-card-icon ' + (item.cls || 'func') + '"><i class="fas ' + item.icon + '"></i></div>' +
+      '<div class="search-card-body"><h4>' + (item.label || item.title) + '</h4><small>' + (item.desc || item.sub) + '</small></div>' +
+      '<i class="fas fa-angle-right search-card-arrow"></i></a>';
   },
 
   _showSearchResults(data) {
     const el = document.getElementById('search-results');
-    let html = '<div class="search-header"><h3>搜索结果</h3><button class="search-close" onclick="App.hideSearch()">&times;</button></div>';
-    if (data.events?.length) { html += '<h4>赛事项目</h4><ul>'; data.events.forEach(e => html += `<li><a href="#/events/${e.id}">${e.name}</a></li>`); html += '</ul>'; }
-    if (data.students?.length) { html += '<h4>学生</h4><ul>'; data.students.forEach(s => html += `<li>${s.name} - ${s.class_name||''}</li>`); html += '</ul>'; }
-    if (data.announcements?.length) { html += '<h4>公告</h4><ul>'; data.announcements.forEach(a => html += `<li><a href="#/announcements/${a.id}">${a.title}</a></li>`); html += '</ul>'; }
-    if (!data.events?.length && !data.students?.length && !data.announcements?.length) html += '<p class="text-muted">未找到相关结果</p>';
+    const q = document.getElementById('nav-search-input')?.value?.trim() || '';
+
+    const catLabel = { event:'赛事通知', registration:'报名截止', result:'成绩公示', urgent:'紧急通知', general:'一般' };
+    const genderLabel = { male:'男子组', female:'女子组', mixed:'混合组' };
+
+    let html = '<div class="search-header"><div><h3>全局搜索<small>' + (q ? '"' + q + '"' : '快捷导航') + '</small></h3></div><button class="search-close" onclick="App.hideSearch()">✕</button></div>';
+    html += '<div class="search-body">';
+
+    let totalCount = 0;
+
+    // ── 快捷导航卡片 (始终显示) ──
+    const quickCards = this._quickCards();
+    html += '<div class="search-section"><div class="search-section-title">快捷导航</div><div class="search-cards">';
+    quickCards.forEach(c => { html += this._makeCard(c); });
+    html += '</div></div>';
+
+    if (data) {
+      // ── 赛事项目 ──
+      if (data.events?.length) {
+        totalCount += data.events.length;
+        html += '<div class="search-section"><div class="search-section-title">赛事项目</div><div class="search-cards">';
+        data.events.forEach(e => {
+          html += this._makeCard({
+            icon: 'fa-running', cls: 'events', label: e.name, href: '#/events',
+            sub: (genderLabel[e.gender_group] || '') + ' · ' + (e.venue || '未指定场地')
+          });
+        });
+        html += '</div></div>';
+      }
+
+      // ── 赛程 ──
+      if (data.schedules?.length) {
+        totalCount += data.schedules.length;
+        html += '<div class="search-section"><div class="search-section-title">赛程安排</div><div class="search-cards">';
+        data.schedules.forEach(s => {
+          html += this._makeCard({
+            icon: 'fa-clock', cls: 'schedule', label: s.event_name, href: '#/events',
+            sub: (s.round_name || '') + ' · ' + (s.start_time || '') + ' · ' + (s.venue || '')
+          });
+        });
+        html += '</div></div>';
+      }
+
+      // ── 成绩 ──
+      if (data.results?.length) {
+        totalCount += data.results.length;
+        html += '<div class="search-section"><div class="search-section-title">比赛成绩</div><div class="search-cards">';
+        data.results.forEach(r => {
+          const rankText = r.rank ? '第' + r.rank + '名' : '';
+          html += this._makeCard({
+            icon: 'fa-medal', cls: 'result', label: r.event_name, href: '#/results',
+            sub: r.user_name + ' · ' + (r.performance || '') + ' ' + rankText + (r.award ? ' · ' + r.award : '')
+          });
+        });
+        html += '</div></div>';
+      }
+
+      // ── 学生 ──
+      if (data.students?.length) {
+        totalCount += data.students.length;
+        html += '<div class="search-section"><div class="search-section-title">学生</div><div class="search-cards">';
+        data.students.forEach(s => {
+          html += this._makeCard({
+            icon: 'fa-user', cls: 'student', label: s.name, href: '#/student',
+            sub: (s.class_name || '') + ' · ' + (s.grade || '') + ' · ' + (s.student_id || '')
+          });
+        });
+        html += '</div></div>';
+      }
+
+      // ── 公告 ──
+      if (data.announcements?.length) {
+        totalCount += data.announcements.length;
+        html += '<div class="search-section"><div class="search-section-title">公告通知</div><div class="search-cards">';
+        data.announcements.forEach(a => {
+          html += this._makeCard({
+            icon: 'fa-bullhorn', cls: 'announce', label: a.title, href: '#/announcements/' + a.id,
+            sub: catLabel[a.category] || '一般' + ' · 发布于 ' + (a.publish_time || '').substring(0, 10)
+          });
+        });
+        html += '</div></div>';
+      }
+
+      // ── 论坛帖子 ──
+      if (data.posts?.length) {
+        totalCount += data.posts.length;
+        html += '<div class="search-section"><div class="search-section-title">论坛帖子</div><div class="search-cards">';
+        data.posts.forEach(p => {
+          html += this._makeCard({
+            icon: 'fa-comment-dots', cls: 'forum', label: p.title, href: '#/forum',
+            sub: (p.author_name || '匿名') + ' · ' + (p.reply_count || 0) + '回复 · ' + (p.view_count || 0) + '浏览'
+          });
+        });
+        html += '</div></div>';
+      }
+    }
+
+    if (!data || (totalCount === 0 && q)) {
+      html += '<div class="search-none"><i class="fas fa-search"></i><p>' + (q ? '未找到相关结果，试试其他关键词' : '输入关键词开始搜索') + '</p></div>';
+    }
+
+    html += '</div>';
+    html += '<div class="search-footer"><small>' + (q ? '共找到 ' + totalCount + ' 条结果' : '输入关键词快速定位功能') + ' · ESC 关闭</small></div>';
+
     el.innerHTML = html;
     document.getElementById('search-overlay')?.classList.remove('hidden');
   },

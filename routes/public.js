@@ -303,20 +303,26 @@ router.get('/search', (req, res) => {
     const db = getDb();
     const q = req.query.q;
     if (!q || !q.trim()) {
-      return res.json({ success: true, data: { events: [], students: [], announcements: [] } });
+      return res.json({ success: true, data: { events: [], students: [], announcements: [], schedules: [], results: [], posts: [] } });
     }
 
     const keyword = `%${q.trim()}%`;
 
-    const events = db.prepare(`SELECT id, name, category, event_type, gender_group, venue FROM events WHERE name LIKE ? AND status = 'active' LIMIT 10`).all(keyword);
+    const events = db.prepare(`SELECT id, name, category, event_type, gender_group, venue FROM events WHERE name LIKE ? AND status = 'active' LIMIT 8`).all(keyword);
 
-    const students = db.prepare(`SELECT id, name, student_id, class_name, grade FROM users WHERE (name LIKE ? OR class_name LIKE ?) AND role = 'student' AND status = 'active' LIMIT 10`).all(keyword, keyword);
+    const students = db.prepare(`SELECT id, name, student_id, class_name, grade FROM users WHERE (name LIKE ? OR student_id LIKE ? OR class_name LIKE ?) AND role = 'student' AND status = 'active' LIMIT 8`).all(keyword, keyword, keyword);
 
-    const announcements = db.prepare(`SELECT a.id, a.title, a.category, a.is_pinned, a.publish_time, u.name AS publisher_name FROM announcements a LEFT JOIN users u ON a.published_by = u.id WHERE a.title LIKE ? AND a.status = 'published' AND (a.expire_time IS NULL OR a.expire_time >= datetime('now','localtime')) ORDER BY a.is_pinned DESC, a.publish_time DESC LIMIT 10`).all(keyword);
+    const announcements = db.prepare(`SELECT a.id, a.title, a.category, a.is_pinned, a.publish_time, u.name AS publisher_name FROM announcements a LEFT JOIN users u ON a.published_by = u.id WHERE a.title LIKE ? AND a.status = 'published' AND (a.expire_time IS NULL OR a.expire_time >= datetime('now','localtime')) ORDER BY a.is_pinned DESC, a.publish_time DESC LIMIT 8`).all(keyword);
+
+    const schedules = db.prepare(`SELECT s.id, e.name AS event_name, s.round_name, s.start_time, s.venue, s.status FROM schedules s LEFT JOIN events e ON s.event_id = e.id WHERE (e.name LIKE ? OR s.round_name LIKE ? OR s.venue LIKE ?) LIMIT 8`).all(keyword, keyword, keyword);
+
+    const results = db.prepare(`SELECT r.id, u.name AS user_name, e.name AS event_name, r.performance, r.rank, r.award FROM results r LEFT JOIN users u ON r.user_id = u.id LEFT JOIN schedules s ON r.schedule_id = s.id LEFT JOIN events e ON s.event_id = e.id WHERE (e.name LIKE ? OR u.name LIKE ?) AND r.is_published = 1 ORDER BY r.rank LIMIT 8`).all(keyword, keyword);
+
+    const posts = db.prepare(`SELECT p.id, p.title, p.content, p.reply_count, p.view_count, p.created_at, u.name AS author_name FROM forum_posts p LEFT JOIN users u ON p.user_id = u.id WHERE (p.title LIKE ? OR p.content LIKE ?) AND p.is_deleted = 0 ORDER BY p.updated_at DESC LIMIT 8`).all(keyword, keyword);
 
     res.json({
       success: true,
-      data: { events, students, announcements }
+      data: { events, students, announcements, schedules, results, posts }
     });
   } catch (err) {
     res.status(500).json({ error: '搜索失败' });
