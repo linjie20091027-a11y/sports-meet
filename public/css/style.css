@@ -586,3 +586,122 @@ body::before {
   from { opacity: 0; transform: translateY(30px); filter: blur(4px) }
   to { opacity: 1; transform: translateY(0); filter: blur(0) }
 }
+
+/* ═══════════════════════════════════════
+   导航下划线滑动 · 搜索框弹性
+   ═══════════════════════════════════════ */
+.nav-link {
+  position: relative;
+  overflow: visible;
+}
+.nav-link::after {
+  content: '';
+  position: absolute;
+  bottom: 4px; left: 50%; transform: translateX(-50%) scaleX(0);
+  width: 50%; height: 2px;
+  background: var(--gold);
+  transition: transform .35s cubic-bezier(0.16,1,0.3,1);
+  transform-origin: center;
+}
+.nav-link:hover::after, .nav-link.active::after {
+  transform: translateX(-50%) scaleX(1);
+}
+
+.nav-search input {
+  transition: width .4s cubic-bezier(0.175,0.885,0.32,1.275), background .3s, border-color .3s;
+}
+.nav-search input:focus {
+  width: 200px;
+}
+
+/* ═══════════════════════════════════════
+   统计数字滚动计数器
+   ═══════════════════════════════════════ */
+.stat-num {
+  transition: none;
+}
+.stat-num.counted {
+  animation: countPop .4s cubic-bezier(0.175,0.885,0.32,1.275);
+}
+@keyframes countPop {
+  0% { transform: scale(1) }
+  50% { transform: scale(1.3); color: var(--gold) }
+  100% { transform: scale(1) }
+}
+
+/* ═══════════════════════════════════════
+   返回顶部按钮 + 进度环
+   ═══════════════════════════════════════ */
+.back-to-top {
+  position: fixed; bottom: 28px; left: 28px;
+  width: 44px; height: 44px; border-radius: 50%;
+  background: var(--red); color: #fff; cursor: pointer; z-index: 1490;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem; opacity: 0; transform: translateY(20px);
+  transition: opacity .3s, transform .3s cubic-bezier(0.175,0.885,0.32,1.275);
+  box-shadow: 0 4px 16px rgba(139,0,0,.25);
+}
+.back-to-top.visible { opacity: 1; transform: translateY(0) }
+.back-to-top:hover { transform: translateY(-3px) scale(1.08); box-shadow: 0 8px 24px rgba(139,0,0,.35) }
+.back-to-top::before {
+  content: '';
+  position: absolute; inset: -3px; border-radius: 50%;
+  border: 2px solid var(--gold); border-top-color: transparent;
+  transform: rotate(-90deg);
+  transition: transform .1s;
+}
+.back-to-top svg {
+  position: absolute; inset: 0; transform: rotate(-90deg);
+}
+
+/* ═══════════════════════════════════════
+   表格行hover微放大
+   ═══════════════════════════════════════ */
+.table tbody tr {
+  transition: transform .25s cubic-bezier(0.175,0.885,0.32,1.275), box-shadow .25s;
+}
+.table tbody tr:hover {
+  transform: scale(1.01);
+  box-shadow: 0 4px 20px rgba(0,0,0,.06);
+  position: relative;
+  z-index: 1;
+  background: var(--gold-light) !important;
+}
+
+/* ═══════════════════════════════════════
+   通知铃铛弹跳
+   ═══════════════════════════════════════ */
+.notify-bell.has-unread {
+  animation: bellBounce .6s cubic-bezier(0.175,0.885,0.32,1.275) infinite;
+}
+@keyframes bellBounce {
+  0%,100% { transform: rotate(0) }
+  15% { transform: rotate(20deg) }
+  30% { transform: rotate(-18deg) }
+  45% { transform: rotate(12deg) }
+  60% { transform: rotate(-8deg) }
+  75% { transform: rotate(4deg) }
+  90% { transform: rotate(-2deg) }
+}
+
+/* ═══════════════════════════════════════
+   移动端按钮涟漪
+   ═══════════════════════════════════════ */
+.btn, .btn--primary, .btn--secondary, .btn--success, .btn--danger, .btn--outline {
+  -webkit-tap-highlight-color: transparent;
+}
+.ripple {
+  position: relative;
+  overflow: hidden;
+}
+.ripple-effect {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255,255,255,.35);
+  transform: scale(0);
+  animation: rippleOut .6s ease-out;
+  pointer-events: none;
+}
+@keyframes rippleOut {
+  to { transform: scale(4); opacity: 0 }
+}

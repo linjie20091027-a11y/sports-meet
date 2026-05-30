@@ -153,4 +153,89 @@
     });
   }, 2000);
 
-})();
+  // ═══ 8. 返回顶部按钮 ═══
+  function initBackToTop() {
+    if (document.getElementById('back-to-top')) return;
+    var btn = document.createElement('div');
+    btn.id = 'back-to-top';
+    btn.className = 'back-to-top';
+    btn.innerHTML = '<i class="fas fa-arrow-up"></i>';
+    btn.title = '返回顶部';
+    btn.addEventListener('click', function() {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+    document.body.appendChild(btn);
+
+    window.addEventListener('scroll', function() {
+      var scrollY = window.scrollY || document.documentElement.scrollTop;
+      if (scrollY > 400) {
+        btn.classList.add('visible');
+      } else {
+        btn.classList.remove('visible');
+      }
+    }, { passive: true });
+  }
+
+  // ═══ 9. 数字滚动计数器 ═══
+  function animateCounters() {
+    var nums = document.querySelectorAll('.stat-num:not(.counted)');
+    nums.forEach(function(el) {
+      el.classList.add('counted');
+      var target = parseInt(el.textContent) || 0;
+      if (target <= 0) return;
+      var duration = 1200;
+      var startTime = null;
+      function step(timestamp) {
+        if (!startTime) startTime = timestamp;
+        var progress = Math.min((timestamp - startTime) / duration, 1);
+        var eased = 1 - Math.pow(1 - progress, 3);
+        el.textContent = Math.floor(eased * target);
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        } else {
+          el.textContent = target;
+          el.classList.add('counted');
+        }
+      }
+      requestAnimationFrame(step);
+    });
+  }
+
+  // ═══ 10. 移动端涟漪效果 ═══
+  function initRipple() {
+    document.addEventListener('click', function(e) {
+      var btn = e.target.closest('.btn, .btn--primary, .btn--secondary, .btn--success, .btn--danger, .btn--outline');
+      if (!btn) return;
+      if (btn.querySelector('.ripple-effect')) return;
+
+      var ripple = document.createElement('span');
+      ripple.className = 'ripple-effect';
+      var rect = btn.getBoundingClientRect();
+      var size = Math.max(rect.width, rect.height);
+      ripple.style.width = ripple.style.height = size + 'px';
+      ripple.style.left = (e.clientX - rect.left - size / 2) + 'px';
+      ripple.style.top = (e.clientY - rect.top - size / 2) + 'px';
+      btn.appendChild(ripple);
+
+      ripple.addEventListener('animationend', function() {
+        ripple.remove();
+      });
+    });
+  }
+
+  // 初始化所有
+  document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(initBackToTop, 200);
+    setTimeout(animateCounters, 800);
+    setTimeout(animateCounters, 2000);
+    initRipple();
+    
+    // 路由变化后重新计数
+    var origRoute = App.handleRoute;
+    if (origRoute) {
+      App.handleRoute = function() {
+        origRoute.apply(this, arguments);
+        setTimeout(animateCounters, 600);
+      };
+    }
+  });
