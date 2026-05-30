@@ -17,7 +17,7 @@ router.get('/meet-info', (req, res) => {
 router.get('/events', (req, res) => {
   try {
     const db = getDb();
-    let sql = `SELECT id, name, category, event_type, gender_group, max_participants, rules, description, venue, status, sort_order, created_at FROM events WHERE status = 'active'`;
+    let sql = `SELECT id, name, category, event_type, gender_group, max_participants, rules, venue, status, sort_order, created_at FROM events WHERE status = 'active'`;
     const conditions = [];
     const params = [];
 

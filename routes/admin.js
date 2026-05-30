@@ -143,8 +143,7 @@ router.post('/users/batch', upload.single('file'), (req, res) => {
     const hash = bcrypt.hashSync('123456', 10);
     let success = 0, fail = 0;
 
-    // sql.js no transaction, inline calls
-    (() => {
+    const txn = db.transaction(() => {
       for (const row of rows) {
         const studentId = String(row['学号'] || row['student_id'] || '');
         const name = String(row['姓名'] || row['name'] || '');
@@ -157,7 +156,7 @@ router.post('/users/batch', upload.single('file'), (req, res) => {
         result.changes > 0 ? success++ : fail++;
       }
     });
-    })();
+    txn();
 
     logOperation(req.user.id, req.user.username, '批量导入学生', `成功${success}条，失败${fail}条`, getIp(req));
     res.json({ success: true, message: `导入完成：成功${success}条，失败${fail}条` });
@@ -623,8 +622,7 @@ router.post('/schedules/auto', (req, res) => {
     let createdCount = 0;
     const insert = db.prepare(`INSERT INTO schedules (event_id, round_name, start_time, end_time, venue, max_heats) VALUES (?, ?, ?, ?, ?, ?)`);
 
-    // sql.js no transaction, inline calls
-    (() => {
+    const txn = db.transaction(() => {
       events.forEach((event, idx) => {
         const dayOffset = Math.floor(idx / (defaultTimeSlots.length * defaultVenues.length));
         const slotIdx = Math.floor(idx / defaultVenues.length) % defaultTimeSlots.length;
@@ -643,7 +641,7 @@ router.post('/schedules/auto', (req, res) => {
         createdCount++;
       });
     });
-    })();
+    txn();
 
     logOperation(req.user.id, req.user.username, '自动编排赛程', `创建${createdCount}个赛程`, getIp(req));
     res.json({ success: true, message: `自动编排完成，创建${createdCount}个赛程` });
@@ -659,9 +657,8 @@ router.put('/schedules/publish', (req, res) => {
     const { ids } = req.body;
     if (!ids || !Array.isArray(ids) || ids.length === 0) return res.status(400).json({ success: false, error: '请提供ID数组' });
     const stmt = db.prepare("UPDATE schedules SET status = 'published' WHERE id = ?");
-    // sql.js no transaction, inline calls
-    (() => {       ids.forEach(id => stmt.run(req.user.id, id));
-    })();
+    const txn = db.transaction(() => { ids.forEach(id => stmt.run(id)); });
+    txn();
     logOperation(req.user.id, req.user.username, '发布赛程', `批量发布${ids.length}个赛程`, getIp(req));
     res.json({ success: true, message: `已发布${ids.length}个赛程` });
   } catch (e) {
@@ -740,8 +737,7 @@ router.post('/results/batch', upload.single('file'), (req, res) => {
     let success = 0, fail = 0;
     const insert = db.prepare('INSERT INTO results (schedule_id, user_id, performance, award, recorded_by) VALUES (?, ?, ?, ?, ?)');
 
-    // sql.js no transaction, inline calls
-    (() => {
+    const txn = db.transaction(() => {
       for (const row of rows) {
         const scheduleId = row['赛程ID'] || row['schedule_id'];
         const userId = row['用户ID'] || row['user_id'];
@@ -754,7 +750,7 @@ router.post('/results/batch', upload.single('file'), (req, res) => {
         } catch { fail++; }
       }
     });
-    })();
+    txn();
 
     logOperation(req.user.id, req.user.username, '批量导入成绩', `成功${success}条，失败${fail}条`, getIp(req));
     res.json({ success: true, message: `导入完成：成功${success}条，失败${fail}条` });
@@ -811,8 +807,7 @@ router.post('/results/auto-rank', (req, res) => {
     const updateRank = db.prepare('UPDATE results SET rank = ? WHERE id = ?');
     let rankedCount = 0;
 
-    // sql.js no transaction, inline calls
-    (() => {
+    const txn = db.transaction(() => {
       for (const schedId of scheduleIds) {
         const schedule = db.prepare('SELECT s.*, e.category FROM schedules s JOIN events e ON s.event_id = e.id WHERE s.id = ?').get(schedId);
         if (!schedule) continue;
@@ -835,7 +830,7 @@ router.post('/results/auto-rank', (req, res) => {
         });
       }
     });
-    })();
+    txn();
 
     logOperation(req.user.id, req.user.username, '自动排名', `已排名${rankedCount}条成绩`, getIp(req));
     res.json({ success: true, message: `自动排名完成，已排名${rankedCount}条成绩` });
@@ -851,9 +846,8 @@ router.put('/results/publish', (req, res) => {
     const { ids } = req.body;
     if (!ids || !Array.isArray(ids) || ids.length === 0) return res.status(400).json({ success: false, error: '请提供ID数组' });
     const stmt = db.prepare('UPDATE results SET is_published = 1 WHERE id = ?');
-    // sql.js no transaction, inline calls
-    (() => {       ids.forEach(id => stmt.run(req.user.id, id));
-    })();
+    const txn = db.transaction(() => { ids.forEach(id => stmt.run(id)); });
+    txn();
     logOperation(req.user.id, req.user.username, '公示成绩', `公示${ids.length}条`, getIp(req));
     res.json({ success: true, message: `已公示${ids.length}条成绩` });
   } catch (e) {
@@ -868,9 +862,8 @@ router.put('/results/unpublish', (req, res) => {
     const { ids } = req.body;
     if (!ids || !Array.isArray(ids) || ids.length === 0) return res.status(400).json({ success: false, error: '请提供ID数组' });
     const stmt = db.prepare('UPDATE results SET is_published = 0 WHERE id = ?');
-    // sql.js no transaction, inline calls
-    (() => {       ids.forEach(id => stmt.run(req.user.id, id));
-    })();
+    const txn = db.transaction(() => { ids.forEach(id => stmt.run(id)); });
+    txn();
     logOperation(req.user.id, req.user.username, '撤回成绩公示', `撤回${ids.length}条`, getIp(req));
     res.json({ success: true, message: `已撤回${ids.length}条成绩公示` });
   } catch (e) {
