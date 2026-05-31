@@ -16,9 +16,9 @@ const Forum = {
       <div class="container page-top">
         <div class="section-title">
           交流论坛
-          <small>赛事討論 · 經驗分享</small>
+          <small>赛事討論 · 經验分享</small>
         </div>
-        ${user ? `<div class="mb-3"><button type="button" class="btn btn-primary btn-sm" id="forum-new-btn"><i class="fas fa-pen"></i> 發表帖子</button></div>` : `<p class="text-muted mb-3"><a href="#/login">登录</a> 後可發帖與回复</p>`}
+        ${user ? `<div class="mb-3"><button type="button" class="btn btn-primary btn-sm" id="forum-new-btn"><i class="fas fa-pen"></i> 发表帖子</button></div>` : `<p class="text-muted mb-3"><a href="#/login">登录</a> 後可发帖與回复</p>`}
         <div id="forum-list"><div class="text-center p-8"><div class="spinner"></div></div></div>
         <div id="forum-pagination" class="text-center mt-3"></div>
       </div>
@@ -34,7 +34,7 @@ const Forum = {
       const data = res.data || {};
       const posts = data.list || [];
       if (!posts.length) {
-        list.innerHTML = '<div class="empty-state"><p>暂无帖子，成為第一個發言的人吧</p></div>';
+        list.innerHTML = '<div class="empty-state"><p>暂无帖子，成為第一個发言的人吧</p></div>';
         return;
       }
       list.innerHTML = posts.map(p => `
@@ -56,9 +56,9 @@ const Forum = {
       const pages = Math.ceil(total / (data.limit || 15));
       const pag = document.getElementById('forum-pagination');
       if (pag && pages > 1) {
-        pag.innerHTML = `<button class="btn btn-outline btn-sm" ${page <= 1 ? 'disabled' : ''} id="forum-prev">上一頁</button>
-          <span class="text-sm text-muted mx-2">第 ${page} / ${pages} 頁</span>
-          <button class="btn btn-outline btn-sm" ${page >= pages ? 'disabled' : ''} id="forum-next">下一頁</button>`;
+        pag.innerHTML = `<button class="btn btn-outline btn-sm" ${page <= 1 ? 'disabled' : ''} id="forum-prev">上一页</button>
+          <span class="text-sm text-muted mx-2">第 ${page} / ${pages} 页</span>
+          <button class="btn btn-outline btn-sm" ${page >= pages ? 'disabled' : ''} id="forum-next">下一页</button>`;
         document.getElementById('forum-prev')?.addEventListener('click', () => this._loadList(page - 1));
         document.getElementById('forum-next')?.addEventListener('click', () => this._loadList(page + 1));
       }
@@ -82,7 +82,7 @@ const Forum = {
       const isAdmin = App.user?.role === 'admin';
 
       root.innerHTML = `
-        <nav class="breadcrumb"><a href="#/forum">论坛</a> <span>/</span> <span>帖子詳情</span></nav>
+        <nav class="breadcrumb"><a href="#/forum">论坛</a> <span>/</span> <span>帖子详情</span></nav>
         <article class="card">
           <div class="card-header">
             <h2 style="margin:0;font-size:1.25rem">${App._escHtml(post.title)}</h2>
@@ -92,7 +92,7 @@ const Forum = {
             <p class="forum-card__meta mb-2">
               <span>${App._escHtml(post.author_name)}</span>
               <span>${App.formatDate(post.created_at)}</span>
-              <span>${post.view_count || 0} 瀏覽</span>
+              <span>${post.view_count || 0} 览览</span>
             </p>
             <div class="detail-prose">${App._escHtml(post.content).replace(/\n/g, '<br>')}</div>
           </div>
@@ -113,7 +113,7 @@ const Forum = {
         ${App.user ? `
           <div class="card mt-3">
             <div class="card-body">
-              <div class="form-group"><label>發表回复</label><textarea id="forum-reply-text" class="form-input" rows="3" placeholder="輸入回复內容…"></textarea></div>
+              <div class="form-group"><label>发表回复</label><textarea id="forum-reply-text" class="form-input" rows="3" placeholder="输入回复内容…"></textarea></div>
               <button type="button" class="btn btn-primary btn-sm" id="forum-reply-submit">提交回复</button>
             </div>
           </div>
@@ -137,7 +137,7 @@ const Forum = {
       });
       document.getElementById('forum-reply-submit')?.addEventListener('click', async () => {
         const content = document.getElementById('forum-reply-text')?.value?.trim();
-        if (!content) return App.showToast('请输入回复內容', 'warning');
+        if (!content) return App.showToast('请输入回复内容', 'warning');
         const r = await API.forum.reply(id, content);
         if (r.success) { App.showToast(App.user?.role==='admin'?'回复成功':'回复已提交，待管理员审核', 'success'); this.renderPost(id); }
         else App.showToast(r.error || '回复失败', 'error');
@@ -150,10 +150,10 @@ const Forum = {
   _showNewPostForm() {
     if (!App.user) { window.location.hash = '#/login'; return; }
     App.showModal(`
-      <div class="modal-header"><h3>發表帖子</h3><button type="button" class="modal-close" onclick="App.hideModal()">&times;</button></div>
+      <div class="modal-header"><h3>发表帖子</h3><button type="button" class="modal-close" onclick="App.hideModal()">&times;</button></div>
       <div class="modal-body">
-        <div class="form-group"><label>標題</label><input type="text" id="forum-post-title" class="form-input" maxlength="120"></div>
-        <div class="form-group"><label>內容</label><textarea id="forum-post-content" class="form-input" rows="5"></textarea></div>
+        <div class="form-group"><label>标题</label><input type="text" id="forum-post-title" class="form-input" maxlength="120"></div>
+        <div class="form-group"><label>内容</label><textarea id="forum-post-content" class="form-input" rows="5"></textarea></div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="App.hideModal()">取消</button>
@@ -163,7 +163,7 @@ const Forum = {
     document.getElementById('forum-post-submit').addEventListener('click', async () => {
       const title = document.getElementById('forum-post-title')?.value?.trim();
       const content = document.getElementById('forum-post-content')?.value?.trim();
-      if (!title || !content) return App.showToast('請填寫標題和內容', 'warning');
+      if (!title || !content) return App.showToast('请填寫标题和内容', 'warning');
       const r = await API.forum.createPost({ title, content });
       if (r.success) {
         App.hideModal();
@@ -195,13 +195,13 @@ const Forum = {
           <button class="ai-chat-close" id="ai-chat-close">&times;</button>
         </div>
         <div class="ai-chat-messages" id="ai-chat-messages">
-          <div class="ai-msg ai-msg-bot">你好！我是運動會助手「小濠」🏃<br>有什麼可以幫你的嗎？</div>
+          <div class="ai-msg ai-msg-bot">你好！我是运动会助手「小濠」🏃<br>有什麼可以幫你的嗎？</div>
         </div>
         <div class="ai-chat-input">
-          <input type="text" id="ai-chat-input" placeholder="輸入問題...">
+          <input type="text" id="ai-chat-input" placeholder="输入問题...">
           <button id="ai-chat-send"><i class="fas fa-paper-plane"></i></button>
         </div>
-        ${App.user?.role==='admin'?`<div class="ai-chat-admin"><button class="btn-text" id="ai-key-btn">設定 API Key</button></div>`:''}
+        ${App.user?.role==='admin'?`<div class="ai-chat-admin"><button class="btn-text" id="ai-key-btn">设定 API Key</button></div>`:''}
       </div>
     `;
     document.body.insertAdjacentHTML('beforeend', html);
@@ -226,9 +226,9 @@ const Forum = {
 
   _showAIKeyModal() {
     App.showModal(`
-      <div class="modal-header"><h3>設定 DeepSeek API Key</h3><button class="modal-close" onclick="App.hideModal()">&times;</button></div>
+      <div class="modal-header"><h3>设定 DeepSeek API Key</h3><button class="modal-close" onclick="App.hideModal()">&times;</button></div>
       <div class="modal-body">
-        <p class="text-sm text-muted mb-2">请输入您的 DeepSeek API Key，用於驅動 AI 助手</p>
+        <p class="text-sm text-muted mb-2">请输入您的 DeepSeek API Key，用於驅动 AI 助手</p>
         <div class="form-group"><label>API Key</label><input type="text" id="ai-key-input" class="form-input" placeholder="sk-..."></div>
       </div>
       <div class="modal-footer">

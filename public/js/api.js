@@ -28,25 +28,25 @@ const API = {
     try {
       result = await res.json();
     } catch (_) {
-      result = { error: '伺服器回應異常' };
+      result = { error: '伺服器回应异常' };
     }
 
     if (res.status === 401) {
       if (opts.silent401) {
-        return { success: false, error: result.error || '未授權', status: 401 };
+        return { success: false, error: result.error || '未授权', status: 401 };
       }
       this.clearToken();
       if (!opts.noRedirect) window.location.hash = '#/login';
-      throw new Error(result.error || '請重新登入');
+      throw new Error(result.error || '请重新登录');
     }
 
-    // 業務校驗錯誤（4xx）仍返回 JSON，由呼叫方依 success / error 處理
+    // 業务校验错误（4xx）仍返回 JSON，由呼叫方依 success / error 处理
     if (res.status >= 500) {
-      throw new Error(result.error || '伺服器內部錯誤，請稍後再試');
+      throw new Error(result.error || '伺服器内部错误，请稍後再试');
     }
 
     if (!res.ok && result.success === undefined && !result.error) {
-      result.error = '請求失敗';
+      result.error = '请求失败';
     }
 
     return result;
@@ -63,13 +63,13 @@ const API = {
     if (this.token) headers['Authorization'] = 'Bearer ' + this.token;
     const res = await fetch(url, { method: 'POST', headers, body: formData });
     let result = {};
-    try { result = await res.json(); } catch (_) { result = { error: '伺服器回應異常' }; }
+    try { result = await res.json(); } catch (_) { result = { error: '伺服器回应异常' }; }
     if (res.status === 401) {
       this.clearToken();
       window.location.hash = '#/login';
-      throw new Error(result.error || '請重新登入');
+      throw new Error(result.error || '请重新登录');
     }
-    if (res.status >= 500) throw new Error(result.error || '上傳失敗');
+    if (res.status >= 500) throw new Error(result.error || '上传失败');
     return result;
   },
 

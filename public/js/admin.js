@@ -1744,7 +1744,7 @@ const Admin = {
     html += '<div class="form__group"><label class="form__label form__label--required">学生姓名</label><input class="form__input" id="result-student-name" placeholder="点击选择班级和学生" autocomplete="off" readonly value="' + this._escapeHtml(initialData.student_name) + '"><div class="form__hint" id="result-selected-student" style="display:none;"></div><div class="form__hint">点击学生姓名字段后，先选择班级，再选择该班学生</div><div class="form__hint" id="result-student-name-error" style="display:none;color:#dc2626;"></div></div>';
     html += '<div class="form__group"><label class="form__label form__label--required">成绩</label><input class="form__input" id="result-performance" placeholder="如: 12.34、1:23.45、DNS" value="' + this._escapeHtml(initialData.performance) + '"><div class="form__hint">支持纯数字、时间格式，或 DNS / DNF / DQ / NM</div><div class="form__hint" id="result-performance-error" style="display:none;color:#dc2626;"></div></div>';
     html += '<div class="form__group"><label class="form__label">奖项</label><select class="form__select" id="result-award"><option value="">无</option><option value="一等"' + (initialData.award === '一等' ? ' selected' : '') + '>一等</option><option value="二等"' + (initialData.award === '二等' ? ' selected' : '') + '>二等</option><option value="三等"' + (initialData.award === '三等' ? ' selected' : '') + '>三等</option><option value="优秀"' + (initialData.award === '优秀' ? ' selected' : '') + '>优秀</option><option value="团体"' + (initialData.award === '团体' ? ' selected' : '') + '>团体</option></select></div>';
-    html += '<div class="form__group"><label class="form__label form__label--required">输入备注</label><textarea class="form__textarea" id="result-note" rows="4" placeholder="请输入补充说明，最多500字">' + this._escapeHtml(initialData.note) + '</textarea><div style="display:flex;justify-content:space-between;gap:12px;"><div class="form__hint">支持中文、英文、数字及常用標點</div><div class="form__hint" id="result-note-counter">0/500</div></div><div class="form__hint" id="result-note-error" style="display:none;color:#dc2626;"></div></div>';
+    html += '<div class="form__group"><label class="form__label form__label--required">输入备注</label><textarea class="form__textarea" id="result-note" rows="4" placeholder="请输入补充说明，最多500字">' + this._escapeHtml(initialData.note) + '</textarea><div style="display:flex;justify-content:space-between;gap:12px;"><div class="form__hint">支持中文、英文、数字及常用标点</div><div class="form__hint" id="result-note-counter">0/500</div></div><div class="form__hint" id="result-note-error" style="display:none;color:#dc2626;"></div></div>';
     html += '<div class="form__group"><label class="form__label form__label--required">是否打破学校记录</label><label style="display:flex;align-items:center;gap:8px;font-weight:500;color:#374151;"><input type="checkbox" id="result-school-record"' + (initialData.is_school_record ? ' checked' : '') + '> 是，已刷新校史记录</label></div>';
     if (!isEdit) {
       html += '<div style="margin-top:20px;border-top:1px solid #e5e7eb;padding-top:16px;">';
@@ -2623,7 +2623,7 @@ const Admin = {
       const replies = res.data || [];
       let html = '<div class="modal-header"><h3>论坛评论审核</h3><button class="modal-close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div><div class="modal-body">';
       if (replies.length === 0) {
-        html += '<p class="text-muted text-center">暂無待審核评论</p>';
+        html += '<p class="text-muted text-center">暂无待审核评论</p>';
       } else {
         replies.forEach(r => {
           html += '<div style="border:1px solid var(--border);padding:10px;margin-bottom:8px;border-radius:var(--radius)"><div style="display:flex;justify-content:space-between;margin-bottom:6px"><strong>'+r.author_name+'</strong><span class="text-sm text-muted">'+r.post_title+'</span></div><p style="margin-bottom:8px">'+r.content+'</p><div style="display:flex;gap:6px"><button class="btn btn-success btn-xs" onclick="Admin._approveReply('+r.id+')">通过</button><button class="btn btn-danger btn-xs" onclick="Admin._rejectReply('+r.id+')">驳回</button></div></div>';
@@ -2687,7 +2687,7 @@ const Admin = {
       let html = '<div class="modal__header"><h3 class="modal__title">AI生成获奖证书</h3><button class="modal__close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>';
       html += '<div class="modal__body">';
       html += '<p class="text-sm text-muted mb-2">输入获奖信息，AI 将自动生成证书内容</p>';
-      html += '<div class="form-group"><label>获奖项目</label><input type="text" id="award-event" class="form__input" placeholder="如：100米男子組"></div>';
+      html += '<div class="form-group"><label>获奖项目</label><input type="text" id="award-event" class="form__input" placeholder="如：100米男子组"></div>';
       html += '<div class="form-group"><label>获奖者</label><input type="text" id="award-name" class="form__input" placeholder="如：张三"></div>';
       html += '<div class="form-row"><div class="form-group"><label>奖项</label><select id="award-level" class="form__select"><option>一等奖</option><option>二等奖</option><option>三等奖</option><option>优秀奖</option></select></div><div class="form-group"><label>班级</label><input type="text" id="award-class" class="form__input" placeholder="如：高一(1)班"></div></div>';
       html += '<button class="btn btn-primary btn-sm" onclick="Admin._doGenerateAward()">生成证书</button>';
@@ -2708,22 +2708,22 @@ const Admin = {
     result.innerHTML = '<div class="text-center"><div class="spinner"></div><p class="text-sm text-muted mt-1">AI生成中...</p></div>';
 
     try {
-      const prompt = `請為澳門濠江中學第三十屆田徑運動會生成一份獲獎證書內容。使用以下格式（繁體中文，正式莊重）：
+      const prompt = `请為澳门濠江中学第三十屆田徑运动会生成一份获奖证书内容。使用以下格式（繁体中文，正式莊重）：
 
 ─────────────────────────────
-          澳門濠江中學
-      第三十屆田徑運動會
-         獲 獎 證 書
+          澳门濠江中学
+      第三十屆田徑运动会
+         获 奖 证 书
 ─────────────────────────────
 
-    茲證明 ${cls||''} 班 ${name} 同學
-    在 ${event} 項目中表現優異
-    榮獲 ${level}
+    茲证明 ${cls||''} 班 ${name} 同学
+    在 ${event} 项目中表现优异
+    榮获 ${level}
 
-    特頒此證，以資鼓勵
+    特頒此证，以资鼓勵
 
-    澳門濠江中學
-    第三十屆田徑運動會組委會
+    澳门濠江中学
+    第三十屆田徑运动会组委会
     2026年6月
 ─────────────────────────────`;
 
@@ -2733,7 +2733,7 @@ const Admin = {
         this._currentAwardHtml = result.innerHTML;
       } else {
         // 直接用模板生成
-        const cert = `\n─────────────────────────────\n          澳門濠江中學\n      第三十屆田徑運動會\n         獲 獎 證 書\n─────────────────────────────\n\n    茲證明 ${cls||''} 班 ${name} 同學\n    在 ${event} 項目中表現優異\n    榮獲 ${level}\n\n    特頒此證，以資鼓勵\n\n    澳門濠江中學\n    第三十屆田徑運動會組委會\n    2026年6月\n─────────────────────────────`;
+        const cert = `\n─────────────────────────────\n          澳门濠江中学\n      第三十屆田徑运动会\n         获 奖 证 书\n─────────────────────────────\n\n    茲证明 ${cls||''} 班 ${name} 同学\n    在 ${event} 项目中表现优异\n    榮获 ${level}\n\n    特頒此证，以资鼓勵\n\n    澳门濠江中学\n    第三十屆田徑运动会组委会\n    2026年6月\n─────────────────────────────`;
         result.innerHTML = `<div style="text-align:center;padding:20px;background:#FFFBF0;border:3px double var(--red);white-space:pre-wrap;font-family:serif;font-size:16px;line-height:2">${cert}</div><button class="btn btn-success btn-sm mt-2" onclick="Admin._printAward()">打印证书</button>`;
       }
     } catch(e) {

@@ -56,7 +56,7 @@ router.get('/events/:id', (req, res) => {
       FROM events WHERE id = ?
     `).get(req.params.id);
     if (!event) {
-      return res.status(404).json({ success: false, error: '項目不存在' });
+      return res.status(404).json({ success: false, error: '项目不存在' });
     }
 
     const regCount = db.prepare(

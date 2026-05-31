@@ -177,16 +177,16 @@ router.get('/me', authMiddleware, (req, res) => {
       'SELECT id, username, email, role, name, student_id, class_name, grade FROM users WHERE id = ?'
     ).get(req.user.id);
     if (!user) {
-      return res.status(404).json({ success: false, error: '用戶不存在' });
+      return res.status(404).json({ success: false, error: '用户不存在' });
     }
     res.json({ success: true, data: user });
   } catch (e) {
-    res.status(500).json({ success: false, error: '無法取得用戶資訊' });
+    res.status(500).json({ success: false, error: '无法取得用户资訊' });
   }
 });
 
 router.post('/logout', authMiddleware, (req, res) => {
-  logOperation(req.user.id, req.user.username, 'logout', '用戶登出', getClientIp(req));
+  logOperation(req.user.id, req.user.username, 'logout', '用户登出', getClientIp(req));
   res.json({ success: true, message: '已登出' });
 });
 
