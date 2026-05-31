@@ -30,7 +30,22 @@
           <a href="#/register" class="btn btn-sm" style="border:1px solid var(--gold);color:var(--gold)">注册</a>
         </div>
         <div id="user-menu" class="hidden" style="display:flex;align-items:center;gap:8px">
-          <a href="#" id="notify-bell" class="notify-bell hidden" title="通知"><i class="fas fa-bell"></i><span class="notify-badge" id="notify-badge">0</span></a>
+          <div id="notify-wrapper" class="notify-wrapper hidden">
+            <a href="#" id="notify-bell" class="notify-bell" title="通知" aria-label="通知中心" aria-expanded="false">
+              <i class="fas fa-bell"></i>
+              <span class="notify-badge" id="notify-badge" data-count="0">0</span>
+            </a>
+            <div id="notify-panel" class="notify-panel" aria-hidden="true">
+              <div class="notify-panel__header">
+                <div>
+                  <strong>通知中心</strong>
+                  <small id="notify-panel-subtitle">加载中...</small>
+                </div>
+                <button type="button" class="btn-text notify-panel__mark-all" id="notify-mark-all-btn">全部已读</button>
+              </div>
+              <div id="notify-panel-list" class="notify-panel__list"></div>
+            </div>
+          </div>
           <span class="user-name" id="user-name-display"></span>
           <a href="#/admin" id="menu-admin-link" class="btn btn-sm hidden" style="background:var(--gold);color:var(--red);border:none;font-weight:700">管理后台</a>
           <a href="#/student" id="menu-student-link" class="btn btn-sm hidden" style="border:1px solid var(--gold);color:var(--gold)">个人中心</a>

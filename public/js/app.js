@@ -1,9 +1,15 @@
 const App = {
   user: JSON.parse(localStorage.getItem('user') || 'null'),
   countdownTimer: null,
+  notificationPanelOpen: false,
+  notificationPollTimer: null,
+  notificationItems: [],
+  notificationUnread: 0,
+  notificationReady: false,
 
   async init() {
     this.bindNavigation();
+    this._initNotifications();
     this.bindSearch();
     this.updateNav();
     this.handleRoute();
@@ -184,9 +190,14 @@ const App = {
       e.stopPropagation();
       document.querySelector('.user-dropdown')?.classList.toggle('show');
     });
+    document.getElementById('notify-wrapper')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
     // 点击其他地方关闭
     document.addEventListener('click', () => {
       document.querySelector('.user-dropdown')?.classList.remove('show');
+      this._toggleNotificationPanel(false);
+      this._closeSwipedNotifications();
     });
   },
 
@@ -195,6 +206,7 @@ const App = {
     const authBtns = document.getElementById('auth-btns');
     const userMenu = document.getElementById('user-menu');
     const notifyBell = document.getElementById('notify-bell');
+    const notifyWrapper = document.getElementById('notify-wrapper');
     if (!authBtns || !userMenu) return;
 
     if (this.user) {
@@ -207,78 +219,318 @@ const App = {
       const studentLink = document.getElementById('menu-student-link');
       if (adminLink) adminLink.classList.toggle('hidden', this.user.role !== 'admin');
       if (studentLink) studentLink.classList.toggle('hidden', this.user.role !== 'student');
-      if (notifyBell) { notifyBell.classList.remove('hidden'); this._fetchUnreadCount(); }
+      if (notifyBell) notifyBell.classList.remove('hidden');
+      if (notifyWrapper) notifyWrapper.classList.remove('hidden');
+      this._ensureNotificationPolling();
+      this._loadNotifications({ silent: true });
     } else {
       authBtns.classList.remove('hidden');
       userMenu.classList.add('hidden');
       if (notifyBell) notifyBell.classList.add('hidden');
+      if (notifyWrapper) notifyWrapper.classList.add('hidden');
+      this._toggleNotificationPanel(false);
+      this._stopNotificationPolling();
+      this.notificationItems = [];
+      this.notificationUnread = 0;
+      this.notificationReady = false;
+      this._updateNotificationBadge(0);
     }
   },
 
-  async _fetchUnreadCount() {
-    try {
-      const res = await API.get('/student/notifications?limit=1');
-      const unread = res.data?.unread || 0;
-      const badge = document.getElementById('notify-badge');
-      const bell = document.getElementById('notify-bell');
-      if (badge) { badge.textContent = unread > 99 ? '99+' : unread; badge.dataset.count = unread; }
-      if (bell) bell.classList.toggle('has-unread', unread > 0);
-    } catch(e) { /* 静默失败 */ }
+  _initNotifications() {
+    const bell = document.getElementById('notify-bell');
+    const panel = document.getElementById('notify-panel');
+    const list = document.getElementById('notify-panel-list');
+    const markAll = document.getElementById('notify-mark-all-btn');
+
+    bell?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!this.user) return;
+      this._toggleNotificationPanel();
+    });
+
+    panel?.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+
+    markAll?.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      await this._markAllRead();
+    });
+
+    list?.addEventListener('click', async (e) => {
+      const item = e.target.closest('.notify-item');
+      if (!item) return;
+      const id = parseInt(item.dataset.id, 10);
+      const targetUrl = item.dataset.url || '';
+
+      if (e.target.closest('[data-action="delete"]')) {
+        e.preventDefault();
+        await this._deleteNotification(id);
+        return;
+      }
+
+      if (e.target.closest('[data-action="read"]')) {
+        e.preventDefault();
+        await this._markNotificationRead(id);
+        return;
+      }
+
+      if (e.target.closest('[data-action="open"]')) {
+        e.preventDefault();
+        await this._openNotification(id, targetUrl);
+      }
+    });
   },
 
-  async _showNotifications() {
+  _ensureNotificationPolling() {
+    if (this.notificationPollTimer || !this.user) return;
+    this.notificationPollTimer = setInterval(() => {
+      if (!this.user) return;
+      this._loadNotifications({ silent: true });
+    }, 30000);
+  },
+
+  _stopNotificationPolling() {
+    if (this.notificationPollTimer) {
+      clearInterval(this.notificationPollTimer);
+      this.notificationPollTimer = null;
+    }
+  },
+
+  _toggleNotificationPanel(force) {
+    const panel = document.getElementById('notify-panel');
+    const bell = document.getElementById('notify-bell');
+    if (!panel || !bell) return;
+
+    const nextOpen = typeof force === 'boolean' ? force : !this.notificationPanelOpen;
+    this.notificationPanelOpen = nextOpen;
+    panel.classList.toggle('is-open', nextOpen);
+    panel.setAttribute('aria-hidden', String(!nextOpen));
+    bell.classList.toggle('is-open', nextOpen);
+    bell.setAttribute('aria-expanded', String(nextOpen));
+    if (nextOpen) this._loadNotifications({ silent: true });
+  },
+
+  _updateNotificationBadge(unread) {
+    const badge = document.getElementById('notify-badge');
+    const bell = document.getElementById('notify-bell');
+    if (badge) {
+      badge.textContent = unread > 99 ? '99+' : String(unread || 0);
+      badge.dataset.count = String(unread || 0);
+    }
+    if (bell) bell.classList.toggle('has-unread', unread > 0);
+  },
+
+  _triggerNotificationBell() {
+    const bell = document.getElementById('notify-bell');
+    if (!bell) return;
+    bell.classList.remove('ring-once');
+    void bell.offsetWidth;
+    bell.classList.add('ring-once');
+  },
+
+  async _loadNotifications(options = {}) {
+    if (!this.user) return;
+    const silent = options.silent === true;
+
     try {
-      this.showLoading();
-      const res = await API.get('/student/notifications?limit=30');
-      this.hideLoading();
-      const data = res.data?.list || [];
-      const typeIcon = { success: 'fa-check-circle', warning: 'fa-exclamation-triangle', danger: 'fa-times-circle', info: 'fa-info-circle' };
-      const typeColor = { success: 'var(--green)', warning: 'var(--orange)', danger: 'var(--red)', info: 'var(--primary)' };
-      let html = `<div class="modal-header"><h3>通知消息</h3><button class="modal-close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div><div class="modal-body" style="padding:0">`;
-      if (data.length === 0) {
-        html += '<div style="padding:3rem;text-align:center"><i class="fas fa-bell-slash" style="font-size:3rem;color:var(--border);margin-bottom:1rem;display:block"></i><p class="text-muted">暂无通知</p></div>';
-      } else {
-        html += data.map(n => `
-          <div class="notify-item ${n.is_read?'':'unread'}" data-id="${n.id}" data-url="${(n.target_url||'').replace(/"/g,'&quot;')}">
-            <i class="fas ${typeIcon[n.type]||'fa-bell'}" style="color:${typeColor[n.type]||'var(--brand)'}"></i>
-            <div style="flex:1">
-              <strong>${this._escHtml(n.title)}</strong>
-              <div style="font-size:0.875rem;color:var(--text-secondary);line-height:1.5">${this._escHtml(n.content||'')}</div>
-              <span class="time">${this.formatDate(n.created_at)}</span>
+      const previousIds = this.notificationItems.map((item) => item.id);
+      const res = await API.student.getNotifications({ limit: 50 });
+      const list = res.data?.list || [];
+      const unread = res.data?.unread || 0;
+      const hasNewNotification = this.notificationReady && list.some((item) => !previousIds.includes(item.id));
+
+      this.notificationItems = list;
+      this.notificationUnread = unread;
+      this.notificationReady = true;
+      this._updateNotificationBadge(unread);
+      this._renderNotifications();
+
+      if (hasNewNotification && !silent) {
+        this._triggerNotificationBell();
+      } else if (hasNewNotification) {
+        this._triggerNotificationBell();
+      }
+    } catch (e) {
+      if (!silent) this.showToast(e.message || '加载通知失败', 'error');
+    }
+  },
+
+  _renderNotifications() {
+    const list = document.getElementById('notify-panel-list');
+    const subtitle = document.getElementById('notify-panel-subtitle');
+    const markAll = document.getElementById('notify-mark-all-btn');
+    if (!list || !subtitle || !markAll) return;
+
+    subtitle.textContent = this.notificationItems.length
+      ? `共 ${this.notificationItems.length} 条，未读 ${this.notificationUnread} 条`
+      : '暂无通知';
+    markAll.disabled = this.notificationUnread <= 0;
+    markAll.style.opacity = this.notificationUnread > 0 ? '1' : '.45';
+
+    if (!this.notificationItems.length) {
+      list.innerHTML = '<div class="notify-panel__empty"><i class="fas fa-bell-slash"></i><p>暂无通知</p></div>';
+      return;
+    }
+
+    list.innerHTML = this.notificationItems.map((item) => {
+      const meta = this._getNotificationMeta(item.type);
+      const unreadClass = item.is_read ? 'is-read' : 'unread';
+      return `
+        <div class="notify-item ${unreadClass}" data-id="${item.id}" data-url="${this._escAttr(item.target_url || '')}">
+          <button type="button" class="notify-item__action" data-action="delete">删除</button>
+          <div class="notify-item__content" data-role="swipe-surface">
+            <div class="notify-item__icon"><i class="fas ${meta.icon}"></i></div>
+            <div class="notify-item__main">
+              <div class="notify-item__top">
+                <div class="notify-item__title">${this._escHtml(item.title || '通知')}</div>
+                <span class="notify-item__time">${this.formatDate(item.created_at)}</span>
+              </div>
+              <div class="notify-item__body">${this._escHtml(item.content || '暂无内容')}</div>
+              <div class="notify-item__tools">
+                ${item.is_read ? '' : '<button type="button" class="notify-item__read" data-action="read">标记已读</button>'}
+                ${item.target_url ? '<button type="button" class="notify-item__link" data-action="open">查看</button>' : ''}
+              </div>
             </div>
           </div>
-        `).join('');
+        </div>
+      `;
+    }).join('');
+
+    list.querySelectorAll('.notify-item').forEach((item) => this._bindNotificationSwipe(item));
+  },
+
+  _getNotificationMeta(type) {
+    const map = {
+      success: { icon: 'fa-check-circle' },
+      warning: { icon: 'fa-exclamation-triangle' },
+      danger: { icon: 'fa-times-circle' },
+      info: { icon: 'fa-bell' }
+    };
+    return map[type] || map.info;
+  },
+
+  _bindNotificationSwipe(item) {
+    const surface = item.querySelector('[data-role="swipe-surface"]');
+    if (!surface) return;
+
+    let startX = 0;
+    let deltaX = 0;
+    let dragging = false;
+    const maxSwipe = 78;
+
+    const setTranslate = (value) => {
+      surface.style.transform = `translateX(${value}px)`;
+    };
+
+    const handlePointerDown = (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      startX = e.clientX;
+      deltaX = item.classList.contains('is-swiped') ? -maxSwipe : 0;
+      dragging = true;
+      surface.style.transition = 'none';
+      this._closeSwipedNotifications(item.dataset.id);
+      if (surface.setPointerCapture) surface.setPointerCapture(e.pointerId);
+    };
+
+    const handlePointerMove = (e) => {
+      if (!dragging) return;
+      const offset = Math.max(-maxSwipe, Math.min(0, e.clientX - startX + deltaX));
+      setTranslate(offset);
+    };
+
+    const handlePointerUp = (e) => {
+      if (!dragging) return;
+      dragging = false;
+      surface.style.transition = '';
+      const offset = Math.max(-maxSwipe, Math.min(0, e.clientX - startX + deltaX));
+      const open = offset < -36;
+      item.classList.toggle('is-swiped', open);
+      setTranslate(open ? -maxSwipe : 0);
+      if (surface.releasePointerCapture) {
+        try { surface.releasePointerCapture(e.pointerId); } catch (_) { /* ignore */ }
       }
-      html += `</div><div class="modal-footer">${data.length>0?`<button class="btn btn-outline btn-sm" onclick="App._markAllRead()">全部標記已讀</button>`:''}<button class="btn btn-primary btn-sm" onclick="App.hideModal()">關閉</button></div>`;
-      this.showModal(html);
-      document.querySelectorAll('.notify-item[data-id]').forEach(el => {
-        el.addEventListener('click', async () => {
-          const id = el.dataset.id;
-          const url = el.dataset.url;
-          try { await API.student.markNotificationRead(id); } catch (_) {}
-          this.hideModal();
-          this._fetchUnreadCount();
-          if (url) window.location.hash = url.startsWith('#') ? url : '#' + url;
-        });
-      });
-    } catch(e) {
-      this.hideLoading();
-      this.showToast(e.message, 'error');
-    }
+    };
+
+    surface.onpointerdown = handlePointerDown;
+    surface.onpointermove = handlePointerMove;
+    surface.onpointerup = handlePointerUp;
+    surface.onpointercancel = handlePointerUp;
+  },
+
+  _closeSwipedNotifications(exceptId) {
+    document.querySelectorAll('.notify-item.is-swiped').forEach((item) => {
+      if (exceptId && item.dataset.id === String(exceptId)) return;
+      item.classList.remove('is-swiped');
+      const surface = item.querySelector('[data-role="swipe-surface"]');
+      if (surface) surface.style.transform = 'translateX(0)';
+    });
   },
 
   async _markAllRead() {
     try {
-      await API.put('/student/notifications/read-all');
-      this.hideModal();
-      this._fetchUnreadCount();
+      await API.student.markAllNotificationsRead();
+      this.notificationItems = this.notificationItems.map((item) => ({ ...item, is_read: 1 }));
+      this.notificationUnread = 0;
+      this._updateNotificationBadge(0);
+      this._renderNotifications();
       this.showToast('已全部标记为已读', 'success');
     } catch(e) { this.showToast(e.message, 'error'); }
+  },
+
+  async _markNotificationRead(id) {
+    try {
+      await API.student.markNotificationRead(id);
+      this.notificationItems = this.notificationItems.map((item) =>
+        item.id === id ? { ...item, is_read: 1 } : item
+      );
+      this.notificationUnread = this.notificationItems.filter((item) => !item.is_read).length;
+      this._updateNotificationBadge(this.notificationUnread);
+      this._renderNotifications();
+    } catch (e) {
+      this.showToast(e.message || '标记已读失败', 'error');
+    }
+  },
+
+  async _deleteNotification(id) {
+    try {
+      await API.student.deleteNotification(id);
+      const item = this.notificationItems.find((entry) => entry.id === id);
+      const el = document.querySelector(`.notify-item[data-id="${id}"]`);
+      if (el) {
+        el.classList.add('is-removing');
+        await new Promise((resolve) => setTimeout(resolve, 180));
+      }
+      this.notificationItems = this.notificationItems.filter((entry) => entry.id !== id);
+      if (item && !item.is_read) this.notificationUnread = Math.max(0, this.notificationUnread - 1);
+      this._updateNotificationBadge(this.notificationUnread);
+      this._renderNotifications();
+      this.showToast('通知已删除', 'success');
+    } catch (e) {
+      this.showToast(e.message || '删除通知失败', 'error');
+    }
+  },
+
+  async _openNotification(id, targetUrl) {
+    const current = this.notificationItems.find((item) => item.id === id);
+    if (current && !current.is_read) {
+      await this._markNotificationRead(id);
+    }
+    this._toggleNotificationPanel(false);
+    this._closeSwipedNotifications();
+    if (targetUrl) {
+      window.location.hash = targetUrl.startsWith('#') ? targetUrl : '#' + targetUrl;
+    }
   },
 
   async logout() {
     API.clearToken();
     this.user = null;
+    this._stopNotificationPolling();
+    this._toggleNotificationPanel(false);
     this.updateNav();
     window.location.hash = '#/';
     this.showToast('已退出登录', 'info');

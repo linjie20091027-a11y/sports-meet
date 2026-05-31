@@ -463,6 +463,26 @@ router.put('/notifications/read-all', (req, res) => {
   }
 });
 
+// DELETE /notifications/:id
+router.delete('/notifications/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const notification = db.prepare(
+      'SELECT id FROM notifications WHERE id = ? AND user_id = ?'
+    ).get(req.params.id, req.user.id);
+
+    if (!notification) {
+      return res.status(404).json({ success: false, error: '通知不存在' });
+    }
+
+    db.prepare('DELETE FROM notifications WHERE id = ? AND user_id = ?')
+      .run(req.params.id, req.user.id);
+    res.json({ success: true, message: '通知已删除' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // PUT /profile/avatar - 更新头像
 router.put('/profile/avatar', (req, res) => {
   try {
