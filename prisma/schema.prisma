@@ -1,0 +1,253 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id                 Int       @id @default(autoincrement())
+  uuid               String    @unique @default(uuid())
+  username           String    @unique
+  email              String    @unique
+  password           String
+  role               String    @default("student")
+  studentId          String?   @unique @map("student_id")
+  name               String
+  className          String?   @map("class_name")
+  grade              String?
+  phone              String?
+  avatarUrl          String?   @map("avatar_url")
+  status             String    @default("active")
+  failedAttempts     Int       @default(0) @map("failed_attempts")
+  lockedUntil        DateTime? @map("locked_until")
+  lastLoginAt        DateTime? @map("last_login_at")
+  passwordChangedAt  DateTime? @map("password_changed_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  deletedAt          DateTime? @map("deleted_at")
+
+  registrations      Registration[]
+  results            Result[]
+  notifications      Notification[]
+  forumPosts         ForumPost[]
+  forumReplies       ForumReply[]
+  operationLogs      OperationLog[]
+  announcements      Announcement[]
+
+  @@map("users")
+}
+
+model Event {
+  id              Int       @id @default(autoincrement())
+  uuid            String    @unique @default(uuid())
+  name            String
+  category        String    @default("track")
+  eventType       String    @default("individual") @map("event_type")
+  genderGroup     String    @default("mixed") @map("gender_group")
+  maxParticipants Int       @default(0) @map("max_participants")
+  rules           String?
+  description     String?
+  venue           String?
+  status          String    @default("active")
+  sortOrder       Int       @default(0) @map("sort_order")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  registrations   Registration[]
+  schedules       Schedule[]
+  results         Result[]
+  
+  @@map("events")
+}
+
+model Registration {
+  id          Int       @id @default(autoincrement())
+  userId      Int       @map("user_id")
+  eventId     Int       @map("event_id")
+  status      String    @default("pending")
+  rejectReason String?  @map("reject_reason")
+  reviewedBy  Int?      @map("reviewed_by")
+  reviewedAt  DateTime? @map("reviewed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventId])
+  @@map("registrations")
+}
+
+model Schedule {
+  id          Int       @id @default(autoincrement())
+  eventId     Int       @map("event_id")
+  roundName   String    @default("预赛") @map("round_name")
+  startTime   String?   @map("start_time")
+  endTime     String?   @map("end_time")
+  venue       String?
+  maxHeats    Int       @default(1) @map("max_heats")
+  status      String    @default("draft")
+  note        String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  results     Result[]
+
+  @@map("schedules")
+}
+
+model Result {
+  id          Int       @id @default(autoincrement())
+  scheduleId  Int       @map("schedule_id")
+  userId      Int       @map("user_id")
+  eventId     Int?      @map("event_id")
+  performance String?
+  rank        Int       @default(0)
+  score       Float     @default(0)
+  award       String    @default("")
+  isPublished Int       @default(0) @map("is_published")
+  note        String?
+  recordedBy  Int?      @map("recorded_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  schedule    Schedule  @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event       Event?    @relation(fields: [eventId], references: [id])
+
+  @@map("results")
+}
+
+model Announcement {
+  id          Int       @id @default(autoincrement())
+  title       String
+  content     String
+  category    String    @default("general")
+  isPinned    Int       @default(0) @map("is_pinned")
+  publishedBy Int       @map("published_by")
+  publishTime String?   @map("publish_time")
+  expireTime  String?   @map("expire_time")
+  viewCount   Int       @default(0) @map("view_count")
+  status      String    @default("published")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  publisher   User      @relation(fields: [publishedBy], references: [id])
+
+  @@map("announcements")
+}
+
+model Notification {
+  id          Int       @id @default(autoincrement())
+  uuid        String    @unique @default(uuid())
+  userId      Int       @map("user_id")
+  type        String    @default("info")
+  title       String
+  content     String?
+  sourceType  String?   @map("source_type")
+  sourceId    Int?      @map("source_id")
+  targetUrl   String?   @map("target_url")
+  isRead      Int       @default(0) @map("is_read")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model ForumPost {
+  id          Int       @id @default(autoincrement())
+  userId      Int       @map("user_id")
+  title       String
+  content     String
+  isPinned    Int       @default(0) @map("is_pinned")
+  viewCount   Int       @default(0) @map("view_count")
+  replyCount  Int       @default(0) @map("reply_count")
+  isDeleted   Int       @default(0) @map("is_deleted")
+  deletedBy   Int?      @map("deleted_by")
+  deletedAt   DateTime? @map("deleted_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  author      User      @relation(fields: [userId], references: [id])
+  replies     ForumReply[]
+
+  @@map("forum_posts")
+}
+
+model ForumReply {
+  id          Int       @id @default(autoincrement())
+  postId      Int       @map("post_id")
+  userId      Int       @map("user_id")
+  content     String
+  status      String    @default("pending")
+  isDeleted   Int       @default(0) @map("is_deleted")
+  deletedBy   Int?      @map("deleted_by")
+  deletedAt   DateTime? @map("deleted_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  post        ForumPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author      User      @relation(fields: [userId], references: [id])
+
+  @@map("forum_replies")
+}
+
+model OperationLog {
+  id          Int       @id @default(autoincrement())
+  userId      Int?      @map("user_id")
+  username    String?
+  action      String
+  detail      String?
+  ipAddress   String?   @map("ip_address")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  user        User?     @relation(fields: [userId], references: [id])
+
+  @@map("operation_logs")
+}
+
+model SchoolInfo {
+  id          Int    @id @default(autoincrement())
+  category    String
+  title       String
+  content     String
+  sortOrder   Int    @default(0) @map("sort_order")
+
+  @@map("school_info")
+}
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  @@map("settings")
+}
+
+model MeetInfo {
+  id                Int    @id @default(autoincrement())
+  name              String @default("学校运动会")
+  theme             String?
+  startDate         String? @map("start_date")
+  endDate           String? @map("end_date")
+  registrationOpen  Int    @default(0) @map("registration_open")
+  siteMaintenance   Int    @default(0) @map("site_maintenance")
+  logoUrl           String? @map("logo_url")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@map("meet_info")
+}
+
+model Captcha {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  code      String
+  createdAt DateTime @default(now()) @map("created_at")
+  used      Int      @default(0)
+
+  @@map("captchas")
+}

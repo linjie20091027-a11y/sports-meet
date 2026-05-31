@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>运动會管理系统｜澳门濠江中学</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="/css/style.css?v=5">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="#/" class="nav-logo">
+        <div><small>澳门濠江中学</small>运动會管理系统</div>
+      </a>
+      <ul class="nav-links" id="nav-links">
+        <li><a href="#/" class="nav-link active">首页</a></li>
+        <li><a href="#/events" class="nav-link">赛事项目</a></li>
+        <li><a href="#/results" class="nav-link">成绩公示</a></li>
+        <li><a href="#/announcements" class="nav-link">公告通知</a></li>
+        <li><a href="#/forum" class="nav-link">论坛</a></li>
+      </ul>
+      <div class="nav-right">
+        <div class="nav-search">
+          <input type="text" id="nav-search-input" placeholder="搜索...">
+          <button id="nav-search-btn"><i class="fas fa-search"></i></button>
+        </div>
+        <div id="auth-btns">
+          <a href="#/login" class="btn btn-sm" style="background:var(--gold);color:var(--red);border:none;font-weight:700">登录</a>
+          <a href="#/register" class="btn btn-sm" style="border:1px solid var(--gold);color:var(--gold)">注册</a>
+        </div>
+        <div id="user-menu" class="hidden" style="display:flex;align-items:center;gap:8px">
+          <a href="#" id="notify-bell" class="notify-bell hidden" title="通知"><i class="fas fa-bell"></i><span class="notify-badge" id="notify-badge">0</span></a>
+          <span class="user-name" id="user-name-display"></span>
+          <a href="#/admin" id="menu-admin-link" class="btn btn-sm hidden" style="background:var(--gold);color:var(--red);border:none;font-weight:700">管理后台</a>
+          <a href="#/student" id="menu-student-link" class="btn btn-sm hidden" style="border:1px solid var(--gold);color:var(--gold)">个人中心</a>
+          <a href="#" id="menu-logout" class="btn btn-sm" style="border:1px solid var(--gold);color:var(--gold)">退出</a>
+        </div>
+        <button class="nav-toggle" id="nav-toggle"><i class="fas fa-bars"></i></button>
+      </div>
+    </div>
+  </nav>
+
+  <main id="app-main">
+    <div id="page-home" class="page">
+      <section class="hero-banner">
+        <div class="hero-content">
+          <h1 class="hero-title"><small>澳门濠江中学</small>第三十届田径运动會</h1>
+          <div class="hero-line"></div>
+          <p class="hero-subtitle">SPEED · STRENGTH · HONOR</p>
+          <div class="countdown">
+            <div class="countdown-item"><div class="countdown-num" id="cd-days">0</div><span>天</span></div>
+            <div class="countdown-item"><div class="countdown-num" id="cd-hours">0</div><span>时</span></div>
+            <div class="countdown-item"><div class="countdown-num" id="cd-mins">0</div><span>分</span></div>
+            <div class="countdown-item"><div class="countdown-num" id="cd-secs">0</div><span>秒</span></div>
+          </div>
+          <p class="hero-date" id="hero-date"></p>
+        </div>
+      </section>
+      <section class="container"><div class="stats-grid"> <div class="stat-card"><i class="fas fa-running"></i><div class="stat-num" id="stat-events">-</div><div class="stat-label">比赛项目</div></div> <div class="stat-card"><i class="fas fa-users"></i><div class="stat-num" id="stat-regs">-</div><div class="stat-label">报名人次</div></div> <div class="stat-card"><i class="fas fa-calendar-check"></i><div class="stat-num" id="stat-done">-</div><div class="stat-label">已完成赛事</div></div> <div class="stat-card"><i class="fas fa-trophy"></i><div class="stat-num" id="stat-awards">-</div><div class="stat-label">获奖人数</div></div> </div>
+      <div class="parallax-section parallax-track" style="margin-top:2rem"><div class="parallax-text">SPEED<span style="font-size:.7rem;display:block;opacity:.4">速度之美</span></div></div>
+      <div class="parallax-section parallax-campus"><div class="parallax-text">STRENGTH<span style="font-size:.7rem;display:block;opacity:.4">力量之美</span></div></div>
+      <div class="photo-gallery container"><div class="section-title">精彩瞬间<small>HIGHLIGHTS</small></div><div class="photo-grid" id="photo-grid"></div></div></section>
+      <section class="container"><div class="content-layout"><div class="content-main">
+        <div class="card mb-3"><div class="card-header"><h3>赛事项目总览</h3><a href="#/events" class="btn-text">全部项目 &raquo;</a></div><div class="card-body" id="home-events"></div></div>
+        <div class="home-grid"><div class="card"><div class="card-header"><h3>最新公告</h3><a href="#/announcements" class="btn-text">更多 &raquo;</a></div><div class="card-body" id="home-announcements"></div></div><div class="card"><div class="card-header"><h3>最新成绩</h3><a href="#/results" class="btn-text">更多 &raquo;</a></div><div class="card-body" id="home-results"></div></div></div>
+      </div><div class="content-sidebar">
+        <div class="sidebar-card"><h4>报名须知</h4><ul><li>每人最多报名3个项目</li><li>报名后需管理员审核</li><li>集体项目需组队参加</li><li>比赛前30分钟检录</li></ul></div>
+      </div></div></section>
+    </div>
+    <div id="page-login" class="page hidden"></div>
+    <div id="page-register" class="page hidden"></div>
+    <div id="page-events" class="page hidden"><div class="container" style="margin-top:80px"><div class="section-title">赛事项目<small>浏览所有比赛项目</small></div><div class="filter-bar" id="events-filter"></div><div class="card-grid" id="events-list"></div></div></div>
+    <div id="page-results" class="page hidden"><div class="container" style="margin-top:80px" id="results-table"></div></div>
+    <div id="page-announcements" class="page hidden"><div class="container" style="margin-top:80px"><div class="section-title">公告通知<small>赛事通知 · 报名提醒 · 成绩公示</small></div><div class="filter-bar" id="announcements-filter"></div><div id="announcements-list"></div></div></div>
+    <div id="page-announcement-detail" class="page hidden"><div class="container" style="margin-top:80px" id="announcement-detail-root"></div></div>
+    <div id="page-event-detail" class="page hidden"><div class="container" style="margin-top:80px" id="event-detail-root"></div></div>
+    <div id="page-forum" class="page hidden" style="padding-top:80px"><div class="container" id="forum-root"></div></div>
+    <div id="page-admin" class="page hidden"></div>
+    <div id="page-student" class="page hidden"></div>
+  </main>
+
+  <div id="toast-container"></div>
+  <div id="modal-overlay" class="modal-overlay hidden"><div class="modal" id="modal-content"></div></div>
+  <div id="search-overlay" class="modal-overlay hidden"><div class="modal modal-lg" id="search-results"></div></div>
+  <div id="loading-overlay" class="hidden"><div class="spinner"></div></div>
+
+  <footer class="footer">
+    <div class="footer-line"></div>
+    <p style="color:rgba(255,255,255,.7);font-weight:600">澳门濠江中学</p>
+    <p>第三十届田径运动會管理系统 &copy; 2026</p>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
+  <script src="/js/api.js?v=5" defer></script>
+  <script src="/js/auth.js?v=5" defer></script>
+  <script src="/js/student.js?v=5" defer></script>
+  <script src="/js/admin.js?v=5" defer></script>
+  <script src="/js/forum.js?v=6" defer></script>
+  <script src="/js/app.js?v=6" defer></script>
+  <script src="/js/app.js?v=99" defer></script>
+  <script src="/js/interactions.js?v=7" defer></script>
+
+  <audio id="bg-music" loop preload="auto">
+    <source src="/audio/bg-music.m4a" type="audio/mp4">
+  </audio>
+  <div id="music-control" class="music-control playing" title="音乐开关" onclick="App.toggleMusic()">
+    <i class="fas fa-music"></i>
+    <span class="music-waves"><i></i><i></i><i></i></span>
+  </div>
+</body>
+</html>
