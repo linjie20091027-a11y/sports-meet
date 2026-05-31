@@ -747,7 +747,7 @@ const App = {
       audio.loop = true;
       audio.preload = 'auto';
       var src = document.createElement('source');
-      src.src = '/audio/bg-music.m4a?v=1';
+      src.src = '/audio/bg-music.mp4?v=1';
       src.type = 'audio/mp4';
       audio.appendChild(src);
       document.body.appendChild(audio);
