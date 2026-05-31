@@ -5,8 +5,9 @@ const App = {
   async init() {
     this.bindNavigation();
     this.bindSearch();
-    await this.refreshUser();
+    this.updateNav();
     this.handleRoute();
+    this._initMusic();
     window.addEventListener('hashchange', () => this.handleRoute());
   },
 
@@ -703,25 +704,63 @@ const App = {
   },
 
   async _quickRegister(eventId, eventName) {
-    if (!this.user || this.user.role !== 'student') {
-      window.location.hash = '#/login';
-      return;
-    }
-    const ok = await this.confirmDialog(`確認報名「${eventName}」？`);
+    if (!this.user || this.user.role !== 'student') return this.showToast('请先以学生身份登录', 'warning');
+    var ok = await this.confirmDialog('确认报名【' + eventName + '】？');
     if (!ok) return;
-    App.showLoading();
     try {
-      const res = await API.student.submitRegistration(eventId);
-      if (res.success) {
-        this.showToast(res.message || '報名成功，等待審核', 'success');
-        this.renderHome();
-      } else {
-        this.showToast(res.error || '報名失敗', 'error');
-      }
-    } catch (e) {
-      this.showToast(e.message || '報名失敗', 'error');
-    } finally {
+      this.showLoading();
+      var res = await API.student.submitRegistration(eventId);
       this.hideLoading();
+      if (res.success) { this.showToast('报名成功！等待审核', 'success'); this.renderHome(); }
+      else this.showToast(res.error || '报名失败', 'error');
+    } catch(e) { this.hideLoading(); this.showToast(e.message || '报名失败', 'error'); }
+  },
+
+  // ====== 背景音乐 ======
+  musicPlaying: true,
+  toggleMusic() {
+    var audio = document.getElementById('bg-music');
+    var btn = document.getElementById('music-control');
+    if (!audio) return;
+    if (this.musicPlaying) {
+      audio.pause();
+      btn.classList.add('muted');
+      btn.classList.remove('playing');
+      this.musicPlaying = false;
+    } else {
+      audio.play().catch(function(){});
+      btn.classList.remove('muted');
+      btn.classList.add('playing');
+      this.musicPlaying = true;
+    }
+  },
+
+  _initMusic() {
+    var self = this;
+    var audio = document.getElementById('bg-music');
+    if (!audio) return;
+    // 尝试自动播放（浏览器可能阻止）
+    audio.volume = 0.3;
+    var playPromise = audio.play();
+    if (playPromise) {
+      playPromise.then(function() {
+        self.musicPlaying = true;
+        var btn = document.getElementById('music-control');
+        if (btn) { btn.classList.remove('muted'); btn.classList.add('playing'); }
+      }).catch(function() {
+        // 浏览器阻止了自动播放，等待用户首次点击
+        self.musicPlaying = false;
+        var btn = document.getElementById('music-control');
+        if (btn) { btn.classList.add('muted'); btn.classList.remove('playing'); }
+        var startOnClick = function() {
+          audio.play().then(function() {
+            self.musicPlaying = true;
+            if (btn) { btn.classList.remove('muted'); btn.classList.add('playing'); }
+          }).catch(function(){});
+          document.removeEventListener('click', startOnClick);
+        };
+        document.addEventListener('click', startOnClick, { once: false });
+      });
     }
   },
   async exportResultsCSV() {

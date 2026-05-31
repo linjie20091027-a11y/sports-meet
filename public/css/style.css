@@ -558,6 +558,24 @@ body::before {
   .hero-banner { animation: none }
 }
 
+/* ═══ 背景音乐控制 ═══ */
+.music-control {
+  position: fixed; bottom: 28px; right: 28px; z-index: 1500;
+  width: 44px; height: 44px; border-radius: 50%;
+  background: var(--red); color: #fff; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem; transition: all .3s; box-shadow: 0 4px 16px rgba(139,0,0,.25);
+}
+.music-control:hover { transform: scale(1.1); box-shadow: 0 8px 24px rgba(139,0,0,.35) }
+.music-control.muted { background: #666; opacity: .7 }
+.music-control.muted .music-waves { display: none }
+.music-waves { display: flex; gap: 2px; margin-left: 2px; align-items: flex-end; height: 14px }
+.music-waves i { display: block; width: 2px; background: #fff; border-radius: 1px; animation: waveAnim 1s ease-in-out infinite }
+.music-waves i:nth-child(1) { height: 6px; animation-delay: 0s }
+.music-waves i:nth-child(2) { height: 12px; animation-delay: .15s }
+.music-waves i:nth-child(3) { height: 8px; animation-delay: .3s }
+@keyframes waveAnim { 0%,100%{transform:scaleY(1)} 50%{transform:scaleY(.4)} }
+
 /* 按钮增强hover */
 .btn:hover { 
   transform: translateY(-2px) scale(1.03);
