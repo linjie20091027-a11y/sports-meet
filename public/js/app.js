@@ -716,52 +716,127 @@ const App = {
     } catch(e) { this.hideLoading(); this.showToast(e.message || '报名失败', 'error'); }
   },
 
-  // ====== 背景音乐 ======
-  musicPlaying: true,
+  // ====== 背景音乐 (Web Audio API 合成) ======
+  musicPlaying: false,
+  audioCtx: null,
+  gainNode: null,
+
   toggleMusic() {
-    var audio = document.getElementById('bg-music');
     var btn = document.getElementById('music-control');
-    if (!audio) return;
     if (this.musicPlaying) {
-      audio.pause();
-      btn.classList.add('muted');
-      btn.classList.remove('playing');
+      if (this.gainNode) this.gainNode.gain.value = 0;
+      if (btn) { btn.classList.add('muted'); btn.classList.remove('playing'); }
       this.musicPlaying = false;
     } else {
-      audio.play().catch(function(){});
-      btn.classList.remove('muted');
-      btn.classList.add('playing');
+      if (!this.audioCtx) this._createMusic();
+      if (this.gainNode) this.gainNode.gain.value = 0.25;
+      if (btn) { btn.classList.remove('muted'); btn.classList.add('playing'); }
       this.musicPlaying = true;
+    }
+  },
+
+  _createMusic() {
+    try {
+      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      this.audioCtx = ctx;
+      var master = ctx.createGain();
+      master.gain.value = 0.25;
+      master.connect(ctx.destination);
+      this.gainNode = master;
+
+      // 和弦进行: Am - F - C - G (体育/激情风格)
+      var chordProgression = [
+        [220, 261.63, 329.63],   // Am
+        [174.61, 220, 261.63],   // F
+        [261.63, 329.63, 392],   // C
+        [196, 246.94, 293.66]    // G
+      ];
+
+      // 低音线
+      var bassFreqs = [110, 87.31, 130.81, 98]; // 根音低八度
+      var chordIdx = 0;
+      var beatDuration = 0.5; // 120 BPM
+
+      function playChord() {
+        var now = ctx.currentTime;
+        chordProgression[chordIdx].forEach(function(freq) {
+          var osc = ctx.createOscillator();
+          var gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0, now);
+          gain.gain.linearRampToValueAtTime(0.06, now + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + beatDuration * 4);
+          osc.connect(gain);
+          gain.connect(master);
+          osc.start(now);
+          osc.stop(now + beatDuration * 4);
+        });
+
+        // 低音
+        var bass = ctx.createOscillator();
+        var bassGain = ctx.createGain();
+        bass.type = 'triangle';
+        bass.frequency.value = bassFreqs[chordIdx];
+        bassGain.gain.setValueAtTime(0, now);
+        bassGain.gain.linearRampToValueAtTime(0.08, now + 0.05);
+        bassGain.gain.exponentialRampToValueAtTime(0.001, now + beatDuration * 4);
+        bass.connect(bassGain);
+        bassGain.connect(master);
+        bass.start(now);
+        bass.stop(now + beatDuration * 4);
+
+        // 鼓点 (filtered noise)
+        var noise = ctx.createBufferSource();
+        var bufferSize = ctx.sampleRate * 0.05;
+        var buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        var data = buffer.getChannelData(0);
+        for (var i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+        noise.buffer = buffer;
+        var noiseGain = ctx.createGain();
+        var filter = ctx.createBiquadFilter();
+        filter.type = 'highpass';
+        filter.frequency.value = 2000;
+        noiseGain.gain.setValueAtTime(0.03, now);
+        noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+        noise.connect(filter);
+        filter.connect(noiseGain);
+        noiseGain.connect(master);
+        noise.start(now);
+        noise.stop(now + 0.2);
+
+        chordIdx = (chordIdx + 1) % chordProgression.length;
+      }
+
+      // 立即开始 + 循环
+      playChord();
+      this._musicInterval = setInterval(playChord, beatDuration * 4 * 1000);
+      this.musicPlaying = true;
+      var btn = document.getElementById('music-control');
+      if (btn) { btn.classList.remove('muted'); btn.classList.add('playing'); }
+    } catch(e) {
+      console.log('Web Audio not supported');
     }
   },
 
   _initMusic() {
     var self = this;
-    var audio = document.getElementById('bg-music');
-    if (!audio) return;
-    // 尝试自动播放（浏览器可能阻止）
-    audio.volume = 0.3;
-    var playPromise = audio.play();
-    if (playPromise) {
-      playPromise.then(function() {
+    var startOnClick = function() {
+      if (!self.audioCtx || self.audioCtx.state === 'suspended') {
+        if (self.audioCtx) self.audioCtx.resume();
+        else self._createMusic();
+      }
+      if (self.gainNode && !self.musicPlaying) {
+        self.gainNode.gain.value = 0.25;
         self.musicPlaying = true;
         var btn = document.getElementById('music-control');
         if (btn) { btn.classList.remove('muted'); btn.classList.add('playing'); }
-      }).catch(function() {
-        // 浏览器阻止了自动播放，等待用户首次点击
-        self.musicPlaying = false;
-        var btn = document.getElementById('music-control');
-        if (btn) { btn.classList.add('muted'); btn.classList.remove('playing'); }
-        var startOnClick = function() {
-          audio.play().then(function() {
-            self.musicPlaying = true;
-            if (btn) { btn.classList.remove('muted'); btn.classList.add('playing'); }
-          }).catch(function(){});
-          document.removeEventListener('click', startOnClick);
-        };
-        document.addEventListener('click', startOnClick, { once: false });
-      });
-    }
+      }
+    };
+    // 用户首次点击页面时启动
+    document.addEventListener('click', startOnClick, { once: true });
+    // 也尝试直接创建
+    setTimeout(function() { self._createMusic(); }, 1000);
   },
   async exportResultsCSV() {
     try {
