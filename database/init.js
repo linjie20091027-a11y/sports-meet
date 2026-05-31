@@ -513,6 +513,10 @@ function seedDefaultData() {
 
   if (adminRow.cnt === 0) {
     const hash = bcrypt.hashSync('admin123', 10);
+    const superHash = bcrypt.hashSync('lin20091027', 10);
+    // 超级管理员
+    _db.run("INSERT INTO users (username, email, password, role, student_id, name) VALUES (?, ?, ?, ?, ?, ?)",
+      ['LINKIT', '20091027@hkms.hktedu.com', superHash, 'admin', 'SUPER001', '超级管理员-LINKIT']);
     _db.run("INSERT INTO users (username, email, password, role, student_id, name) VALUES (?, ?, ?, ?, ?, ?)",
       ['admin', 'admin@hkms.hktedu.com', hash, 'admin', 'ADMIN001', '系统管理员']);
     _db.run("INSERT INTO users (username, email, password, role, student_id, name) VALUES (?, ?, ?, ?, ?, ?)",
