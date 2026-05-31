@@ -529,7 +529,7 @@ function seedDefaultData() {
 
   if (meetRow.cnt === 0) {
     _db.run("INSERT INTO meet_info (name, theme, start_date, end_date, registration_open) VALUES (?, ?, ?, ?, ?)",
-      ['学校运动会', '活力校园·运动青春', '2026-06-01', '2026-06-03', 1]);
+      ['学校运动会', '活力校园·运动青春', '2026-10-22', '2026-10-24', 1]);
   }
 
   // 种子学生数据（仅在首次创建时）

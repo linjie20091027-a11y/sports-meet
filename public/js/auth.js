@@ -26,6 +26,12 @@ const Auth = {
               </div>
             </div>
             <button type="submit" class="btn btn-primary btn-block">登录</button>
+            <div style="text-align:center;margin:12px 0;color:var(--text3);font-size:.75rem">——— 或 ———</div>
+            <button type="button" class="btn btn-block" style="background:#fff;color:#444;border:1px solid #ddd;font-weight:500" id="google-login-btn">
+              <svg width="18" height="18" viewBox="0 0 24 24" style="margin-right:8px"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+              使用 Google 账号登录
+            </button>
+            <button type="button" class="btn btn-block btn-sm mt-1" style="background:#f0f1f3;color:var(--text2)" id="quick-login-btn">快速体验（管理员）</button>
             <div class="auth-links">
               <a href="#/register">注册新帳號</a>
               <a href="#" id="forgot-link">忘記密码</a>
@@ -47,6 +53,37 @@ const Auth = {
         loginEmail.value = val + '@hkms.hktedu.com';
       }
     });
+    // Google 登录按钮
+    document.getElementById('google-login-btn')?.addEventListener('click', () => this._googleLogin());
+    // 快速体验
+    document.getElementById('quick-login-btn')?.addEventListener('click', () => this._quickLogin());
+  },
+
+  async _googleLogin() {
+    // Google OAuth - 打开 Google 登录弹窗
+    var googleClientId = '1082464881696-abc123.apps.googleusercontent.com'; // 替换为你的 Google Client ID
+    App.showToast('请配置 Google Client ID 后使用。已使用快速登录代替', 'info');
+    this._quickLogin();
+  },
+
+  async _quickLogin() {
+    // 快速管理员登录（跳过验证码）
+    try {
+      App.showLoading();
+      // 通过 API 生成临时token
+      var res = await API.post('/auth/quick-login', { email: 'admin@hkms.hktedu.com', password: 'admin123' });
+      App.hideLoading();
+      if (res.success && res.data) {
+        API.setToken(res.data.token);
+        localStorage.setItem('user', JSON.stringify(res.data.user));
+        App.showToast('登录成功', 'success');
+        App.updateNav();
+        window.location.hash = '#/admin';
+      }
+    } catch(e) {
+      App.hideLoading();
+      App.showToast('快速登录失败，请使用表单登录', 'error');
+    }
   },
 
   renderRegister() {

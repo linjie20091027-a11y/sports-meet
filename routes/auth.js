@@ -151,6 +151,25 @@ router.post('/login', (req, res) => {
   }
 });
 
+// POST /quick-login - 快速登录（跳过验证码，仅管理员）
+router.post('/quick-login', (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) return res.json({ success: false, error: '邮箱和密码必填' });
+    const db = getDb();
+    const user = db.prepare("SELECT * FROM users WHERE email = ? AND status = 'active'").get(email);
+    if (!user) return res.json({ success: false, error: '账号不存在' });
+    if (!bcrypt.compareSync(password, user.password)) return res.json({ success: false, error: '密码错误' });
+    if (user.role !== 'admin') return res.json({ success: false, error: '快速登录仅限管理员' });
+    db.prepare('UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = ?').run(user.id);
+    const token = generateToken({ id: user.id, username: user.username, email: user.email, role: user.role, name: user.name });
+    logOperation(user.id, user.username, 'quick-login', `快速登录: ${email}`, getClientIp(req));
+    res.json({ success: true, data: { token, user: { id: user.id, username: user.username, email: user.email, role: user.role, name: user.name } } });
+  } catch (e) {
+    res.json({ success: false, error: '登录失败' });
+  }
+});
+
 router.get('/me', authMiddleware, (req, res) => {
   try {
     const db = getDb();

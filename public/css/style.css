@@ -41,7 +41,7 @@ h1{font-family:var(--title-font);font-size:2.2rem}h2{font-size:1.4rem}h3{font-si
 @keyframes bell-ring{0%,100%{transform:rotate(0)}25%{transform:rotate(15deg)}75%{transform:rotate(-15deg)}}
 
 /* Hero */
-.hero-banner{position:relative;margin-top:var(--nav-h);min-height:420px;background:linear-gradient(rgba(60,0,0,.75),rgba(30,0,0,.7)),url('https://images.unsplash.com/photo-1461896836934-bd45ba2ae6c7?w=1200&q=80') center/cover no-repeat;background-color:var(--red-dark);display:flex;align-items:center;justify-content:center;text-align:center;padding:4rem 1.25rem;border-bottom:4px solid var(--gold)}
+.hero-banner{position:relative;margin-top:var(--nav-h);min-height:420px;background:linear-gradient(rgba(60,0,0,.75),rgba(30,0,0,.7)),url('/images/08cdc1479f4817482d2db2903af8985f_1000X1000.jpg') center/cover no-repeat;background-color:var(--red-dark);display:flex;align-items:center;justify-content:center;text-align:center;padding:4rem 1.25rem;border-bottom:4px solid var(--gold)}
 .hero-content{max-width:750px;animation:fadeInUp .8s ease}
 .hero-title{font-family:var(--title-font);font-size:3rem;font-weight:400;color:var(--gold);margin-bottom:.4rem;text-shadow:0 2px 16px rgba(0,0,0,.5);letter-spacing:.1em;line-height:1.3}
 .hero-title small{display:block;font-size:.95rem;font-family:var(--body-font);color:rgba(255,255,255,.7);font-weight:300;letter-spacing:.25em;margin-bottom:.5rem}
@@ -410,6 +410,15 @@ h1{font-family:var(--title-font);font-size:2.2rem}h2{font-size:1.4rem}h3{font-si
 .detail-stat .value{font-size:1.1rem;font-weight:700;color:var(--text)}.detail-prose{font-size:.82rem;line-height:1.9;color:var(--text2)}
 .detail-prose p{margin-bottom:.5rem}
 
+/* ═══ 首页照片墙 ═══ */
+.photo-gallery{padding:1.5rem 0 0;max-width:var(--max-w);margin:0 auto}
+.photo-gallery .section-title{margin-bottom:.8rem}
+.photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px}
+.photo-grid a{display:block;overflow:hidden;border-radius:var(--radius);aspect-ratio:1;transition:transform .3s var(--ease-spring),box-shadow .3s}
+.photo-grid a:hover{transform:scale(1.04);box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:1;position:relative}
+.photo-grid img{width:100%;height:100%;object-fit:cover;display:block;transition:filter .3s}
+.photo-grid a:hover img{filter:brightness(1.1)}
+
 /* ═══════════════════════════════════════
    质感注入 — 噪点纹理 · 暖光投影 · 风景视差
    ═══════════════════════════════════════ */
@@ -446,7 +455,7 @@ body::before {
   position: relative;
   min-height: 320px;
   display: flex; align-items: center; justify-content: center;
-  background: url('https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1200&q=80') center/cover no-repeat fixed;
+  background: url('/images/00d7247112096fd0cc0a5f0be2e4535f_1000X1000.jpg') center/cover no-repeat fixed;
   margin: 1.5rem 0;
   border-radius: var(--radius-lg);
   overflow: hidden;
@@ -466,10 +475,10 @@ body::before {
 
 /* 第二个视差 — 校园 */
 .parallax-section.parallax-campus {
-  background-image: url('https://images.unsplash.com/photo-1523050854058-8df9010c142f?w=1200&q=80');
+  background-image: url('/images/07fec7138eee60f994b88ad0d35c4029_1000X1000.jpg');
 }
 .parallax-section.parallax-track {
-  background-image: url('https://images.unsplash.com/photo-1461896836934-bd45ba2ae6c7?w=1200&q=80');
+  background-image: url('/images/015e3a6dd3fd45e4a79e66e6e468de10_1000X1000.jpg');
 }
 
 /* Hero Banner 增强质感 */
