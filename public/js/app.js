@@ -405,16 +405,27 @@ const App = {
 
   startCountdown(targetDate) {
     if (this.countdownTimer) clearInterval(this.countdownTimer);
-    const update = () => {
-      const diff = new Date(targetDate) - new Date();
-      if (diff <= 0) {
-        ['days','hours','mins','secs'].forEach(k => { const el = document.getElementById('cd-'+k); if(el) el.textContent='0'; });
-        clearInterval(this.countdownTimer); return;
+    var self = this;
+    var update = function() {
+      var diff = new Date(targetDate) - new Date();
+      var daysEl = document.getElementById('cd-days');
+      var hoursEl = document.getElementById('cd-hours');
+      var minsEl = document.getElementById('cd-mins');
+      var secsEl = document.getElementById('cd-secs');
+      if (!daysEl || !hoursEl || !minsEl || !secsEl) {
+        self.countdownTimer && clearInterval(self.countdownTimer);
+        return;
       }
-      document.getElementById('cd-days').textContent = Math.floor(diff/(86400000));
-      document.getElementById('cd-hours').textContent = Math.floor((diff%86400000)/3600000);
-      document.getElementById('cd-mins').textContent = Math.floor((diff%3600000)/60000);
-      document.getElementById('cd-secs').textContent = Math.floor((diff%60000)/1000);
+      if (diff <= 0) {
+        daysEl.textContent = '0'; hoursEl.textContent = '0';
+        minsEl.textContent = '0'; secsEl.textContent = '0';
+        clearInterval(self.countdownTimer);
+        return;
+      }
+      daysEl.textContent = Math.floor(diff / 86400000);
+      hoursEl.textContent = Math.floor((diff % 86400000) / 3600000);
+      minsEl.textContent = Math.floor((diff % 3600000) / 60000);
+      secsEl.textContent = Math.floor((diff % 60000) / 1000);
     };
     update();
     this.countdownTimer = setInterval(update, 1000);
