@@ -523,8 +523,18 @@ function seedDefaultData() {
       ['20250041', '20250041@hkms.hktedu.com', hash, 'admin', '20250041', '李靖汐']);
     _db.run("INSERT INTO users (username, email, password, role, student_id, name) VALUES (?, ?, ?, ?, ?, ?)",
       ['20250037', '20250037@hkms.hktedu.com', hash, 'admin', '20250037', '徐振华']);
+  }
+
+  // 冯梓雯（始终确保存在）
+  var fzwRow = _db.prepare("SELECT COUNT(*) as cnt FROM users WHERE email = '20250030@hkms.hktedu.com'");
+  fzwRow.step();
+  var fzwCnt = fzwRow.getAsObject().cnt;
+  fzwRow.free();
+  if (fzwCnt === 0) {
     _db.run("INSERT INTO users (username, email, password, role, student_id, name) VALUES (?, ?, ?, ?, ?, ?)",
       ['20250030', '20250030@hkms.hktedu.com', hash, 'admin', '20250030', '冯梓雯']);
+  } else {
+    _db.run("UPDATE users SET role = 'admin' WHERE email = '20250030@hkms.hktedu.com' AND role != 'admin'");
   }
 
   // 超级管理员（始终确保存在）
