@@ -144,8 +144,11 @@ const App = {
         Forum._initAIChat();
       }
     } else if (hash.startsWith('/announcements/')) {
+      document.getElementById('page-announcements').classList.remove('hidden');
+      document.querySelector('[href="#/announcements"]')?.classList.add('active');
       this.renderAnnouncements();
-      this.renderAnnouncementDetail(hash.split('/')[2]);
+      var annId = hash.split('/')[2];
+      if (annId && /^\d+$/.test(annId)) this.showAnnouncementDetail(annId);
     } else if (hash === '/admin') {
       if (!this.user || this.user.role !== 'admin') { window.location.hash = '#/login'; return; }
       document.getElementById('page-admin').classList.remove('hidden');
