@@ -744,79 +744,126 @@ const App = {
       master.connect(ctx.destination);
       this.gainNode = master;
 
-      // 和弦进行: Am - F - C - G (体育/激情风格)
-      var chordProgression = [
-        [220, 261.63, 329.63],   // Am
-        [174.61, 220, 261.63],   // F
-        [261.63, 329.63, 392],   // C
-        [196, 246.94, 293.66]    // G
+      // 体育激情风格：C小调，130BPM
+      var bpm = 130;
+      var beat = 60 / bpm;
+
+      // 低音线 (C - Ab - F - G)
+      var bassNotes = [130.81, 103.83, 87.31, 98.00];
+      
+      // 和弦 (Cm - Ab - Fm - G)
+      var chords = [
+        [130.81, 155.56, 196.00],  // Cm
+        [103.83, 130.81, 155.56],  // Ab
+        [87.31, 104.00, 130.81],   // Fm
+        [98.00, 123.47, 146.83]    // G
+      ];
+      
+      // 旋律片段
+      var melodyPatterns = [
+        [261.63, 329.63, 392.00, 329.63, 311.13, 261.63],
+        [311.13, 261.63, 207.65, 233.08, 261.63],
+        [261.63, 311.13, 349.23, 392.00, 523.25, 466.16],
+        [392.00, 349.23, 311.13, 329.63, 261.63]
       ];
 
-      // 低音线
-      var bassFreqs = [110, 87.31, 130.81, 98]; // 根音低八度
       var chordIdx = 0;
-      var beatDuration = 0.5; // 120 BPM
+      var barLength = beat * 4;
 
-      function playChord() {
+      function playBar() {
         var now = ctx.currentTime;
-        chordProgression[chordIdx].forEach(function(freq) {
+        var chord = chords[chordIdx];
+        var melody = melodyPatterns[chordIdx];
+        var bassFreq = bassNotes[chordIdx];
+
+        // 铺底和弦
+        chord.forEach(function(freq) {
           var osc = ctx.createOscillator();
           var gain = ctx.createGain();
           osc.type = 'sine';
           osc.frequency.value = freq;
           gain.gain.setValueAtTime(0, now);
-          gain.gain.linearRampToValueAtTime(0.06, now + 0.02);
-          gain.gain.exponentialRampToValueAtTime(0.001, now + beatDuration * 4);
+          gain.gain.linearRampToValueAtTime(0.04, now + 0.03);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + barLength);
           osc.connect(gain);
           gain.connect(master);
           osc.start(now);
-          osc.stop(now + beatDuration * 4);
+          osc.stop(now + barLength);
         });
 
         // 低音
         var bass = ctx.createOscillator();
-        var bassGain = ctx.createGain();
+        var bGain = ctx.createGain();
         bass.type = 'triangle';
-        bass.frequency.value = bassFreqs[chordIdx];
-        bassGain.gain.setValueAtTime(0, now);
-        bassGain.gain.linearRampToValueAtTime(0.08, now + 0.05);
-        bassGain.gain.exponentialRampToValueAtTime(0.001, now + beatDuration * 4);
-        bass.connect(bassGain);
-        bassGain.connect(master);
+        bass.frequency.value = bassFreq;
+        bGain.gain.setValueAtTime(0, now);
+        bGain.gain.linearRampToValueAtTime(0.06, now + 0.02);
+        bGain.gain.exponentialRampToValueAtTime(0.001, now + barLength);
+        bass.connect(bGain);
+        bGain.connect(master);
         bass.start(now);
-        bass.stop(now + beatDuration * 4);
+        bass.stop(now + barLength);
 
-        // 鼓点 (filtered noise)
-        var noise = ctx.createBufferSource();
-        var bufferSize = ctx.sampleRate * 0.05;
-        var buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-        var data = buffer.getChannelData(0);
-        for (var i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
-        noise.buffer = buffer;
-        var noiseGain = ctx.createGain();
-        var filter = ctx.createBiquadFilter();
-        filter.type = 'highpass';
-        filter.frequency.value = 2000;
-        noiseGain.gain.setValueAtTime(0.03, now);
-        noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
-        noise.connect(filter);
-        filter.connect(noiseGain);
-        noiseGain.connect(master);
-        noise.start(now);
-        noise.stop(now + 0.2);
+        // 旋律
+        var noteLen = barLength / melody.length;
+        melody.forEach(function(freq, i) {
+          var osc = ctx.createOscillator();
+          var gain = ctx.createGain();
+          osc.type = 'square';
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0, now + i * noteLen);
+          gain.gain.linearRampToValueAtTime(0.05, now + i * noteLen + 0.01);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + (i + 0.9) * noteLen);
+          osc.connect(gain);
+          gain.connect(master);
+          osc.start(now + i * noteLen);
+          osc.stop(now + (i + 1) * noteLen);
+        });
 
-        chordIdx = (chordIdx + 1) % chordProgression.length;
+        // 打击乐 (kick + hi-hat)
+        // Kick
+        var kickOsc = ctx.createOscillator();
+        var kickGain = ctx.createGain();
+        kickOsc.type = 'sine';
+        kickOsc.frequency.setValueAtTime(150, now);
+        kickOsc.frequency.exponentialRampToValueAtTime(30, now + 0.1);
+        kickGain.gain.setValueAtTime(0.15, now);
+        kickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+        kickOsc.connect(kickGain);
+        kickGain.connect(master);
+        kickOsc.start(now);
+        kickOsc.stop(now + 0.3);
+        
+        // Hi-hat on 8th notes
+        for (var h = 0; h < 8; h++) {
+          var noise = ctx.createBufferSource();
+          var bufSize = ctx.sampleRate * 0.02;
+          var buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+          var data = buf.getChannelData(0);
+          for (var i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+          noise.buffer = buf;
+          var nGain = ctx.createGain();
+          var filter = ctx.createBiquadFilter();
+          filter.type = 'highpass';
+          filter.frequency.value = 6000 + (h % 2 === 0 ? 2000 : 0);
+          nGain.gain.setValueAtTime(h % 2 === 0 ? 0.04 : 0.02, now + h * beat / 2);
+          nGain.gain.exponentialRampToValueAtTime(0.001, now + h * beat / 2 + 0.04);
+          noise.connect(filter);
+          filter.connect(nGain);
+          nGain.connect(master);
+          noise.start(now + h * beat / 2);
+          noise.stop(now + h * beat / 2 + 0.05);
+        }
+
+        chordIdx = (chordIdx + 1) % chords.length;
       }
 
-      // 立即开始 + 循环
-      playChord();
-      this._musicInterval = setInterval(playChord, beatDuration * 4 * 1000);
+      playBar();
+      this._musicInterval = setInterval(playBar, barLength * 1000);
       this.musicPlaying = true;
       var btn = document.getElementById('music-control');
       if (btn) { btn.classList.remove('muted'); btn.classList.add('playing'); }
-    } catch(e) {
-      console.log('Web Audio not supported');
-    }
+    } catch(e) {}
   },
 
   _initMusic() {
