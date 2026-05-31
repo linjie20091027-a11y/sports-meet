@@ -523,6 +523,8 @@ function seedDefaultData() {
       ['20250041', '20250041@hkms.hktedu.com', hash, 'admin', '20250041', '李靖汐']);
     _db.run("INSERT INTO users (username, email, password, role, student_id, name) VALUES (?, ?, ?, ?, ?, ?)",
       ['20250037', '20250037@hkms.hktedu.com', hash, 'admin', '20250037', '徐振华']);
+    _db.run("INSERT INTO users (username, email, password, role, student_id, name) VALUES (?, ?, ?, ?, ?, ?)",
+      ['20250030', '20250030@hkms.hktedu.com', hash, 'admin', '20250030', '冯梓雯']);
   }
 
   // 超级管理员（始终确保存在）
