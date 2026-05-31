@@ -21,23 +21,30 @@ app.use(helmet({
       fontSrc: ["'self'", "cdn.jsdelivr.net", "cdnjs.cloudflare.com", "fonts.gstatic.com"],
     },
   },
+  // 防止点击劫持
+  frameguard: { action: 'deny' },
+  // 隐藏 X-Powered-By
+  hidePoweredBy: true,
 }));
 app.use(cors());
 app.use(cookieParser());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+// 禁止访问数据库文件
+app.use('/database', (req, res) => { res.status(403).send('Forbidden'); });
 
 // 速率限制
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 3000,
+  max: 500,
   message: { error: '请求过于频繁，请稍后再试' }
 });
 app.use('/api/', limiter);
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: 8,
   message: { error: '登录尝试过多，请15分钟后再试' }
 });
 app.use('/api/auth/login', loginLimiter);
