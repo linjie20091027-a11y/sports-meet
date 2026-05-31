@@ -335,19 +335,11 @@ const App = {
       ]);
 
       const m = meet.value?.data || {};
-      document.getElementById('hero-title').textContent = m.name || '田徑運動會';
-      document.getElementById('hero-theme').textContent = m.theme || '';
-      const dateEl = document.getElementById('hero-date');
-      if (dateEl) {
-        dateEl.innerHTML = `<i class="far fa-calendar"></i> ${m.start_date || '—'} 至 ${m.end_date || '—'}`;
-      }
-      const regEl = document.getElementById('hero-reg-status');
-      if (regEl) {
-        const open = m.registration_open;
-        regEl.innerHTML = open
-          ? '<i class="fas fa-circle" style="color:#34d399;font-size:0.5rem"></i> 報名開放中'
-          : '<i class="fas fa-circle" style="color:#f87171;font-size:0.5rem"></i> 報名已關閉';
-      }
+      document.getElementById('hero-title').textContent = m.name || '学校运动会';
+      var sub = document.getElementById('hero-subtitle');
+      if (sub) sub.textContent = m.theme || '';
+      var dateEl = document.getElementById('hero-date');
+      if (dateEl) dateEl.textContent = '比赛时间：' + (m.start_date || '—') + ' 至 ' + (m.end_date || '—');
       if (m.start_date) this.startCountdown(m.start_date);
 
       // ── 数据看板 ──

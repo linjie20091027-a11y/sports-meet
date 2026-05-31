@@ -60,10 +60,81 @@ const Auth = {
   },
 
   async _googleLogin() {
-    // Google OAuth - 打开 Google 登录弹窗
-    var googleClientId = '1082464881696-abc123.apps.googleusercontent.com'; // 替换为你的 Google Client ID
-    App.showToast('请配置 Google Client ID 后使用。已使用快速登录代替', 'info');
-    this._quickLogin();
+    // Google OAuth 登录
+    // 需要：在 https://console.cloud.google.com 创建 OAuth 2.0 客户端
+    // 获取 Client ID 后替换下方 YOUR_CLIENT_ID
+    var clientId = localStorage.getItem('google_client_id') || '';
+    
+    if (!clientId) {
+      // 未配置时：弹窗让用户输入 Client ID 或使用快速登录
+      App.showModal(`
+        <div class="modal-header"><h3>Google 登录配置</h3><button class="modal-close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>
+        <div class="modal-body">
+          <p class="mb-2" style="font-size:.85rem">Google 登录需要配置 OAuth 客户端 ID。</p>
+          <div class="form-group"><label>Google Client ID</label><input type="text" id="g-client-id" class="form-input" placeholder="粘贴你的 Google Client ID"></div>
+          <p class="text-sm text-muted">如果没有，可以 <a href="https://console.cloud.google.com/apis/credentials" target="_blank">点击这里创建</a></p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary btn-sm" onclick="App.hideModal()">取消</button>
+          <button class="btn btn-primary btn-sm" id="save-g-id">保存并登录</button>
+          <button class="btn btn-outline btn-sm" id="use-quick">快速登录</button>
+        </div>
+      `);
+      document.getElementById('save-g-id').addEventListener('click', function() {
+        var cid = document.getElementById('g-client-id').value.trim();
+        if (cid) { localStorage.setItem('google_client_id', cid); App.showToast('已保存', 'success'); }
+        App.hideModal();
+        Auth._googleLogin();
+      });
+      document.getElementById('use-quick').addEventListener('click', function() {
+        App.hideModal();
+        Auth._quickLogin();
+      });
+      return;
+    }
+    
+    // 使用 Google Identity Services 登录
+    if (typeof google === 'undefined' || !google.accounts) {
+      // 动态加载 Google GIS
+      var script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.onload = function() {
+        google.accounts.id.initialize({
+          client_id: clientId,
+          callback: Auth._handleGoogleResponse
+        });
+        google.accounts.id.prompt();
+      };
+      document.head.appendChild(script);
+    } else {
+      google.accounts.id.initialize({
+        client_id: clientId,
+        callback: Auth._handleGoogleResponse
+      });
+      google.accounts.id.prompt();
+    }
+  },
+
+  _handleGoogleResponse(response) {
+    // 发送 Google token 到后端验证
+    App.showLoading();
+    API.post('/auth/google-login', { credential: response.credential })
+      .then(function(res) {
+        App.hideLoading();
+        if (res.success && res.data) {
+          API.setToken(res.data.token);
+          localStorage.setItem('user', JSON.stringify(res.data.user));
+          App.showToast('Google 登录成功', 'success');
+          App.updateNav();
+          window.location.hash = '#/';
+        } else {
+          App.showToast(res.error || '登录失败', 'error');
+        }
+      })
+      .catch(function(e) {
+        App.hideLoading();
+        App.showToast(e.message, 'error');
+      });
   },
 
   async _quickLogin() {
