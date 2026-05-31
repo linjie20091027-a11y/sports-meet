@@ -77,32 +77,11 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: '服务器内部错误' });
 });
 
-// 异步启动：先初始化数据库，再启动服务器
-function runDbMaintenance() {
-  try {
-    const { getDb } = require('./database/init');
-    const db = getDb();
-    db.prepare("DELETE FROM events WHERE name LIKE '%500000%'").run();
-    db.prepare(`
-      UPDATE users SET role = 'student'
-      WHERE role = 'admin' AND id != 1
-        AND (
-          (student_id IS NOT NULL AND student_id != '')
-          OR email GLOB '2025*@hkms.hktedu.com'
-          OR email = '2100@hkms.hktedu.com'
-        )
-    `).run();
-  } catch (e) {
-    console.warn('資料庫維護跳過:', e.message);
-  }
-}
-
+// 直接启动
 initDatabase().then(() => {
-  runDbMaintenance();
   app.listen(PORT, () => {
-    console.log(`運動會管理系統: http://localhost:${PORT}`);
-    console.log(`管理員: admin@hkms.hktedu.com / admin123`);
-    console.log(`學生測試: 20250001@hkms.hktedu.com / 123456`);
+    console.log(`运动会管理系统: http://localhost:${PORT}`);
+    console.log(`管理员: admin@hkms.hktedu.com / admin123`);
   });
 }).catch(err => {
   console.error('数据库初始化失败:', err);
