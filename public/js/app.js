@@ -8,7 +8,43 @@ const App = {
     this.updateNav();
     this.handleRoute();
     this._initMusic();
+    // 倒计时独立启动，不依赖API
+    this._startCountdownSafe();
     window.addEventListener('hashchange', () => this.handleRoute());
+  },
+
+  _startCountdownSafe() {
+    // 硬编码目标时间，不依赖API响应
+    var target = new Date('2026-10-22T08:00:00+08:00');
+    var self = this;
+    if (this.countdownTimer) clearInterval(this.countdownTimer);
+    
+    var tick = function() {
+      var diff = target - new Date();
+      var els = {
+        days: document.getElementById('cd-days'),
+        hours: document.getElementById('cd-hours'),
+        mins: document.getElementById('cd-mins'),
+        secs: document.getElementById('cd-secs')
+      };
+      // 如果元素不存在，跳过
+      if (!els.days) return;
+      
+      if (diff <= 0) {
+        els.days.textContent = '0';
+        els.hours.textContent = '0';
+        els.mins.textContent = '0';
+        els.secs.textContent = '0';
+        clearInterval(self.countdownTimer);
+        return;
+      }
+      els.days.textContent = Math.floor(diff / 86400000);
+      els.hours.textContent = Math.floor((diff % 86400000) / 3600000);
+      els.mins.textContent = Math.floor((diff % 3600000) / 60000);
+      els.secs.textContent = Math.floor((diff % 60000) / 1000);
+    };
+    tick();
+    this.countdownTimer = setInterval(tick, 1000);
   },
 
   syncSessionFromStorage() {
@@ -84,6 +120,13 @@ const App = {
       var c = document.getElementById('results-table');
       if (c) c.style.display = 'block';
       this.renderResults();
+    } else if (hash.startsWith('/results/group/')) {
+      document.getElementById('page-results').classList.remove('hidden');
+      document.querySelector('[href="#/results"]')?.classList.add('active');
+      var parts = hash.replace('/results/group/','').split('/').filter(Boolean);
+      if (parts.length === 1) this._renderGroupDetail(parts[0]);
+      else if (parts.length === 2) this._renderGenderDetail(parts[0], parts[1]);
+      else if (parts.length === 3) this._renderEventRanking(parts[0], parts[1], decodeURIComponent(parts[2]));
     } else if (hash === '/announcements') {
       document.getElementById('page-announcements').classList.remove('hidden');
       document.querySelector('[href="#/announcements"]')?.classList.add('active');
@@ -340,8 +383,7 @@ const App = {
       var sub = document.getElementById('hero-subtitle');
       if (sub) sub.textContent = m.theme || '';
       var dateEl = document.getElementById('hero-date');
-      if (dateEl) dateEl.textContent = '比赛时间：' + (m.start_date || '—') + ' 至 ' + (m.end_date || '—');
-      if (m.start_date) this.startCountdown(m.start_date);
+      if (dateEl) dateEl.textContent = '比赛时间：2026年10月22日 至 10月24日';
 
       // ── 数据看板 ──
       const s = stats.value?.data || {};
@@ -567,61 +609,98 @@ const App = {
   async renderResults() {
     var table = document.getElementById('results-table');
     if (!table) return;
-    table.innerHTML = '<div class="section-title" style="margin-top:80px">成绩公示</div><div class="text-center p-8"><div class="spinner"></div></div>';
+    table.innerHTML = '<div class="text-center p-8"><div class="spinner"></div></div>';
     try {
       this.showLoading();
       var res = await API.get('/public/results');
       var data = res.data || [];
       this.hideLoading();
-      if (!data.length) { table.innerHTML = '<div class="section-title" style="margin-top:80px">成绩公示</div><p class="text-muted p-8 text-center">暂无成绩数据</p>'; return; }
+      if (!data.length) { table.innerHTML = '<p class="text-muted p-8 text-center">暂无成绩数据</p>'; return; }
 
-      var groups = {};
-      data.forEach(function(r) {
-        var key = r.event_name || '其他';
-        if (!groups[key]) groups[key] = [];
-        groups[key].push(r);
-      });
+      // 统计各组人数
+      var grpCount = {};
+      data.forEach(function(r){ var sg=(r.user_sport_group||'A'); grpCount[sg]=(grpCount[sg]||0)+1; });
 
-      var medals = {1:'🥇',2:'🥈',3:'🥉'};
-      var idx = 0;
-      var html = '<div class="section-title" style="margin-top:80px">成绩公示<small>点击项目查看详细排名</small></div>';
-      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">';
-      
-      Object.keys(groups).sort().forEach(function(eventName) {
-        var results = groups[eventName];
-        var sid = 'rg' + (idx++);
-        var top3 = results.filter(function(r){return r.rank<=3});
-        html += '<div class="card" style="cursor:pointer" onclick="App._toggleResults(\''+sid+'\')">';
-        html += '<div class="card-header"><h3>'+eventName+'</h3><span class="badge badge-success">'+results.length+'人</span></div>';
-        html += '<div class="card-body">';
-        html += '<div id="'+sid+'" style="display:none;margin-top:8px">';
-        html += '<div class="table-container"><table class="table"><thead><tr><th>排名</th><th>姓名</th><th>班级</th><th>成绩</th><th>奖项</th></tr></thead><tbody>';
-        results.sort(function(a,b){return (a.rank||99)-(b.rank||99)});
-        results.forEach(function(r) {
-          html += '<tr class="'+(r.rank<=3?'award-row':'')+'"><td>'+(medals[r.rank]||r.rank||'-')+'</td><td>'+(r.name||'-')+'</td><td>'+(r.class_name||'-')+'</td><td>'+(r.performance||'-')+'</td><td><span class="badge badge-success">'+(r.award||'-')+'</span></td></tr>';
-        });
-        html += '</tbody></table></div></div>';
-        html += '<div style="margin-top:4px;font-size:12px;color:var(--text3)">';
-        if (top3.length) {
-          top3.forEach(function(r,i){ html += medals[i+1]+' '+r.name+' '; });
-        }
-        html += ' | 点击查看全部</div>';
-        html += '</div></div>';
+      var html = '<div class="section-title">成绩公示<small>请选择组别</small></div>';
+      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px">';
+      ['A','B','C','D','E'].forEach(function(sg) {
+        var cnt = grpCount[sg] || 0;
+        if (!cnt) return;
+        html += '<a href="#/results/group/'+sg+'" class="card" style="text-decoration:none;text-align:center;padding:2rem 1rem;border-left:4px solid var(--red)">';
+        html += '<div style="font-size:2.5rem;font-weight:900;color:var(--red)">'+sg+'</div><div class="text-sm mt-1">'+cnt+'条成绩</div></a>';
       });
       html += '</div>';
-      html += '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-outline btn-sm" onclick="App.exportResults()">导出Excel</button><button class="btn btn-outline btn-sm" onclick="App.exportResultsCSV()">导出CSV</button></div>';
       table.innerHTML = html;
-    } catch(e) { this.hideLoading(); table.innerHTML = '<p class="text-muted p-8 text-center">加载失败：'+e.message+'</p>'; }
+    } catch(e) { table.innerHTML = '<p class="text-muted p-8 text-center">加载失败</p>'; }
   },
 
-  _toggleResults(id) {
-    var el = document.getElementById(id);
-    if (el) { el.style.display = el.style.display === 'none' ? 'block' : 'none'; }
+  // 组详情 → 选择男女
+  async _renderGroupDetail(sg) {
+    var table = document.getElementById('results-table');
+    if (!table) return;
+    table.innerHTML = '<div class="text-center p-8"><div class="spinner"></div></div>';
+    try {
+      var res = await API.get('/public/results');
+      var data = (res.data||[]).filter(function(r){return (r.user_sport_group||'A')===sg});
+      if (!data.length) { table.innerHTML = '<p class="text-muted p-8 text-center">该组暂无成绩</p>'; return; }
+      var maleCount=data.filter(function(r){return (r.user_gender||'male')==='male'}).length;
+      var femaleCount=data.length - maleCount;
+
+      var html = '<div class="section-title"><a href="#/results">← 返回</a> '+sg+'组</div>';
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">';
+      if(maleCount) html += '<a href="#/results/group/'+sg+'/male" class="card" style="text-decoration:none;text-align:center;padding:2rem;border-left:4px solid #1e6091"><i class="fas fa-male" style="font-size:2.5rem;color:#1e6091"></i><div style="font-size:1.3rem;font-weight:700;margin-top:8px">男子组</div><div class="text-sm text-muted mt-1">'+maleCount+'条</div></a>';
+      if(femaleCount) html += '<a href="#/results/group/'+sg+'/female" class="card" style="text-decoration:none;text-align:center;padding:2rem;border-left:4px solid #e91e63"><i class="fas fa-female" style="font-size:2.5rem;color:#e91e63"></i><div style="font-size:1.3rem;font-weight:700;margin-top:8px">女子组</div><div class="text-sm text-muted mt-1">'+femaleCount+'条</div></a>';
+      html += '</div>';
+      table.innerHTML = html;
+    } catch(e) { table.innerHTML = '<p class="text-muted p-8 text-center">加载失败</p>'; }
   },
 
-  _toggleResults(id) {
-    const el = document.getElementById(id);
-    if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  // 性别详情 → 选择项目
+  async _renderGenderDetail(sg, g) {
+    var table = document.getElementById('results-table');
+    if (!table) return;
+    table.innerHTML = '<div class="text-center p-8"><div class="spinner"></div></div>';
+    try {
+      var res = await API.get('/public/results');
+      var data = (res.data||[]).filter(function(r){return (r.user_sport_group||'A')===sg && (r.user_gender||'male')===g});
+      if (!data.length) { table.innerHTML = '<p class="text-muted p-8 text-center">暂无成绩</p>'; return; }
+
+      var evtGrp = {};
+      data.forEach(function(r){var en=r.event_name||'其他';evtGrp[en]=(evtGrp[en]||0)+1});
+      var gLabel = g==='male'?'男子组':'女子组';
+
+      var html = '<div class="section-title"><a href="#/results/group/'+sg+'">← 返回</a> '+sg+'组 '+gLabel+'</div>';
+      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">';
+      Object.keys(evtGrp).sort().forEach(function(en){
+        var cnt = evtGrp[en];
+        var safe = encodeURIComponent(en);
+        html += '<a href="#/results/group/'+sg+'/'+g+'/'+safe+'" class="card" style="text-decoration:none;color:inherit;border-left:3px solid var(--gold)"><div class="card-body" style="text-align:center"><strong style="font-size:1rem">'+en+'</strong><br><span class="text-sm text-muted">'+cnt+'人参赛</span></div></a>';
+      });
+      html += '</div>';
+      table.innerHTML = html;
+    } catch(e) { table.innerHTML = '<p class="text-muted p-8 text-center">加载失败</p>'; }
+  },
+
+  // 项目完整排名表
+  async _renderEventRanking(sg, g, en) {
+    var table = document.getElementById('results-table');
+    if (!table) return;
+    table.innerHTML = '<div class="text-center p-8"><div class="spinner"></div></div>';
+    try {
+      var res = await API.get('/public/results');
+      var data = (res.data||[]).filter(function(r){return (r.user_sport_group||'A')===sg && (r.user_gender||'male')===g && r.event_name===en});
+      if (!data.length) { table.innerHTML = '<p class="text-muted p-8 text-center">暂无排名</p>'; return; }
+
+      var medals = {1:'🥇',2:'🥈',3:'🥉'};
+      var results = data.sort(function(a,b){return (a.rank||99)-(b.rank||99)});
+      var gLabel = g==='male'?'男子组':'女子组';
+
+      var html = '<div class="section-title"><a href="#/results/group/'+sg+'/'+g+'">← 返回</a> '+sg+'组 '+gLabel+' → '+en+'</div>';
+      html += '<div class="table-container"><table class="table"><thead><tr><th>排名</th><th>姓名</th><th>班级</th><th>成绩</th><th>奖项</th></tr></thead><tbody>';
+      results.forEach(function(r){html += '<tr class="'+(r.rank<=3?'award-row':'')+'"><td>'+(medals[r.rank]||r.rank||'-')+'</td><td>'+(r.name||'-')+'</td><td>'+(r.class_name||'-')+'</td><td>'+(r.performance||'-')+'</td><td><span class="badge badge-success">'+(r.award||'-')+'</span></td></tr>'});
+      html += '</tbody></table></div>';
+      table.innerHTML = html;
+    } catch(e) { table.innerHTML = '<p class="text-muted p-8 text-center">加载失败</p>'; }
   },
 
   async exportResults() {
@@ -672,22 +751,22 @@ const App = {
   async showAnnouncementDetail(id) {
     try {
       this.showLoading();
-      const res = await API.get(`/public/announcements/${id}`);
-      const a = res.data;
-      if (!a) return this.showToast('公告不存在', 'error');
+      var res = await API.get('/public/announcements/' + id);
+      var a = res.data;
       this.hideLoading();
-      const catL = {event:'赛事通知',registration:'报名截止',result:'成绩公示',urgent:'紧急通知',general:'一般'};
+      if (!a) return this.showToast('公告不存在', 'error');
+      var catL = {event:'赛事通知',registration:'报名截止',result:'成绩公示',urgent:'紧急通知',general:'一般'};
       this.showModal(
-        `<div class="modal-header"><h3>${String(a.title)}</h3><button class="modal-close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>` +
-        `<div class="modal-body">` +
-          `<div class="detail-meta"><span class="badge badge-${a.category||'general'}">${catL[a.category]||a.category}</span><span class="text-sm text-muted">${this.formatDate(a.publish_time)} · ${a.view_count||0}阅读</span></div>` +
-          `<div class="detail-content">${(a.content||'').replace(/\n/g,'<br>')}</div>` +
-        `</div>` +
-        `<div class="modal-footer"><button class="btn btn-secondary btn-sm" onclick="App.hideModal()">关闭</button></div>`
+        '<div class="modal-header"><h3>'+a.title+'</h3><button class="modal-close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>' +
+        '<div class="modal-body">' +
+          '<div class="detail-meta"><span class="badge badge-'+(a.category||'general')+'">'+(catL[a.category]||a.category)+'</span><span class="text-sm text-muted">'+this.formatDate(a.publish_time)+' · '+(a.view_count||0)+'阅读</span></div>' +
+          '<div class="detail-content">'+(a.content||'').replace(/\n/g,'<br>')+'</div>' +
+        '</div>' +
+        '<div class="modal-footer"><button class="btn btn-secondary btn-sm" onclick="App.hideModal()">关闭</button></div>'
       );
     } catch (e) {
       this.hideLoading();
-      this.showToast('加载公告失败: ' + (e.message||''), 'error');
+      this.showToast('加载失败', 'error');
     }
   },
 
