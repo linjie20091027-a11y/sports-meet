@@ -739,30 +739,40 @@ const App = {
 
   _initMusic() {
     var self = this;
-    // 动态创建音频元素（无视HTML缓存问题）
     var audio = document.getElementById('bg-music');
     if (!audio) {
       audio = document.createElement('audio');
       audio.id = 'bg-music';
       audio.loop = true;
-      audio.preload = 'auto';
-      var src = document.createElement('source');
-      src.src = '/audio/bg-music.mp4?v=1';
-      src.type = 'audio/mp4';
-      audio.appendChild(src);
+      audio.volume = 0.3;
       document.body.appendChild(audio);
     }
-    audio.volume = 0.3;
 
     var btn = document.getElementById('music-control');
-    var p = audio.play();
-    if (p) {
-      p.then(function() {
+    
+    // 按优先级尝试不同格式
+    var sources = ['/audio/bg-music.m4a', '/audio/bg-music.wav'];
+    var tryIdx = 0;
+    
+    function trySource() {
+      if (tryIdx >= sources.length) {
+        if (btn) btn.classList.add('muted');
+        return;
+      }
+      audio.src = sources[tryIdx];
+      audio.load();
+      tryIdx++;
+    }
+    
+    audio.onerror = function() { trySource(); };
+    
+    audio.oncanplay = function() {
+      audio.play().then(function() {
         self.musicPlaying = true;
         if (btn) { btn.classList.remove('muted'); btn.classList.add('playing'); }
       }).catch(function() {
         self.musicPlaying = false;
-        if (btn) { btn.classList.add('muted'); btn.classList.remove('playing'); }
+        if (btn) btn.classList.add('muted');
         var start = function() {
           audio.play().then(function() {
             self.musicPlaying = true;
@@ -772,7 +782,9 @@ const App = {
         };
         document.addEventListener('click', start);
       });
-    }
+    };
+    
+    trySource();
   },
 
   async exportResultsCSV() {
