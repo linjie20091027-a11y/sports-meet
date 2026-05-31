@@ -716,22 +716,53 @@ const App = {
     } catch(e) { this.hideLoading(); this.showToast(e.message || '报名失败', 'error'); }
   },
 
-  // ====== 背景音乐 (Web Audio API 合成) ======
+  // ====== 背景音乐 ======
   musicPlaying: false,
-  audioCtx: null,
-  gainNode: null,
 
   toggleMusic() {
+    var audio = document.getElementById('bg-music');
     var btn = document.getElementById('music-control');
+    if (!audio || !btn) return;
     if (this.musicPlaying) {
-      if (this.gainNode) this.gainNode.gain.value = 0;
-      if (btn) { btn.classList.add('muted'); btn.classList.remove('playing'); }
+      audio.pause();
+      btn.classList.add('muted');
+      btn.classList.remove('playing');
       this.musicPlaying = false;
     } else {
-      if (!this.audioCtx) this._createMusic();
-      if (this.gainNode) this.gainNode.gain.value = 0.25;
-      if (btn) { btn.classList.remove('muted'); btn.classList.add('playing'); }
+      audio.play().then(function() {
+        btn.classList.remove('muted');
+        btn.classList.add('playing');
+      }).catch(function(){});
       this.musicPlaying = true;
+    }
+  },
+
+  _initMusic() {
+    var self = this;
+    var audio = document.getElementById('bg-music');
+    var btn = document.getElementById('music-control');
+    if (!audio) return;
+    audio.volume = 0.3;
+    
+    // 尝试自动播放
+    var p = audio.play();
+    if (p) {
+      p.then(function() {
+        self.musicPlaying = true;
+        if (btn) { btn.classList.remove('muted'); btn.classList.add('playing'); }
+      }).catch(function() {
+        // 浏览器阻止自动播放，点击任意位置后开始
+        self.musicPlaying = false;
+        if (btn) { btn.classList.add('muted'); btn.classList.remove('playing'); }
+        var start = function() {
+          audio.play().then(function() {
+            self.musicPlaying = true;
+            if (btn) { btn.classList.remove('muted'); btn.classList.add('playing'); }
+          }).catch(function(){});
+          document.removeEventListener('click', start);
+        };
+        document.addEventListener('click', start);
+      });
     }
   },
 
