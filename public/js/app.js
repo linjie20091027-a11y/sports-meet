@@ -739,52 +739,82 @@ const App = {
 
   _initMusic() {
     var self = this;
-    var audio = document.getElementById('bg-music');
-    if (!audio) {
-      audio = document.createElement('audio');
-      audio.id = 'bg-music';
-      audio.loop = true;
-      audio.volume = 0.3;
-      document.body.appendChild(audio);
+    var btn = document.getElementById('music-control');
+    if (!btn) return;
+
+    // 使用 Web Audio API 解码播放 m4a
+    var ctx = null;
+    var source = null;
+    var gainNode = null;
+
+    function ensureCtx() {
+      if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+      if (!gainNode) { gainNode = ctx.createGain(); gainNode.gain.value = 0.25; gainNode.connect(ctx.destination); }
+      if (ctx.state === 'suspended') ctx.resume();
+      return ctx;
     }
 
-    var btn = document.getElementById('music-control');
-    
-    // 按优先级尝试不同格式
-    var sources = ['/audio/bg-music.m4a', '/audio/bg-music.wav'];
-    var tryIdx = 0;
-    
-    function trySource() {
-      if (tryIdx >= sources.length) {
-        if (btn) btn.classList.add('muted');
-        return;
-      }
-      audio.src = sources[tryIdx];
-      audio.load();
-      tryIdx++;
-    }
-    
-    audio.onerror = function() { trySource(); };
-    
-    audio.oncanplay = function() {
-      audio.play().then(function() {
+    function loadAndPlay() {
+      ensureCtx();
+      // 从服务器加载 m4a 文件并用 AudioContext 解码
+      fetch('/audio/bg-music.m4a').then(function(response) {
+        if (!response.ok) throw new Error('File not found');
+        return response.arrayBuffer();
+      }).then(function(buffer) {
+        return ctx.decodeAudioData(buffer);
+      }).then(function(audioBuffer) {
+        if (source) { try { source.stop(); } catch(e) {} }
+        source = ctx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.loop = true;
+        source.connect(gainNode);
+        source.start();
         self.musicPlaying = true;
         if (btn) { btn.classList.remove('muted'); btn.classList.add('playing'); }
-      }).catch(function() {
-        self.musicPlaying = false;
+      }).catch(function(e) {
+        console.log('Audio load failed:', e.message);
         if (btn) btn.classList.add('muted');
-        var start = function() {
-          audio.play().then(function() {
-            self.musicPlaying = true;
-            if (btn) { btn.classList.remove('muted'); btn.classList.add('playing'); }
-          }).catch(function(){});
-          document.removeEventListener('click', start);
-        };
-        document.addEventListener('click', start);
       });
+    }
+
+    // 用户首次点击后加载播放
+    var started = false;
+    var startOnClick = function() {
+      if (started) return;
+      started = true;
+      loadAndPlay();
+      document.removeEventListener('click', startOnClick);
     };
+    document.addEventListener('click', startOnClick);
     
-    trySource();
+    // 存储引用用于 toggle
+    this._audioCtx = ctx;
+    this._audioGain = gainNode;
+    this._audioSource = source;
+    this._audioReload = loadAndPlay;
+  },
+
+  toggleMusic() {
+    var btn = document.getElementById('music-control');
+    // 尝试使用 ctx gain
+    if (this._audioGain) {
+      if (this.musicPlaying) {
+        this._audioGain.gain.value = 0;
+        this.musicPlaying = false;
+        if (btn) { btn.classList.add('muted'); btn.classList.remove('playing'); }
+      } else {
+        if (this._audioCtx) this._audioCtx.resume();
+        this._audioGain.gain.value = 0.25;
+        this.musicPlaying = true;
+        if (btn) { btn.classList.remove('muted'); btn.classList.add('playing'); }
+      }
+      return;
+    }
+    // Fallback: HTML audio element
+    var audio = document.getElementById('bg-music');
+    if (!audio || !btn) return;
+    if (this.musicPlaying) { audio.pause(); btn.classList.add('muted'); btn.classList.remove('playing'); this.musicPlaying = false; }
+    else { audio.play().then(function(){ btn.classList.remove('muted'); btn.classList.add('playing'); }).catch(function(){}); this.musicPlaying = true; }
   },
 
   async exportResultsCSV() {
