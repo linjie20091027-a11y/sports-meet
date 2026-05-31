@@ -119,14 +119,14 @@ router.post('/registrations', (req, res) => {
     const { event_id } = req.body;
 
     if (!event_id) {
-      return res.status(400).json({ success: false, error: '請選擇報名項目' });
+      return res.status(400).json({ success: false, error: '请选择报名项目' });
     }
 
     const db = getDb();
 
     const meet = db.prepare('SELECT registration_open FROM meet_info LIMIT 1').get();
     if (meet && !meet.registration_open) {
-      return res.status(400).json({ success: false, error: '報名通道已關閉，請留意學校公告' });
+      return res.status(400).json({ success: false, error: '报名通道已关闭，请留意学校公告' });
     }
 
     const event = db.prepare('SELECT * FROM events WHERE id = ? AND status = ?').get(event_id, 'active');
@@ -174,12 +174,12 @@ router.post('/registrations', (req, res) => {
 
     createNotification(db, req.user.id, {
       type: 'info',
-      title: '報名已提交',
-      content: `您已報名「${event.name}」，請等待管理員審核。`,
+      title: '报名已提交',
+      content: `您已报名「${event.name}」，请等待管理员审核。`,
       target_url: '#/student'
     });
 
-    res.json({ success: true, message: '報名成功，等待審核' });
+    res.json({ success: true, message: '报名成功，等待审核' });
   } catch (e) {
     console.error('提交报名失败:', e.message);
     res.status(500).json({ success: false, error: '服务器内部错误' });
@@ -488,17 +488,17 @@ router.put('/profile/avatar', (req, res) => {
   try {
     const { avatar } = req.body;
     if (avatar === undefined || avatar === null) {
-      return res.status(400).json({ success: false, error: '請提供頭像資料' });
+      return res.status(400).json({ success: false, error: '请提供头像资料' });
     }
     const db = getDb();
     try {
       db.prepare('ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT \'\'').run();
     } catch (_) { /* column exists */ }
     db.prepare('UPDATE users SET avatar = ? WHERE id = ?').run(String(avatar), req.user.id);
-    res.json({ success: true, message: avatar ? '頭像已更新' : '頭像已移除' });
+    res.json({ success: true, message: avatar ? '头像已更新' : '头像已移除' });
   } catch (e) {
-    console.error('更新頭像失敗:', e.message);
-    res.status(500).json({ success: false, error: '更新頭像失敗' });
+    console.error('更新头像失败:', e.message);
+    res.status(500).json({ success: false, error: '更新头像失败' });
   }
 });
 

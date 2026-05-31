@@ -223,20 +223,20 @@ const Student = {
         (await API.student.getMyRegistrations().then(r => r.data || []).catch(() => [])).map(x => x.event_id)
       );
 
-      const genderLabel = g => (g === 'male' ? '男子組' : g === 'female' ? '女子組' : '混合組');
-      const catLabel = c => ({ track: '徑賽', field: '田賽', relay: '接力', team: '集体' }[c] || c);
+      const genderLabel = g => (g === 'male' ? '男子组' : g === 'female' ? '女子组' : '混合组');
+      const catLabel = c => ({ track: '徑赛', field: '田赛', relay: '接力', team: '集体' }[c] || c);
       const typeLabel = t => (t === 'team' ? '集体' : '个人');
       const esc = s => this._escape(s);
 
       let banner = '';
       if (!regOpen) {
-        banner = '<div class="reg-banner reg-banner--closed"><span><strong>报名已关闭</strong> — 管理员已暫停線上报名，請留意公告通知。</span></div>';
+        banner = '<div class="reg-banner reg-banner--closed"><span><strong>报名已关闭</strong> — 管理员已暂停線上报名，请留意公告通知。</span></div>';
       } else {
-        banner = `<div class="reg-banner reg-banner--open"><span>报名開放中 · 您已報 <strong>${myN}</strong> / <strong>${maxN}</strong> 項</span>${myN >= maxN ? '<span class="text-sm">已達上限</span>' : ''}</div>`;
+        banner = `<div class="reg-banner reg-banner--open"><span>报名开放中 · 您已报 <strong>${myN}</strong> / <strong>${maxN}</strong> 项</span>${myN >= maxN ? '<span class="text-sm">已達上限</span>' : ''}</div>`;
       }
 
       if (events.length === 0) {
-        c.innerHTML = `<div class="student-section"><h2 class="student-section-title">在線报名</h2>${banner}<div class="empty-state"><div class="empty-state__icon"><i class="fas fa-inbox"></i></div><p class="empty-state__desc">暂无開放报名的项目</p></div></div>`;
+        c.innerHTML = `<div class="student-section"><h2 class="student-section-title">在線报名</h2>${banner}<div class="empty-state"><div class="empty-state__icon"><i class="fas fa-inbox"></i></div><p class="empty-state__desc">暂无开放报名的项目</p></div></div>`;
         return;
       }
 
@@ -292,7 +292,7 @@ const Student = {
   },
 
   async _doRegister(eventId, eventName) {
-    const ok = await App.confirmDialog(`确认报名「${eventName}」？提交後將進入审核流程。`);
+    const ok = await App.confirmDialog(`确认报名「${eventName}」？提交後將进入审核流程。`);
     if (!ok) return;
     App.showLoading();
     try {

@@ -41,7 +41,7 @@ router.get('/posts', optionalAuth, (req, res) => {
   }
 });
 
-// GET /posts/:id — 帖子詳情含回覆
+// GET /posts/:id — 帖子详情含回覆
 router.get('/posts/:id', optionalAuth, (req, res) => {
   try {
     const db = getDb();
@@ -52,7 +52,7 @@ router.get('/posts/:id', optionalAuth, (req, res) => {
       WHERE p.id = ? AND p.is_deleted = 0
     `).get(req.params.id);
 
-    if (!post) return res.status(404).json({ success: false, error: '帖子不存在或已刪除' });
+    if (!post) return res.status(404).json({ success: false, error: '帖子不存在或已删除' });
 
     db.prepare('UPDATE forum_posts SET view_count = view_count + 1 WHERE id = ?').run(req.params.id);
 
@@ -72,22 +72,22 @@ router.get('/posts/:id', optionalAuth, (req, res) => {
   }
 });
 
-// POST /posts — 發帖（需登入）
+// POST /posts — 发帖（需登录）
 router.post('/posts', authMiddleware, (req, res) => {
   try {
     const { title, content } = req.body;
     if (!title?.trim() || !content?.trim()) {
-      return res.status(400).json({ success: false, error: '標題與內容不能為空' });
+      return res.status(400).json({ success: false, error: '标题與内容不能為空' });
     }
     if (title.length > 120) {
-      return res.status(400).json({ success: false, error: '標題不能超過 120 字' });
+      return res.status(400).json({ success: false, error: '标题不能超過 120 字' });
     }
     const db = getDb();
     const r = db.prepare(
       'INSERT INTO forum_posts (user_id, title, content) VALUES (?, ?, ?)'
     ).run(req.user.id, title.trim(), content.trim());
 
-    res.json({ success: true, data: { id: r.lastInsertRowid }, message: '發布成功' });
+    res.json({ success: true, data: { id: r.lastInsertRowid }, message: '发布成功' });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
@@ -98,7 +98,7 @@ router.post('/posts/:id/replies', authMiddleware, (req, res) => {
   try {
     const { content } = req.body;
     if (!content?.trim()) {
-      return res.status(400).json({ success: false, error: '回覆內容不能為空' });
+      return res.status(400).json({ success: false, error: '回覆内容不能為空' });
     }
     const db = getDb();
     const post = db.prepare(
@@ -117,12 +117,12 @@ router.post('/posts/:id/replies', authMiddleware, (req, res) => {
       `).run(post.id);
     }
 
-    const msg = req.user.role === 'admin' ? '回覆成功' : '回覆已提交，待管理員審核後顯示';
+    const msg = req.user.role === 'admin' ? '回覆成功' : '回覆已提交，待管理员审核後显示';
 
     if (post.user_id !== req.user.id) {
       createNotification(db, post.user_id, {
         type: 'info',
-        title: '論壇有新回覆',
+        title: '论坛有新回覆',
         content: `${req.user.name || req.user.username} 回覆了您的帖子「${post.title}」`,
         target_url: `#/forum/${post.id}`
       });
@@ -134,7 +134,7 @@ router.post('/posts/:id/replies', authMiddleware, (req, res) => {
   }
 });
 
-// DELETE /posts/:id — 管理員刪帖
+// DELETE /posts/:id — 管理员删帖
 router.delete('/posts/:id', authMiddleware, adminOnly, (req, res) => {
   try {
     const db = getDb();
@@ -148,18 +148,18 @@ router.delete('/posts/:id', authMiddleware, adminOnly, (req, res) => {
 
     createNotification(db, post.user_id, {
       type: 'warning',
-      title: '帖子已被管理員刪除',
-      content: `您的帖子「${post.title}」因違規或管理需要已被刪除。`,
+      title: '帖子已被管理员删除',
+      content: `您的帖子「${post.title}」因違規或管理需要已被删除。`,
       target_url: '#/forum'
     });
 
-    res.json({ success: true, message: '帖子已刪除' });
+    res.json({ success: true, message: '帖子已删除' });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
 });
 
-// DELETE /replies/:id — 管理員刪回覆
+// DELETE /replies/:id — 管理员删回覆
 router.delete('/replies/:id', authMiddleware, adminOnly, (req, res) => {
   try {
     const db = getDb();
@@ -175,7 +175,7 @@ router.delete('/replies/:id', authMiddleware, adminOnly, (req, res) => {
       'UPDATE forum_posts SET reply_count = reply_count - 1 WHERE id = ? AND reply_count > 0'
     ).run(reply.post_id);
 
-    res.json({ success: true, message: '回覆已刪除' });
+    res.json({ success: true, message: '回覆已删除' });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
@@ -205,7 +205,7 @@ function loadApiKey() {
 AI_ROUTER.post('/ai-key', authMiddleware, adminOnly, (req, res) => {
   try {
     const { key } = req.body;
-    if (!key) return res.json({ success: false, error: '請提供 API Key' });
+    if (!key) return res.json({ success: false, error: '请提供 API Key' });
     DEEPSEEK_API_KEY = key;
     const db = getDb();
     db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('deepseek_api_key', ?)").run(key);
@@ -220,8 +220,8 @@ AI_ROUTER.post('/ai-chat', optionalAuth, async (req, res) => {
   try {
     loadApiKey();
     const { message, history } = req.body;
-    if (!message?.trim()) return res.json({ success: false, error: '請輸入問題' });
-    if (!DEEPSEEK_API_KEY) return res.json({ success: false, error: 'AI 助手尚未配置，請管理員設置 API Key' });
+    if (!message?.trim()) return res.json({ success: false, error: '请输入問题' });
+    if (!DEEPSEEK_API_KEY) return res.json({ success: false, error: 'AI 助手尚未配置，请管理员设置 API Key' });
 
     const https = require('https');
     const db = getDb();
@@ -233,24 +233,24 @@ AI_ROUTER.post('/ai-chat', optionalAuth, async (req, res) => {
     const schedules = db.prepare("SELECT COUNT(*) as cnt FROM schedules WHERE status='published'").get()?.cnt || 0;
     const maxEvents = db.prepare("SELECT value FROM settings WHERE key='max_events_per_student'").get()?.value || '3';
 
-    const context = `【系統實時數據】
-當前時間：${new Date().toLocaleString('zh-CN', {timeZone:'Asia/Shanghai'})}
-運動會：濠江中學第三十屆田徑運動會（${meet.start_date||'待定'} 至 ${meet.end_date||'待定'}）
-報名：${meet.registration_open?'開放中':'已關閉'}，已有${totalRegs}人次報名（${pendingRegs}待審核）
-賽程：已發布${schedules}場，每人限報${maxEvents}項
-學校：澳門濠江中學，1932年創校，校訓「忠誠勤奮求實創新」，位於青洲大馬路`;
+    const context = `【系统實时数据】
+當前时间：${new Date().toLocaleString('zh-CN', {timeZone:'Asia/Shanghai'})}
+运动会：濠江中学第三十屆田徑运动会（${meet.start_date||'待定'} 至 ${meet.end_date||'待定'}）
+报名：${meet.registration_open?'开放中':'已关闭'}，已有${totalRegs}人次报名（${pendingRegs}待审核）
+赛程：已发布${schedules}场，每人限报${maxEvents}项
+学校：澳门濠江中学，1932年创校，校訓「忠誠勤奮求實创新」，位於青洲大马路`;
 
-    const systemPrompt = `你是「小濠」，一個全能的AI助手，部署於澳門濠江中學運動會管理系統中。
+    const systemPrompt = `你是「小濠」，一個全能的AI助手，部署於澳门濠江中学运动会管理系统中。
 
 【核心原則】
-- 你有廣博的知識儲備，能回答任何領域的問題（科學、歷史、編程、數學、文學、生活常識等）
-- 回答風格：清晰、直接、有條理，避免廢話。像一個聰明靠譜的朋友
-- 如果用戶問程式開發、代碼調試、系統架構等問題，發揮你的編程能力給出實用建議
-- 如果用戶問數學/科學問題，給出準確的解釋和計算
-- 如果問學校/運動會相關，結合上方【系統實時數據】準確回答
-- 全程繁體中文，可適度夾雜粵語口語詞增加親切感
+- 你有廣博的知識儲备，能回答任何領域的問题（科学、歷史、编程、数学、文学、生活常識等）
+- 回答風格：清晰、直接、有条理，避免廢话。像一個聰明靠譜的朋友
+- 如果用户問程式开发、代码调试、系统架构等問题，发揮你的编程能力給出實用建議
+- 如果用户問数学/科学問题，給出準确的解釋和计算
+- 如果問学校/运动会相关，结合上方【系统實时数据】準确回答
+- 全程繁体中文，可適度夾雜粵語口語詞增加親切感
 - 適度使用 emoji 但不濫用
-- 保持誠實：不知道就說不知道，不要編造`;
+- 保持誠實：不知道就說不知道，不要编造`;
 
     // 构建消息列表（含历史）
     const messages = [
@@ -284,16 +284,16 @@ AI_ROUTER.post('/ai-chat', optionalAuth, async (req, res) => {
           if (result.choices?.[0]?.message?.content) {
             res.json({ success: true, data: { reply: result.choices[0].message.content } });
           } else {
-            res.json({ success: false, error: result.error?.message || 'AI 回應異常' });
+            res.json({ success: false, error: result.error?.message || 'AI 回应异常' });
           }
         } catch (e) {
-          res.json({ success: false, error: 'AI 回應解析失敗' });
+          res.json({ success: false, error: 'AI 回应解析失败' });
         }
       });
     });
 
     apiReq.on('error', (e) => {
-      res.json({ success: false, error: 'AI 服務暫不可用：' + e.message });
+      res.json({ success: false, error: 'AI 服务暂不可用：' + e.message });
     });
 
     apiReq.write(JSON.stringify({
@@ -308,7 +308,7 @@ AI_ROUTER.post('/ai-chat', optionalAuth, async (req, res) => {
   }
 });
 
-// AI 自動生成賽程
+// AI 自动生成赛程
 AI_ROUTER.get('/generate-schedule', authMiddleware, adminOnly, async (req, res) => {
   try {
     loadApiKey();
@@ -328,7 +328,7 @@ AI_ROUTER.get('/generate-schedule', authMiddleware, adminOnly, async (req, res) 
       ORDER BY e.sort_order, u.class_name
     `).all();
 
-    if (!registrations.length) return res.json({ success: false, error: '暫無已通過審核的報名記錄' });
+    if (!registrations.length) return res.json({ success: false, error: '暂无已通过审核的报名记录' });
 
     // 构建数据摘要
     const events = {};
@@ -344,22 +344,22 @@ AI_ROUTER.get('/generate-schedule', authMiddleware, adminOnly, async (req, res) 
 
     let eventSummary = '';
     Object.values(events).forEach(e => {
-      eventSummary += `\n項目：${e.name}（${e.type==='team'?'集體':'個人'}，${e.gender==='male'?'男子':e.gender==='female'?'女子':'混合'}）| 參賽人數：${e.students.length} | 參賽者：${e.students.map(s=>s.name+'('+s.class+')').join('、')}`;
+      eventSummary += `\n项目：${e.name}（${e.type==='team'?'集体':'个人'}，${e.gender==='male'?'男子':e.gender==='female'?'女子':'混合'}）| 參赛人数：${e.students.length} | 參赛者：${e.students.map(s=>s.name+'('+s.class+')').join('、')}`;
     });
 
-    const prompt = `你是澳門濠江中學運動會的賽程編排專家。請根據以下報名數據，生成一份合理的比賽時間表。
+    const prompt = `你是澳门濠江中学运动会的赛程编排專家。请根据以下报名数据，生成一份合理的比赛时间表。
 
-【編排要求】
-1. 運動會日期：第一天上午(8:00-12:00)、下午(14:00-17:00)；第二天上午(8:00-12:00)、下午(14:00-17:00)
-2. 徑賽項目安排在上午（天氣較涼爽），田賽和集體項目安排在下午
-3. 每個項目按參賽人數分組（每組6-8人），計算需要的輪次
-4. 同一運動員不應同時參加兩個項目（根據參賽者名單避免衝突）
-5. 100米、200米等短項目先進行預賽再決賽；長跑項目直接決賽
-6. 接力項目安排在每天最後時段
-7. 請用純JSON格式返回，格式如下：
+【编排要求】
+1. 运动会日期：第一天上午(8:00-12:00)、下午(14:00-17:00)；第二天上午(8:00-12:00)、下午(14:00-17:00)
+2. 徑赛项目安排在上午（天氣較涼爽），田赛和集体项目安排在下午
+3. 每個项目按參赛人数分组（每组6-8人），计算需要的轮次
+4. 同一运动员不应同时參加兩個项目（根据參赛者名單避免衝突）
+5. 100米、200米等短项目先进行預赛再決赛；長跑项目直接決赛
+6. 接力项目安排在每天最後时段
+7. 请用純JSON格式返回，格式如下：
 
 {
-  "day1_am": [{"time":"08:00","event":"100米男子預賽","venue":"田徑場","round":"預賽第1組","students":["姓名(班級)"]}],
+  "day1_am": [{"time":"08:00","event":"100米男子預赛","venue":"田徑场","round":"預赛第1组","students":["姓名(班級)"]}],
   "day1_pm": [...],
   "day2_am": [...],
   "day2_pm": [...]
@@ -367,7 +367,7 @@ AI_ROUTER.get('/generate-schedule', authMiddleware, adminOnly, async (req, res) 
 
 只返回JSON，不要任何其他文字。
 
-【報名數據】
+【报名数据】
 ${eventSummary}`;
 
     const apiReq = https.request(DEEPSEEK_BASE_URL, {
@@ -386,15 +386,15 @@ ${eventSummary}`;
             const schedule = JSON.parse(jsonMatch[0]);
             res.json({ success: true, data: schedule });
           } else {
-            res.json({ success: false, error: 'AI 生成格式異常', raw: content.substring(0, 200) });
+            res.json({ success: false, error: 'AI 生成格式异常', raw: content.substring(0, 200) });
           }
         } catch (e) {
-          res.json({ success: false, error: '解析AI回應失敗：' + e.message });
+          res.json({ success: false, error: '解析AI回应失败：' + e.message });
         }
       });
     });
 
-    apiReq.on('error', (e) => res.json({ success: false, error: 'AI 服務暫不可用' }));
+    apiReq.on('error', (e) => res.json({ success: false, error: 'AI 服务暂不可用' }));
     apiReq.write(JSON.stringify({ model: 'deepseek-chat', messages: [{ role: 'user', content: prompt }], max_tokens: 4000, temperature: 0.3 }));
     apiReq.end();
   } catch (e) {
@@ -402,12 +402,12 @@ ${eventSummary}`;
   }
 });
 
-// 檢查 API Key 狀態
+// 检查 API Key 状态
 AI_ROUTER.get('/ai-status', (req, res) => {
   res.json({ success: true, data: { configured: !!DEEPSEEK_API_KEY } });
 });
 
-// ===== 管理員審核回覆 =====
+// ===== 管理员审核回覆 =====
 router.get('/pending-replies', authMiddleware, adminOnly, (req, res) => {
   try {
     const db = getDb();
@@ -435,11 +435,11 @@ router.put('/replies/:id/approve', authMiddleware, adminOnly, (req, res) => {
     db.prepare("UPDATE forum_replies SET status = 'approved' WHERE id = ?").run(req.params.id);
     db.prepare("UPDATE forum_posts SET reply_count = reply_count + 1, updated_at = datetime('now','localtime') WHERE id = ?").run(reply.post_id);
     createNotification(db, reply.user_id, {
-      type: 'success', title: '論壇回覆已通過審核',
-      content: '您在論壇的回覆已通過管理員審核，現已公開顯示。',
+      type: 'success', title: '论坛回覆已通过审核',
+      content: '您在论坛的回覆已通过管理员审核，现已公开显示。',
       target_url: '#/forum/' + reply.post_id
     });
-    res.json({ success: true, message: '已通過' });
+    res.json({ success: true, message: '已通过' });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
@@ -451,7 +451,7 @@ router.put('/replies/:id/reject', authMiddleware, adminOnly, (req, res) => {
     const reply = db.prepare('SELECT * FROM forum_replies WHERE id = ?').get(req.params.id);
     if (!reply) return res.status(404).json({ success: false, error: '回覆不存在' });
     db.prepare("UPDATE forum_replies SET status = 'rejected' WHERE id = ?").run(req.params.id);
-    res.json({ success: true, message: '已駁回' });
+    res.json({ success: true, message: '已驳回' });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }

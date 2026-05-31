@@ -88,7 +88,7 @@ const App = {
         this.user = null;
       }
     } catch (_) {
-      /* 網路異常時保留本地登入狀態 */
+      /* 网路异常时保留本地登录状态 */
     }
     this.updateNav();
   },
@@ -163,7 +163,7 @@ const App = {
     } else if (hash === '/student' || hash.startsWith('/student/')) {
       if (!this.user) { window.location.hash = '#/login'; return; }
       if (this.user.role === 'admin') {
-        this.showToast('管理員帳號無法報名，請使用學生帳號登入', 'warning');
+        this.showToast('管理员账号无法报名，请使用学生账号登录', 'warning');
         window.location.hash = '#/';
         return;
       }
@@ -693,7 +693,7 @@ const App = {
         document.getElementById('home-results').innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无更多信息</p>';
       }
     } catch (e) {
-      this.showToast('載入首頁失敗', 'error');
+      this.showToast('载入首页失败', 'error');
     }
   },
 
@@ -768,7 +768,7 @@ const App = {
             </div>
             <div class="card-footer">
               <span></span>
-              <a href="#/events/${e.id}" class="btn btn-outline btn-sm">查看詳情</a>
+              <a href="#/events/${e.id}" class="btn btn-outline btn-sm">查看详情</a>
             </div>
           </div>`).join('') : '<div class="empty-state" style="grid-column:1/-1"><p class="text-muted">暂无符合条件的赛事</p></div>';
       } catch (e) { this.showToast(e.message, 'error'); }
@@ -786,40 +786,40 @@ const App = {
   async renderEventDetailPage(id) {
     const root = document.getElementById('event-detail-root');
     if (!root) return;
-    root.innerHTML = '<div class="text-center p-8"><div class="spinner"></div><p class="text-muted mt-2">載入中…</p></div>';
+    root.innerHTML = '<div class="text-center p-8"><div class="spinner"></div><p class="text-muted mt-2">载入中…</p></div>';
 
     try {
       const res = await API.public.getEvent(id);
       const e = res.data;
       if (!res.success || !e) {
-        root.innerHTML = `<div class="empty-state"><p>項目不存在</p><a href="#/events" class="btn btn-outline mt-2">返回列表</a></div>`;
+        root.innerHTML = `<div class="empty-state"><p>项目不存在</p><a href="#/events" class="btn btn-outline mt-2">返回列表</a></div>`;
         return;
       }
 
-      const genderL = g => (g === 'male' ? '男子組' : g === 'female' ? '女子組' : '混合組');
-      const catL = c => ({ track: '徑賽', field: '田賽', relay: '接力', team: '集體' }[c] || c);
-      const typeL = t => (t === 'team' ? '集體項目' : '個人項目');
+      const genderL = g => (g === 'male' ? '男子组' : g === 'female' ? '女子组' : '混合组');
+      const catL = c => ({ track: '徑赛', field: '田赛', relay: '接力', team: '集体' }[c] || c);
+      const typeL = t => (t === 'team' ? '集体项目' : '个人项目');
       const isStudent = this.user && this.user.role === 'student';
       const name = this._escHtml(e.name || '');
-      const desc = this._escHtml(e.description || e.rules || '暫無詳細說明');
+      const desc = this._escHtml(e.description || e.rules || '暂无详細說明');
       const rules = this._escHtml(e.rules || '');
 
       let scheduleHtml = '';
       if (e.schedules?.length) {
-        scheduleHtml = `<div class="card mt-3"><div class="card-header"><h3>賽程安排</h3></div><div class="card-body"><div class="table-container"><table class="table"><thead><tr><th>輪次</th><th>時間</th><th>場地</th></tr></thead><tbody>${e.schedules.map(s => `<tr><td>${this._escHtml(s.round_name)}</td><td>${this.formatDate(s.start_time)}</td><td>${this._escHtml(s.venue || e.venue || '待定')}</td></tr>`).join('')}</tbody></table></div></div></div>`;
+        scheduleHtml = `<div class="card mt-3"><div class="card-header"><h3>赛程安排</h3></div><div class="card-body"><div class="table-container"><table class="table"><thead><tr><th>轮次</th><th>时间</th><th>场地</th></tr></thead><tbody>${e.schedules.map(s => `<tr><td>${this._escHtml(s.round_name)}</td><td>${this.formatDate(s.start_time)}</td><td>${this._escHtml(s.venue || e.venue || '待定')}</td></tr>`).join('')}</tbody></table></div></div></div>`;
       }
 
       let actionHtml = '';
       if (isStudent) {
-        actionHtml = `<button type="button" class="btn btn-primary" id="event-detail-register">提交報名</button>`;
+        actionHtml = `<button type="button" class="btn btn-primary" id="event-detail-register">提交报名</button>`;
       } else if (!this.user) {
-        actionHtml = `<a href="#/login" class="btn btn-primary">登入後報名</a>`;
+        actionHtml = `<a href="#/login" class="btn btn-primary">登录後报名</a>`;
       } else if (this.user.role === 'admin') {
-        actionHtml = `<span class="text-muted text-sm">管理員帳號請使用學生帳號報名</span>`;
+        actionHtml = `<span class="text-muted text-sm">管理员账号请使用学生账号报名</span>`;
       }
 
       root.innerHTML = `
-        <nav class="breadcrumb"><a href="#/events">賽事項目</a> <span>/</span> <span>${name}</span></nav>
+        <nav class="breadcrumb"><a href="#/events">赛事项目</a> <span>/</span> <span>${name}</span></nav>
         <div class="detail-page-header">
           <div>
             <h1>${name}</h1>
@@ -832,25 +832,25 @@ const App = {
           <div class="detail-actions">${actionHtml}</div>
         </div>
         <div class="detail-stats-row">
-          <div class="detail-stat"><span class="label">比賽場地</span><span class="value">${this._escHtml(e.venue || '待定')}</span></div>
-          <div class="detail-stat"><span class="label">人數上限</span><span class="value">${e.max_participants || '不限'}</span></div>
-          <div class="detail-stat"><span class="label">已報名</span><span class="value">${e.registration_count ?? 0} 人</span></div>
-          <div class="detail-stat"><span class="label">已通過</span><span class="value">${e.approved_count ?? 0} 人</span></div>
+          <div class="detail-stat"><span class="label">比赛场地</span><span class="value">${this._escHtml(e.venue || '待定')}</span></div>
+          <div class="detail-stat"><span class="label">人数上限</span><span class="value">${e.max_participants || '不限'}</span></div>
+          <div class="detail-stat"><span class="label">已报名</span><span class="value">${e.registration_count ?? 0} 人</span></div>
+          <div class="detail-stat"><span class="label">已通过</span><span class="value">${e.approved_count ?? 0} 人</span></div>
         </div>
         <div class="card mt-3">
-          <div class="card-header"><h3>項目詳情</h3></div>
+          <div class="card-header"><h3>项目详情</h3></div>
           <div class="card-body detail-prose">${desc.replace(/\n/g, '<br>')}</div>
         </div>
-        ${rules ? `<div class="card mt-3"><div class="card-header"><h3>比賽規則</h3></div><div class="card-body detail-prose">${rules.replace(/\n/g, '<br>')}</div></div>` : ''}
+        ${rules ? `<div class="card mt-3"><div class="card-header"><h3>比赛规则</h3></div><div class="card-body detail-prose">${rules.replace(/\n/g, '<br>')}</div></div>` : ''}
         ${scheduleHtml}
-        <p class="mt-3"><a href="#/events" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> 返回項目列表</a></p>
+        <p class="mt-3"><a href="#/events" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> 返回项目列表</a></p>
       `;
 
       document.getElementById('event-detail-register')?.addEventListener('click', () => {
         if (typeof Student !== 'undefined') Student._doRegister(parseInt(id, 10), e.name);
       });
     } catch (err) {
-      root.innerHTML = `<div class="empty-state"><p>載入失敗：${this._escHtml(err.message)}</p><a href="#/events" class="btn btn-outline mt-2">返回</a></div>`;
+      root.innerHTML = `<div class="empty-state"><p>载入失败：${this._escHtml(err.message)}</p><a href="#/events" class="btn btn-outline mt-2">返回</a></div>`;
     }
   },
 

@@ -7,11 +7,11 @@ const Auth = {
         <div class="auth-card">
           <div class="auth-header">
             <h2>登录系统</h2>
-            <p>使用學校邮箱與密码登录</p>
+            <p>使用学校邮箱與密码登录</p>
           </div>
           <form id="login-form" class="auth-form" novalidate>
             <div class="form-group">
-              <label for="login-email">學校邮箱</label>
+              <label for="login-email">学校邮箱</label>
               <input type="email" id="login-email" class="form-input" placeholder="name@hkms.hktedu.com" required autofocus autocomplete="username">
             </div>
             <div class="form-group">
@@ -21,7 +21,7 @@ const Auth = {
             <div class="form-group">
               <label for="login-captcha">验证码</label>
               <div class="captcha-row">
-                <input type="text" id="login-captcha" class="form-input" placeholder="圖中字符" required maxlength="4" autocomplete="off" inputmode="text">
+                <input type="text" id="login-captcha" class="form-input" placeholder="图中字符" required maxlength="4" autocomplete="off" inputmode="text">
                 <div class="captcha-img" id="login-captcha-img" title="点击刷新验证码" role="button" tabindex="0"></div>
               </div>
             </div>
@@ -33,8 +33,8 @@ const Auth = {
             </button>
             <button type="button" class="btn btn-block btn-sm mt-1" style="background:#f0f1f3;color:var(--text2)" id="quick-login-btn">快速体验（管理员）</button>
             <div class="auth-links">
-              <a href="#/register">注册新帳號</a>
-              <a href="#" id="forgot-link">忘記密码</a>
+              <a href="#/register">注册新账号</a>
+              <a href="#" id="forgot-link">忘记密码</a>
             </div>
           </form>
         </div>
@@ -162,8 +162,8 @@ const Auth = {
       <div class="auth-page">
         <div class="auth-card" style="max-width:480px">
           <div class="auth-header">
-            <h2>注册帳號</h2>
-            <p>填寫真實資料以便賽務审核與聯絡</p>
+            <h2>注册账号</h2>
+            <p>填寫真實资料以便赛务审核與聯络</p>
           </div>
           <form id="register-form" class="auth-form" novalidate>
             <div class="form-group">
@@ -171,9 +171,9 @@ const Auth = {
               <input type="text" id="reg-username" class="form-input" placeholder="登录用，建議使用学号或拼音" required autocomplete="username">
             </div>
             <div class="form-group">
-              <label for="reg-email">學校邮箱 <span class="text-muted">*</span></label>
+              <label for="reg-email">学校邮箱 <span class="text-muted">*</span></label>
               <input type="email" id="reg-email" class="form-input" placeholder="xxx@hkms.hktedu.com" required autocomplete="email">
-              <span class="form-hint">須為 @hkms.hktedu.com 結尾之邮箱</span>
+              <span class="form-hint">須為 @hkms.hktedu.com 结尾之邮箱</span>
             </div>
             <div class="form-row">
               <div class="form-group">
@@ -182,12 +182,12 @@ const Auth = {
               </div>
               <div class="form-group">
                 <label for="reg-confirm">确认密码 <span class="text-muted">*</span></label>
-                <input type="password" id="reg-confirm" class="form-input" placeholder="再次輸入" required autocomplete="new-password">
+                <input type="password" id="reg-confirm" class="form-input" placeholder="再次输入" required autocomplete="new-password">
               </div>
             </div>
             <div class="form-group">
               <label for="reg-name">真實姓名 <span class="text-muted">*</span></label>
-              <input type="text" id="reg-name" class="form-input" placeholder="與證件一致" required>
+              <input type="text" id="reg-name" class="form-input" placeholder="與证件一致" required>
             </div>
             <div class="form-row">
               <div class="form-group">
@@ -202,7 +202,7 @@ const Auth = {
             <div class="form-group">
               <label for="reg-grade">年级</label>
               <select id="reg-grade" class="form-select">
-                <option value="">請选择</option>
+                <option value="">请选择</option>
                 <option>初一</option><option>初二</option><option>初三</option>
                 <option>高一</option><option>高二</option><option>高三</option>
               </select>
@@ -210,13 +210,13 @@ const Auth = {
             <div class="form-group">
               <label for="reg-captcha">验证码 <span class="text-muted">*</span></label>
               <div class="captcha-row">
-                <input type="text" id="reg-captcha" class="form-input" placeholder="圖中字符" required maxlength="4" autocomplete="off">
+                <input type="text" id="reg-captcha" class="form-input" placeholder="图中字符" required maxlength="4" autocomplete="off">
                 <div class="captcha-img" id="reg-captcha-img" title="点击刷新" role="button" tabindex="0"></div>
               </div>
             </div>
             <button type="submit" class="btn btn-primary btn-block">提交注册</button>
             <div class="auth-links" style="justify-content:center">
-              <a href="#/login">已有帳號？返回登录</a>
+              <a href="#/login">已有账号？返回登录</a>
             </div>
           </form>
         </div>
@@ -255,7 +255,7 @@ const Auth = {
         el.innerHTML = '<span class="text-xs text-muted">加载失败</span>';
       }
     } catch (_) {
-      el.innerHTML = '<span class="text-xs text-muted">点击重試</span>';
+      el.innerHTML = '<span class="text-xs text-muted">点击重试</span>';
     }
   },
 
@@ -305,7 +305,7 @@ const Auth = {
     if (!username) return App.showToast('请输入用户名', 'warning');
     if (!email) return App.showToast('请输入邮箱', 'warning');
     if (!/^[a-zA-Z0-9._%+-]+@hkms\.hktedu\.com$/i.test(email)) {
-      return App.showToast('邮箱須為 @hkms.hktedu.com 結尾', 'warning');
+      return App.showToast('邮箱須為 @hkms.hktedu.com 结尾', 'warning');
     }
     if (!password || password.length < 6) return App.showToast('密码至少 6 位', 'warning');
     if (password !== confirm) return App.showToast('兩次密码不一致', 'warning');
@@ -323,7 +323,7 @@ const Auth = {
         captchaCode
       });
       if (res.success) {
-        App.showToast('注册成功，請登录', 'success');
+        App.showToast('注册成功，请登录', 'success');
         window.location.hash = '#/login';
       } else {
         App.showToast(res.error || '注册失败', 'error');
@@ -345,7 +345,7 @@ const Auth = {
           <label for="forgot-email">注册邮箱</label>
           <input type="email" id="forgot-email" class="form-input" placeholder="name@hkms.hktedu.com">
         </div>
-        <p class="form-hint">系统將生成一次性重置令牌，請妥善保存。</p>
+        <p class="form-hint">系统將生成一次性重置令牌，请妥善保存。</p>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="App.hideModal()">取消</button>
@@ -362,7 +362,7 @@ const Auth = {
     document.getElementById('forgot-submit').addEventListener('click', async () => {
       const email = document.getElementById('forgot-email')?.value?.trim();
       if (!email || !/^[a-zA-Z0-9._%+-]+@hkms\.hktedu\.com$/i.test(email)) {
-        return App.showToast('请输入正確的學校邮箱', 'warning');
+        return App.showToast('请输入正确的学校邮箱', 'warning');
       }
       App.showLoading();
       try {
