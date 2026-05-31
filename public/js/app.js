@@ -739,19 +739,28 @@ const App = {
 
   _initMusic() {
     var self = this;
+    // 动态创建音频元素（无视HTML缓存问题）
     var audio = document.getElementById('bg-music');
-    var btn = document.getElementById('music-control');
-    if (!audio) return;
+    if (!audio) {
+      audio = document.createElement('audio');
+      audio.id = 'bg-music';
+      audio.loop = true;
+      audio.preload = 'auto';
+      var src = document.createElement('source');
+      src.src = '/audio/bg-music.m4a?v=1';
+      src.type = 'audio/mp4';
+      audio.appendChild(src);
+      document.body.appendChild(audio);
+    }
     audio.volume = 0.3;
-    
-    // 尝试自动播放
+
+    var btn = document.getElementById('music-control');
     var p = audio.play();
     if (p) {
       p.then(function() {
         self.musicPlaying = true;
         if (btn) { btn.classList.remove('muted'); btn.classList.add('playing'); }
       }).catch(function() {
-        // 浏览器阻止自动播放，点击任意位置后开始
         self.musicPlaying = false;
         if (btn) { btn.classList.add('muted'); btn.classList.remove('playing'); }
         var start = function() {
