@@ -27,7 +27,10 @@ h1{font-family:var(--title-font);font-size:2.2rem}h2{font-size:1.4rem}h3{font-si
 .nav-logo{font-family:var(--title-font);font-size:1.35rem;color:var(--gold);display:flex;align-items:center;gap:.5rem;text-shadow:0 1px 2px rgba(0,0,0,.3);letter-spacing:.05em}
 .nav-logo small{font-size:.65rem;font-family:var(--body-font);color:rgba(255,255,255,.7);display:block;line-height:1;font-weight:400;letter-spacing:.1em}
 .nav-links{display:flex;align-items:center;gap:0}
-.nav-link{padding:.4rem .9rem;font-size:.78rem;font-weight:500;color:rgba(255,255,255,.8);border-radius:var(--radius);transition:all .2s;letter-spacing:.03em}
+.nav-link{
+  position:relative;
+  padding:.4rem .9rem;font-size:.78rem;font-weight:500;color:rgba(255,255,255,.8);border-radius:var(--radius);transition:all .2s;letter-spacing:.03em
+}
 .nav-link:hover{color:var(--gold);background:rgba(255,255,255,.08)}.nav-link.active{color:var(--gold);background:rgba(255,255,255,.12);font-weight:700}
 .nav-right{display:flex;align-items:center;gap:.5rem}
 .nav-search input{padding:.35rem .7rem;font-size:.75rem;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.1);color:#fff;outline:none;width:140px;border-radius:var(--radius);transition:.2s}.nav-search input::placeholder{color:rgba(255,255,255,.4)}
@@ -556,6 +559,92 @@ body::before {
   .card-3d { transform: none !important; transition: none !important }
   .scroll-progress { display: none }
   .hero-banner { animation: none }
+}
+
+/* ═══════════════════════════════════════
+   典藏级互动增强 v3
+   ═══════════════════════════════════════ */
+
+/* 1. 按钮流光扫过 */
+.btn, .btn--primary, .btn--secondary, .btn--success, .btn--danger, .btn--outline {
+  position: relative;
+  overflow: hidden;
+  transition: transform .3s cubic-bezier(0.175,0.885,0.32,1.275), box-shadow .3s, filter .3s;
+}
+.btn::after {
+  content: '';
+  position: absolute; top: 0; left: -100%; width: 60%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.25), transparent);
+  transform: skewX(-20deg);
+  transition: left .5s cubic-bezier(0.4,0,0.2,1);
+}
+.btn:hover::after { left: 120% }
+.btn:hover { transform: translateY(-2px) scale(1.04); box-shadow: 0 8px 24px rgba(139,69,19,.2); filter: brightness(1.05) }
+.btn:active { transform: scale(.96); transition: transform .1s }
+
+/* 2. 卡片磁吸悬浮 */
+.card, .stat-card, .event-mini-card, .forum-card, .announcement-card {
+  transition: transform .35s cubic-bezier(0.175,0.885,0.32,1.275), box-shadow .35s cubic-bezier(0.4,0,0.2,1);
+}
+.card:hover, .stat-card:hover, .event-mini-card:hover, .forum-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 20px 60px rgba(139,69,19,.1);
+}
+
+/* 3. 导航下划线滑入 */
+.nav-link::after {
+  content: ''; position: absolute; bottom: 4px; left: 50%;
+  width: 0; height: 2px; background: var(--gold);
+  transform: translateX(-50%);
+  transition: width .35s cubic-bezier(0.16,1,0.3,1);
+}
+.nav-link:hover::after, .nav-link.active::after { width: 60% }
+
+/* 4. 统计数字弹跳 */
+@keyframes countBounce {
+  0% { transform: scale(1) }
+  60% { transform: scale(1.4); color: var(--gold) }
+  100% { transform: scale(1) }
+}
+.stat-num.counted { animation: countBounce .5s cubic-bezier(0.175,0.885,0.32,1.275) }
+
+/* 5. 表格行涟漪 */
+.table tbody tr {
+  transition: transform .25s cubic-bezier(0.175,0.885,0.32,1.275), box-shadow .25s, background .2s;
+}
+.table tbody tr:hover {
+  transform: scale(1.008);
+  box-shadow: 0 4px 16px rgba(0,0,0,.05);
+  background: var(--gold-light) !important;
+  position: relative; z-index: 1;
+}
+
+/* 6. 输入框呼吸 */
+.form-group input:focus, .form-select:focus, .form-input:focus {
+  animation: inputGlow 1.5s ease-in-out infinite;
+  border-color: var(--red);
+}
+@keyframes inputGlow {
+  0%,100% { box-shadow: 0 0 0 3px rgba(139,0,0,.08) }
+  50% { box-shadow: 0 0 0 6px rgba(139,0,0,.04), 0 0 16px rgba(139,0,0,.06) }
+}
+
+/* 7. Toast 滑入弹跳 */
+@keyframes toastSlideBounce {
+  0% { opacity: 0; transform: translateY(30px) scale(.9) }
+  60% { opacity: 1; transform: translateY(-4px) scale(1.02) }
+  80% { transform: translateY(2px) scale(.99) }
+  100% { transform: translateY(0) scale(1) }
+}
+.toast { animation: toastSlideBounce .5s cubic-bezier(0.175,0.885,0.32,1.275) }
+
+/* 8. 页面切换 */
+.page:not(.hidden) {
+  animation: pageFadeSlide .4s cubic-bezier(0.16,1,0.3,1);
+}
+@keyframes pageFadeSlide {
+  from { opacity: 0; transform: translateY(12px) }
+  to { opacity: 1; transform: translateY(0) }
 }
 
 /* ═══ 背景音乐控制 ═══ */
