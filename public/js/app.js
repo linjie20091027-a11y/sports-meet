@@ -405,10 +405,14 @@ const App = {
   },
 
   startCountdown(targetDate) {
+    // 确保使用10月22日早上8点
+    var d = targetDate && targetDate !== '—' ? targetDate : '2026-10-22';
+    if (!d.includes('T')) d += 'T08:00:00';
     if (this.countdownTimer) clearInterval(this.countdownTimer);
     var self = this;
+    var countdownTarget = d;
     var update = function() {
-      var diff = new Date(targetDate) - new Date();
+      var diff = new Date(countdownTarget) - new Date();
       var daysEl = document.getElementById('cd-days');
       var hoursEl = document.getElementById('cd-hours');
       var minsEl = document.getElementById('cd-mins');
