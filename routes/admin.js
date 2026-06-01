@@ -535,12 +535,13 @@ router.put('/rules', (req, res) => {
 router.get('/registrations', (req, res) => {
   try {
     const db = getDb();
-    const { event_id, grade, class_name, status, page, limit } = req.query;
+    const { event_id, grade, class_name, gender, status, page, limit } = req.query;
     let conditions = [];
     let params = [];
     if (event_id) { conditions.push('r.event_id = ?'); params.push(event_id); }
     if (grade) { conditions.push('u.grade = ?'); params.push(grade); }
     if (class_name) { conditions.push('u.class_name = ?'); params.push(class_name); }
+    if (gender) { conditions.push('u.gender = ?'); params.push(gender); }
     if (status) { conditions.push('r.status = ?'); params.push(status); }
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
     const query = `SELECT r.*, u.name as user_name, u.student_id, u.class_name, u.grade, e.name as event_name, e.category as event_category

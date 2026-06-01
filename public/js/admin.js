@@ -736,6 +736,8 @@ const Admin = {
   // ==================== 报名管理 ====================
   _regPage: 1,
   _regLimit: 20,
+  _regFilters: { class_name: '', gender: '', event_id: '', status: '' },
+  _regFilterData: null,
 
   async renderRegistrations(container) {
     this._regPage = 1;
@@ -762,23 +764,90 @@ const Admin = {
 
   _renderRegFilter(container) {
     const bar = container.querySelector('#reg-filter-bar');
+    const f = this._regFilters;
+    const labels = [];
+    if (f.class_name) labels.push('班级：' + f.class_name);
+    if (f.gender) labels.push('性别：' + (f.gender === 'male' ? '男' : '女'));
+    if (f.status) labels.push('状态：' + ({pending:'待审核',approved:'已通过',rejected:'已驳回'}[f.status] || f.status));
+    if (f.event_id && this._regFilterData) {
+      const evt = this._regFilterData.events.find(e => e.id == f.event_id);
+      if (evt) labels.push('项目：' + evt.name);
+    }
     bar.innerHTML = `
-      <select id="reg-grade" class="form__select"><option value="">全部年级</option></select>
-      <select id="reg-class" class="form__select"><option value="">全部班级</option></select>
-      <select id="reg-event" class="form__select"><option value="">全部项目</option></select>
-      <select id="reg-status" class="form__select"><option value="">全部状态</option><option value="pending">待审核</option><option value="approved">已通过</option><option value="rejected">已驳回</option></select>
-      <button class="btn btn--primary btn--sm" id="btn-reg-search"><i class="fas fa-search"></i> 筛选</button>
+      <button class="btn btn--primary btn--sm" id="btn-reg-filter"><i class="fas fa-filter"></i> 筛选</button>
+      <select id="reg-status" class="form__select"><option value="">全部状态</option><option value="pending" ${f.status==='pending'?'selected':''}>待审核</option><option value="approved" ${f.status==='approved'?'selected':''}>已通过</option><option value="rejected" ${f.status==='rejected'?'selected':''}>已驳回</option></select>
+      ${labels.length > 0 ? '<span class="text-sm" style="color:var(--red);margin-left:8px">当前筛选：' + labels.join(' / ') + ' <a href="javascript:void(0)" id="btn-reg-clear" style="color:var(--text3)">[清除]</a></span>' : ''}
     `;
-    this._loadRegFilters(container);
+    bar.querySelector('#btn-reg-clear')?.addEventListener('click', () => {
+      this._regFilters = { class_name: '', gender: '', event_id: '', status: '' };
+      this._regPage = 1;
+      this._renderRegFilter(container);
+      this._loadRegistrations(container);
+    });
+    bar.querySelector('#btn-reg-filter')?.addEventListener('click', () => this._showRegFilterModal(container));
+  },
+
+  async _showRegFilterModal(container) {
+    if (!this._regFilterData) {
+      try {
+        const gradesRes = await API.public.getGrades();
+        const eventsRes = await API.get('/admin/events');
+        this._regFilterData = {
+          classes: (gradesRes.data && gradesRes.data.classes) ? gradesRes.data.classes : [],
+          events: eventsRes.data || []
+        };
+      } catch (e) { App.showToast('加载筛选数据失败','error'); return; }
+    }
+    const f = this._regFilters;
+    const classOpts = this._regFilterData.classes.map(c =>
+      `<option value="${c.name}" ${f.class_name===c.name?'selected':''}>${c.name}</option>`
+    ).join('');
+    const eventOpts = this._regFilterData.events.map(e =>
+      `<option value="${e.id}" ${f.event_id==e.id?'selected':''}>${e.name}</option>`
+    ).join('');
+    const genderOpts = `<option value="" ${!f.gender?'selected':''}>全部</option>
+      <option value="male" ${f.gender==='male'?'selected':''}>男</option>
+      <option value="female" ${f.gender==='female'?'selected':''}>女</option>`;
+    const statusOpts = `<option value="" ${!f.status?'selected':''}>全部状态</option>
+      <option value="pending" ${f.status==='pending'?'selected':''}>待审核</option>
+      <option value="approved" ${f.status==='approved'?'selected':''}>已通过</option>
+      <option value="rejected" ${f.status==='rejected'?'selected':''}>已驳回</option>`;
+
+    const html = `
+      <div class="modal-header"><h3>报名筛选</h3><button class="modal-close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>
+      <div class="modal-body">
+        <div class="form-group"><label>班级</label><select id="reg-filter-class" class="form__select"><option value="">全部班级</option>${classOpts}</select></div>
+        <div class="form-group"><label>性别</label><select id="reg-filter-gender" class="form__select">${genderOpts}</select></div>
+        <div class="form-group"><label>项目</label><select id="reg-filter-event" class="form__select"><option value="">全部项目</option>${eventOpts}</select></div>
+        <div class="form-group"><label>状态</label><select id="reg-filter-status" class="form__select">${statusOpts}</select></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn--outline btn--sm" id="btn-reg-filter-cancel">取消</button>
+        <button class="btn btn--primary btn--sm" id="btn-reg-filter-apply">确定筛选</button>
+      </div>`;
+    App.showModal(html);
+
+    document.getElementById('btn-reg-filter-cancel').onclick = () => App.hideModal();
+    document.getElementById('btn-reg-filter-apply').onclick = () => {
+      const className = document.getElementById('reg-filter-class')?.value || '';
+      const gender = document.getElementById('reg-filter-gender')?.value || '';
+      const eventId = document.getElementById('reg-filter-event')?.value || '';
+      const status = document.getElementById('reg-filter-status')?.value || '';
+      this._regFilters.class_name = className;
+      this._regFilters.gender = gender;
+      this._regFilters.event_id = eventId;
+      this._regFilters.status = status;
+      this._regPage = 1;
+      App.hideModal();
+      this._renderRegFilter(container);
+      this._loadRegistrations(container);
+    };
   },
 
   async _loadRegFilters(container) {
     try {
       const gradesRes = await API.public.getGrades();
-      const grades = gradesRes.data && gradesRes.data.grades ? gradesRes.data.grades : [];
       const classes = gradesRes.data && gradesRes.data.classes ? gradesRes.data.classes : [];
-      const gradeSel = container.querySelector('#reg-grade');
-      grades.forEach(g => { const o = document.createElement('option'); o.value = g.name; o.textContent = g.name; gradeSel.appendChild(o); });
       const classSel = container.querySelector('#reg-class');
       classes.forEach(c => { const o = document.createElement('option'); o.value = c.name; o.textContent = c.name; classSel.appendChild(o); });
 
@@ -790,7 +859,11 @@ const Admin = {
   },
 
   _bindRegEvents(container) {
-    container.querySelector('#btn-reg-search').addEventListener('click', () => { this._regPage = 1; this._loadRegistrations(container); });
+    container.querySelector('#reg-status')?.addEventListener('change', () => {
+      this._regFilters.status = container.querySelector('#reg-status').value;
+      this._regPage = 1;
+      this._loadRegistrations(container);
+    });
     container.querySelector('#btn-batch-approve').addEventListener('click', () => this._batchApprove(container));
     container.querySelector('#btn-export-reg').addEventListener('click', () => this._exportRegistrations());
   },
@@ -798,15 +871,12 @@ const Admin = {
   async _loadRegistrations(container) {
     try {
       App.showLoading();
+      const f = this._regFilters;
       const params = { page: this._regPage, limit: this._regLimit };
-      const grade = container.querySelector('#reg-grade').value;
-      const className = container.querySelector('#reg-class').value;
-      const eventId = container.querySelector('#reg-event').value;
-      const status = container.querySelector('#reg-status').value;
-      if (grade) params.grade = grade;
-      if (className) params.class_name = className;
-      if (eventId) params.event_id = eventId;
-      if (status) params.status = status;
+      if (f.class_name) params.class_name = f.class_name;
+      if (f.gender) params.gender = f.gender;
+      if (f.event_id) params.event_id = f.event_id;
+      if (f.status) params.status = f.status;
 
       const res = await API.admin.getRegistrations(params);
       const d = res.data || res;
