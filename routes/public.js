@@ -242,7 +242,7 @@ router.get('/results/rankings', (req, res) => {
 router.get('/announcements', (req, res) => {
   try {
     const db = getDb();
-    let sql = `SELECT a.id, a.title, a.category, a.is_pinned, a.publish_time, a.expire_time, a.view_count, a.created_at, u.name AS publisher_name FROM announcements a LEFT JOIN users u ON a.published_by = u.id WHERE a.status = 'published' AND (a.expire_time IS NULL OR a.expire_time >= datetime('now','localtime'))`;
+    let sql = `SELECT a.id, a.title, a.content, a.category, a.is_pinned, a.publish_time, a.expire_time, a.view_count, a.created_at, u.name AS publisher_name FROM announcements a LEFT JOIN users u ON a.published_by = u.id WHERE a.status = 'published' AND (a.expire_time IS NULL OR a.expire_time >= datetime('now','localtime'))`;
     const params = [];
 
     if (req.query.category) {
@@ -312,7 +312,7 @@ router.get('/search', (req, res) => {
 
     const students = db.prepare(`SELECT id, name, student_id, class_name, grade FROM users WHERE (name LIKE ? OR student_id LIKE ? OR class_name LIKE ?) AND role = 'student' AND status = 'active' LIMIT 8`).all(keyword, keyword, keyword);
 
-    const announcements = db.prepare(`SELECT a.id, a.title, a.category, a.is_pinned, a.publish_time, u.name AS publisher_name FROM announcements a LEFT JOIN users u ON a.published_by = u.id WHERE a.title LIKE ? AND a.status = 'published' AND (a.expire_time IS NULL OR a.expire_time >= datetime('now','localtime')) ORDER BY a.is_pinned DESC, a.publish_time DESC LIMIT 8`).all(keyword);
+    const announcements = db.prepare(`SELECT a.id, a.title, a.content, a.category, a.is_pinned, a.publish_time, u.name AS publisher_name FROM announcements a LEFT JOIN users u ON a.published_by = u.id WHERE a.title LIKE ? AND a.status = 'published' AND (a.expire_time IS NULL OR a.expire_time >= datetime('now','localtime')) ORDER BY a.is_pinned DESC, a.publish_time DESC LIMIT 8`).all(keyword);
 
     const schedules = db.prepare(`SELECT s.id, e.name AS event_name, s.round_name, s.start_time, s.venue, s.status FROM schedules s LEFT JOIN events e ON s.event_id = e.id WHERE (e.name LIKE ? OR s.round_name LIKE ? OR s.venue LIKE ?) LIMIT 8`).all(keyword, keyword, keyword);
 
