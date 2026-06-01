@@ -143,6 +143,54 @@ function resolveStudentUser(db, payload, options = {}) {
   throw new Error('请提供学生姓名、学号或用户ID');
 }
 
+function normalizeMultiValue(input) {
+  if (Array.isArray(input)) {
+    return [...new Set(input
+      .flatMap((item) => String(item || '').split(','))
+      .map((item) => item.trim())
+      .filter(Boolean))];
+  }
+  if (input === undefined || input === null) return [];
+  return [...new Set(String(input)
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean))];
+}
+
+function appendInCondition(conditions, params, column, values) {
+  if (!Array.isArray(values) || values.length === 0) return;
+  if (values.length === 1) {
+    conditions.push(`${column} = ?`);
+    params.push(values[0]);
+    return;
+  }
+  conditions.push(`${column} IN (${values.map(() => '?').join(',')})`);
+  params.push(...values);
+}
+
+function validateGradeClassSelection(db, payload, student) {
+  const selectedGrade = String(payload.grade || '').trim();
+  const selectedClass = String(payload.class_name || '').trim();
+  if (!selectedGrade && !selectedClass) return;
+
+  if (selectedGrade && student.grade !== selectedGrade) {
+    throw new Error('所选年级与学生档案不一致');
+  }
+  if (selectedClass && student.class_name !== selectedClass) {
+    throw new Error('所选班级与学生档案不一致');
+  }
+
+  if (selectedGrade && selectedClass) {
+    const cls = db.prepare(`
+      SELECT c.id
+      FROM classes c
+      JOIN grades g ON c.grade_id = g.id
+      WHERE g.name = ? AND c.name = ?
+    `).get(selectedGrade, selectedClass);
+    if (!cls) throw new Error('所选年级与班级不在当前教务字典中');
+  }
+}
+
 function paginate(query, params, page, limit) {
   const p = Math.max(1, parseInt(page) || 1);
   const l = Math.min(99999, Math.max(1, parseInt(limit) || 20));
@@ -536,11 +584,13 @@ router.get('/registrations', (req, res) => {
   try {
     const db = getDb();
     const { event_id, grade, class_name, gender, status, page, limit } = req.query;
+    const gradeValues = normalizeMultiValue(grade);
+    const classValues = normalizeMultiValue(class_name);
     let conditions = [];
     let params = [];
     if (event_id) { conditions.push('r.event_id = ?'); params.push(event_id); }
-    if (grade) { conditions.push('u.grade = ?'); params.push(grade); }
-    if (class_name) { conditions.push('u.class_name = ?'); params.push(class_name); }
+    appendInCondition(conditions, params, 'u.grade', gradeValues);
+    appendInCondition(conditions, params, 'u.class_name', classValues);
     if (gender) { conditions.push('u.gender = ?'); params.push(gender); }
     if (status) { conditions.push('r.status = ?'); params.push(status); }
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
@@ -862,12 +912,14 @@ router.get('/results', (req, res) => {
   try {
     const db = getDb();
     const { event_id, schedule_id, grade, class_name, award, is_published, page, limit } = req.query;
+    const gradeValues = normalizeMultiValue(grade);
+    const classValues = normalizeMultiValue(class_name);
     let conditions = [];
     let params = [];
     if (event_id) { conditions.push('e.id = ?'); params.push(event_id); }
     if (schedule_id) { conditions.push('r.schedule_id = ?'); params.push(schedule_id); }
-    if (grade) { conditions.push('u.grade = ?'); params.push(grade); }
-    if (class_name) { conditions.push('u.class_name = ?'); params.push(class_name); }
+    appendInCondition(conditions, params, 'u.grade', gradeValues);
+    appendInCondition(conditions, params, 'u.class_name', classValues);
     if (award) { conditions.push('r.award = ?'); params.push(award); }
     if (is_published !== undefined) { conditions.push('r.is_published = ?'); params.push(parseInt(is_published)); }
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
@@ -891,6 +943,7 @@ router.post('/results', (req, res) => {
     const db = getDb();
     const data = normalizeResultPayload(req.body);
     const student = resolveStudentUser(db, req.body);
+    validateGradeClassSelection(db, req.body, student);
     data.user_id = student.id;
     const schedule = db.prepare('SELECT id FROM schedules WHERE id = ?').get(data.schedule_id);
     const user = db.prepare('SELECT id FROM users WHERE id = ?').get(data.user_id);
@@ -991,7 +1044,10 @@ router.put('/results/:id', (req, res) => {
     if (!result) return res.status(404).json({ success: false, error: '成绩记录不存在' });
     const data = normalizeResultPayload(req.body, { partial: true });
     const student = resolveStudentUser(db, req.body, { partial: true });
-    if (student) data.user_id = student.id;
+    if (student) {
+      validateGradeClassSelection(db, req.body, student);
+      data.user_id = student.id;
+    }
 
     if (data.schedule_id) {
       const schedule = db.prepare('SELECT id FROM schedules WHERE id = ?').get(data.schedule_id);

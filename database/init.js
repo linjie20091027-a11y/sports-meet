@@ -162,6 +162,41 @@ async function initDatabase() {
 }
 
 function migrateSchema() {
+  // Ensure legacy forum tables exist before applying ALTERs and dependent indexes.
+  _db.run(`
+    CREATE TABLE IF NOT EXISTS forum_posts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      view_count INTEGER DEFAULT 0,
+      reply_count INTEGER DEFAULT 0,
+      is_pinned INTEGER DEFAULT 0,
+      is_deleted INTEGER DEFAULT 0,
+      deleted_by INTEGER,
+      deleted_at TEXT,
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      updated_at TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (deleted_by) REFERENCES users(id)
+    )
+  `);
+  _db.run(`
+    CREATE TABLE IF NOT EXISTS forum_replies (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      post_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      is_deleted INTEGER DEFAULT 0,
+      deleted_by INTEGER,
+      deleted_at TEXT,
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (post_id) REFERENCES forum_posts(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (deleted_by) REFERENCES users(id)
+    )
+  `);
+
   const alters = [
     "ALTER TABLE events ADD COLUMN description TEXT DEFAULT ''",
     "ALTER TABLE users ADD COLUMN sport_group TEXT DEFAULT 'A'",
@@ -169,10 +204,35 @@ function migrateSchema() {
     "ALTER TABLE users ADD COLUMN age INTEGER DEFAULT 16",
     "ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT ''",
     "ALTER TABLE results ADD COLUMN is_school_record INTEGER DEFAULT 0",
+    "ALTER TABLE users ADD COLUMN muted_until TEXT DEFAULT ''",
+    "ALTER TABLE forum_posts ADD COLUMN summary TEXT DEFAULT ''",
+    "ALTER TABLE forum_posts ADD COLUMN category TEXT DEFAULT 'general'",
+    "ALTER TABLE forum_posts ADD COLUMN tags TEXT DEFAULT '[]'",
+    "ALTER TABLE forum_posts ADD COLUMN attachments TEXT DEFAULT '[]'",
+    "ALTER TABLE forum_posts ADD COLUMN like_count INTEGER DEFAULT 0",
+    "ALTER TABLE forum_posts ADD COLUMN favorite_count INTEGER DEFAULT 0",
+    "ALTER TABLE forum_posts ADD COLUMN report_count INTEGER DEFAULT 0",
+    "ALTER TABLE forum_posts ADD COLUMN status TEXT DEFAULT 'pending'",
+    "ALTER TABLE forum_posts ADD COLUMN review_stage INTEGER DEFAULT 1",
+    "ALTER TABLE forum_posts ADD COLUMN review_comment TEXT DEFAULT ''",
+    "ALTER TABLE forum_posts ADD COLUMN reviewed_by INTEGER",
+    "ALTER TABLE forum_posts ADD COLUMN reviewed_at TEXT",
+    "ALTER TABLE forum_posts ADD COLUMN is_featured INTEGER DEFAULT 0",
+    "ALTER TABLE forum_posts ADD COLUMN last_interaction_at TEXT DEFAULT ''",
+    "ALTER TABLE forum_replies ADD COLUMN status TEXT DEFAULT 'pending'",
   ];
   alters.forEach((sql) => {
     try { _db.run(sql); } catch (_) { /* 栏位已存在 */ }
   });
+  try {
+    _db.run(`
+      UPDATE forum_posts
+      SET last_interaction_at = COALESCE(NULLIF(last_interaction_at, ''), updated_at, created_at, datetime('now','localtime'))
+      WHERE COALESCE(last_interaction_at, '') = ''
+    `);
+  } catch (_) {
+    /* legacy forum_posts may not exist yet */
+  }
 
   _db.run(`
     CREATE TABLE IF NOT EXISTS forum_posts (
@@ -208,6 +268,50 @@ function migrateSchema() {
     )
   `);
   _db.run(`
+    CREATE TABLE IF NOT EXISTS forum_post_actions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      post_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      action_type TEXT NOT NULL CHECK(action_type IN ('like','favorite')),
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (post_id) REFERENCES forum_posts(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(post_id, user_id, action_type)
+    )
+  `);
+  _db.run(`
+    CREATE TABLE IF NOT EXISTS forum_reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      target_type TEXT NOT NULL CHECK(target_type IN ('post','reply')),
+      target_id INTEGER NOT NULL,
+      post_id INTEGER,
+      reporter_id INTEGER NOT NULL,
+      reason TEXT NOT NULL,
+      detail TEXT DEFAULT '',
+      status TEXT DEFAULT 'pending' CHECK(status IN ('pending','resolved','dismissed')),
+      handled_by INTEGER,
+      handled_at TEXT,
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (reporter_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (handled_by) REFERENCES users(id)
+    )
+  `);
+  _db.run(`
+    CREATE TABLE IF NOT EXISTS forum_moderation_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      post_id INTEGER,
+      reply_id INTEGER,
+      action TEXT NOT NULL,
+      stage INTEGER DEFAULT 1,
+      operator_id INTEGER,
+      comment TEXT DEFAULT '',
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (post_id) REFERENCES forum_posts(id) ON DELETE CASCADE,
+      FOREIGN KEY (reply_id) REFERENCES forum_replies(id) ON DELETE CASCADE,
+      FOREIGN KEY (operator_id) REFERENCES users(id)
+    )
+  `);
+  _db.run(`
     CREATE TABLE IF NOT EXISTS friend_requests (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       requester_id INTEGER NOT NULL,
@@ -239,7 +343,13 @@ function migrateSchema() {
   `);
   _db.run('CREATE INDEX IF NOT EXISTS idx_forum_posts_updated ON forum_posts(updated_at DESC)');
   _db.run('CREATE INDEX IF NOT EXISTS idx_forum_posts_user ON forum_posts(user_id)');
+  _db.run('CREATE INDEX IF NOT EXISTS idx_forum_posts_status ON forum_posts(status, is_pinned DESC, is_featured DESC, last_interaction_at DESC)');
   _db.run('CREATE INDEX IF NOT EXISTS idx_forum_replies_post ON forum_replies(post_id)');
+  _db.run('CREATE INDEX IF NOT EXISTS idx_forum_actions_post ON forum_post_actions(post_id, action_type)');
+  _db.run('CREATE INDEX IF NOT EXISTS idx_forum_actions_user ON forum_post_actions(user_id, action_type)');
+  _db.run('CREATE INDEX IF NOT EXISTS idx_forum_reports_status ON forum_reports(status, created_at DESC)');
+  _db.run('CREATE INDEX IF NOT EXISTS idx_forum_reports_target ON forum_reports(target_type, target_id)');
+  _db.run('CREATE INDEX IF NOT EXISTS idx_forum_logs_post ON forum_moderation_logs(post_id, created_at DESC)');
   _db.run('CREATE INDEX IF NOT EXISTS idx_friend_requests_receiver ON friend_requests(receiver_id, status, created_at DESC)');
   _db.run('CREATE INDEX IF NOT EXISTS idx_friend_requests_requester ON friend_requests(requester_id, status, created_at DESC)');
   _db.run('CREATE INDEX IF NOT EXISTS idx_friendships_user ON friendships(user_id, created_at DESC)');

@@ -192,12 +192,24 @@ const API = {
   },
 
   forum: {
+    getMeta() { return API.get('/forum/meta'); },
     getPosts(params) { return API.get('/forum/posts' + API._qs(params)); },
     getPost(id) { return API.get('/forum/posts/' + id); },
     createPost(data) { return API.post('/forum/posts', data); },
+    uploadAttachments(formData) { return API.upload('/forum/attachments', formData); },
     reply(postId, content) { return API.post('/forum/posts/' + postId + '/replies', { content }); },
+    likePost(id) { return API.post('/forum/posts/' + id + '/like', {}); },
+    favoritePost(id) { return API.post('/forum/posts/' + id + '/favorite', {}); },
+    reportPost(id, data) { return API.post('/forum/posts/' + id + '/report', data); },
     deletePost(id) { return API.delete('/forum/posts/' + id); },
     deleteReply(id) { return API.delete('/forum/replies/' + id); },
+    getAdminPosts(params) { return API.get('/forum/admin/posts' + API._qs(params)); },
+    auditPost(id, data) { return API.put('/forum/admin/posts/' + id + '/audit', data); },
+    getPendingReplies() { return API.get('/forum/admin/replies/pending'); },
+    auditReply(id, data) { return API.put('/forum/admin/replies/' + id + '/audit', data); },
+    handleReport(id, data) { return API.put('/forum/admin/reports/' + id + '/handle', data); },
+    muteUser(id, data) { return API.put('/forum/admin/users/' + id + '/mute', data); },
+    getAdminStats() { return API.get('/forum/admin/stats'); },
   },
 
   // ==================== 工具方法 ====================

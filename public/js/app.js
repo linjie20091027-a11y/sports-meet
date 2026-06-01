@@ -1340,6 +1340,7 @@ const App = {
       ]);
 
       const m = meet.value?.data || {};
+      this._updateSchoolLogo(m.logo_url || '/images/school-emblem-default.svg');
       document.getElementById('hero-title').textContent = m.name || '学校运动会';
       var sub = document.getElementById('hero-subtitle');
       if (sub) sub.textContent = m.theme || '';
@@ -1440,6 +1441,29 @@ const App = {
       console.error('renderHome error:', e);
       this.showToast('首页加载异常，请刷新重试', 'error');
     }
+  },
+
+  _updateSchoolLogo(src) {
+    const media = document.getElementById('nav-logo-media');
+    const image = document.getElementById('nav-logo-image');
+    const fallback = document.getElementById('nav-logo-fallback');
+    if (!media || !image || !fallback) return;
+    const finalSrc = String(src || '/images/school-emblem-default.svg').trim() || '/images/school-emblem-default.svg';
+    media.classList.add('is-loading');
+    fallback.classList.add('hidden');
+    image.classList.add('hidden');
+    image.onload = () => {
+      media.classList.remove('is-loading');
+      image.classList.remove('hidden');
+      fallback.classList.add('hidden');
+    };
+    image.onerror = () => {
+      media.classList.remove('is-loading');
+      image.classList.add('hidden');
+      fallback.classList.remove('hidden');
+    };
+    if (image.getAttribute('src') !== finalSrc) image.setAttribute('src', finalSrc);
+    else if (image.complete && image.naturalWidth > 0) image.onload();
   },
 
   _escAttr(s) {

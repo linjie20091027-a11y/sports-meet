@@ -1,4 +1,9 @@
 const Forum = {
+  _meta: null,
+  _filters: { keyword: '', category: '', tag: '', mine: false },
+  _page: 1,
+  _composerAttachments: [],
+
   handleRoute(hash) {
     const page = document.getElementById('page-forum');
     if (!page) return;
@@ -14,46 +19,146 @@ const Forum = {
     const user = App.user;
     page.innerHTML = `
       <div class="container page-top">
-        <div class="section-title">
-          交流论坛
-          <small>赛事討論 · 經验分享</small>
+        <div class="card forum-shell">
+          <div class="card-header forum-shell__head">
+            <div>
+              <div class="section-title" style="margin-bottom:0;">交流论坛<small>置顶公告 · 精华推荐 · 全站讨论</small></div>
+              <p class="text-sm text-muted" style="margin-top:8px;">支持富文本发帖、附件上传、分类标签、搜索筛选与分页浏览。</p>
+            </div>
+            <div class="forum-shell__actions">
+              ${user ? `<button type="button" class="btn btn-primary btn-sm" id="forum-new-btn"><i class="fas fa-pen"></i> 发布帖子</button>` : `<a href="#/login" class="btn btn-outline btn-sm">登录后发帖</a>`}
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="forum-toolbar">
+              <input id="forum-keyword" class="form__input" placeholder="搜索标题、摘要或正文关键词">
+              <select id="forum-category" class="form__select"><option value="">全部分类</option></select>
+              <select id="forum-tag" class="form__select"><option value="">全部标签</option></select>
+              ${user ? `<label class="text-sm" style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="forum-mine-only"> 仅看我的帖子</label>` : ''}
+              <button type="button" class="btn btn-primary btn-sm" id="forum-search-btn"><i class="fas fa-search"></i> 查询</button>
+            </div>
+            <div id="forum-pinned" class="forum-highlight"></div>
+            <div id="forum-featured" class="forum-highlight"></div>
+            <div id="forum-list"><div class="text-center p-8"><div class="spinner"></div></div></div>
+            <div id="forum-pagination" class="text-center mt-3"></div>
+          </div>
         </div>
-        ${user ? `<div class="mb-3"><button type="button" class="btn btn-primary btn-sm" id="forum-new-btn"><i class="fas fa-pen"></i> 发表帖子</button></div>` : `<p class="text-muted mb-3"><a href="#/login">登录</a> 後可发帖與回复</p>`}
-        <div id="forum-list"><div class="text-center p-8"><div class="spinner"></div></div></div>
-        <div id="forum-pagination" class="text-center mt-3"></div>
       </div>
     `;
+    await this._ensureMeta();
+    this._renderFilterOptions();
     document.getElementById('forum-new-btn')?.addEventListener('click', () => this._showNewPostForm());
+    document.getElementById('forum-search-btn')?.addEventListener('click', () => {
+      this._filters.keyword = document.getElementById('forum-keyword')?.value?.trim() || '';
+      this._filters.category = document.getElementById('forum-category')?.value || '';
+      this._filters.tag = document.getElementById('forum-tag')?.value || '';
+      this._filters.mine = !!document.getElementById('forum-mine-only')?.checked;
+      this._loadList(1);
+    });
     await this._loadList(1);
+  },
+
+  async _ensureMeta() {
+    if (this._meta) return this._meta;
+    const res = await API.forum.getMeta();
+    this._meta = res.data || { categories: [], tags: [], report_reasons: [] };
+    return this._meta;
+  },
+
+  _renderFilterOptions() {
+    const meta = this._meta || {};
+    const category = document.getElementById('forum-category');
+    const tag = document.getElementById('forum-tag');
+    if (category) {
+      category.innerHTML = '<option value="">全部分类</option>' + (meta.categories || []).map((item) =>
+        `<option value="${App._escHtml(item.value)}">${App._escHtml(item.label)}</option>`
+      ).join('');
+      category.value = this._filters.category || '';
+    }
+    if (tag) {
+      tag.innerHTML = '<option value="">全部标签</option>' + (meta.tags || []).map((item) =>
+        `<option value="${App._escHtml(item)}">${App._escHtml(item)}</option>`
+      ).join('');
+      tag.value = this._filters.tag || '';
+    }
+    if (document.getElementById('forum-keyword')) document.getElementById('forum-keyword').value = this._filters.keyword || '';
+    if (document.getElementById('forum-mine-only')) document.getElementById('forum-mine-only').checked = !!this._filters.mine;
+  },
+
+  _renderHighlightSection(targetId, title, badge, items) {
+    const wrap = document.getElementById(targetId);
+    if (!wrap) return;
+    if (!items || !items.length) {
+      wrap.innerHTML = '';
+      return;
+    }
+    wrap.innerHTML = `
+      <div class="forum-highlight__title">${title}</div>
+      <div class="forum-highlight__list">
+        ${items.map((item) => `
+          <a href="#/forum/${item.id}" class="forum-highlight__item">
+            <span class="badge badge-pin">${badge}</span>
+            <strong>${App._escHtml(item.title)}</strong>
+            <small>${App._escHtml(item.author_name || '-')} · ${App.formatDate(item.updated_at || item.created_at)}</small>
+          </a>
+        `).join('')}
+      </div>
+    `;
+  },
+
+  _renderPostCard(post) {
+    const tags = Array.isArray(post.tags) ? post.tags : [];
+    const summary = post.summary || String(post.content || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+    return `
+      <article class="forum-card card mb-2">
+        <a href="#/forum/${post.id}" class="forum-card__link">
+          <div class="forum-card__badges">
+            ${post.is_pinned ? '<span class="badge badge-pin">置顶</span>' : ''}
+            ${post.is_featured ? '<span class="badge badge-success">精华</span>' : ''}
+            ${post.status && post.status !== 'approved' ? `<span class="badge badge-warning">${post.status === 'pending' ? '审核中' : '未通过'}</span>` : ''}
+            ${post.category ? `<span class="badge badge-info">${App._escHtml(post.category)}</span>` : ''}
+          </div>
+          <h3>${App._escHtml(post.title)}</h3>
+          <p class="forum-card__excerpt">${App._escHtml(summary)}</p>
+          <div class="forum-card__tags">
+            ${tags.map((tag) => `<span>${App._escHtml(tag)}</span>`).join('')}
+          </div>
+          <div class="forum-card__meta">
+            <span><i class="fas fa-user"></i> ${App._escHtml(post.author_name || '-')} ${post.class_name ? `· ${App._escHtml(post.class_name)}` : ''}</span>
+            <span><i class="fas fa-comment"></i> ${post.reply_count || 0}</span>
+            <span><i class="fas fa-heart"></i> ${post.like_count || 0}</span>
+            <span><i class="fas fa-star"></i> ${post.favorite_count || 0}</span>
+            <span>${App.formatDate(post.updated_at || post.created_at)}</span>
+          </div>
+        </a>
+      </article>
+    `;
   },
 
   async _loadList(page) {
     const list = document.getElementById('forum-list');
     try {
-      const res = await API.forum.getPosts({ page, limit: 15 });
+      this._page = page;
+      const res = await API.forum.getPosts({
+        page,
+        limit: 10,
+        keyword: this._filters.keyword || '',
+        category: this._filters.category || '',
+        tag: this._filters.tag || '',
+        mine: this._filters.mine ? 1 : ''
+      });
       const data = res.data || {};
       const posts = data.list || [];
+      this._renderHighlightSection('forum-pinned', '置顶帖', '置顶', data.pinned || []);
+      this._renderHighlightSection('forum-featured', '精华推荐', '精华', data.featured || []);
       if (!posts.length) {
-        list.innerHTML = '<div class="empty-state"><p>暂无帖子，成為第一個发言的人吧</p></div>';
+        list.innerHTML = '<div class="empty-state"><p>当前筛选下暂无帖子，试试调整关键词或分类</p></div>';
         return;
       }
-      list.innerHTML = posts.map(p => `
-        <article class="forum-card card mb-2">
-          <a href="#/forum/${p.id}" class="forum-card__link">
-            <h3>${App._escHtml(p.title)}</h3>
-            <p class="forum-card__excerpt">${App._escHtml((p.content || '').slice(0, 120))}${(p.content || '').length > 120 ? '…' : ''}</p>
-            <div class="forum-card__meta">
-              <span><i class="fas fa-user"></i> ${App._escHtml(p.author_name)}${p.class_name ? ` · ${App._escHtml(p.class_name)}` : ''}</span>
-              <span><i class="fas fa-comment"></i> ${p.reply_count || 0}</span>
-              <span><i class="fas fa-eye"></i> ${p.view_count || 0}</span>
-              <span>${App.formatDate(p.updated_at || p.created_at)}</span>
-            </div>
-          </a>
-        </article>
-      `).join('');
+      list.innerHTML = posts.map((item) => this._renderPostCard(item)).join('');
 
       const total = data.total || 0;
-      const pages = Math.ceil(total / (data.limit || 15));
+      const pages = Math.ceil(total / (data.limit || 10));
       const pag = document.getElementById('forum-pagination');
       if (pag && pages > 1) {
         pag.innerHTML = `<button class="btn btn-outline btn-sm" ${page <= 1 ? 'disabled' : ''} id="forum-prev">上一页</button>
@@ -80,31 +185,52 @@ const Forum = {
       }
       const { post, replies } = res.data;
       const isAdmin = App.user?.role === 'admin';
+      const canDelete = isAdmin || Number(post.user_id) === Number(App.user?.id);
+      const attachments = Array.isArray(post.attachments) ? post.attachments : [];
+      const tags = Array.isArray(post.tags) ? post.tags : [];
 
       root.innerHTML = `
         <nav class="breadcrumb"><a href="#/forum">论坛</a> <span>/</span> <span>帖子详情</span></nav>
-        <article class="card">
+        <article class="card forum-post-detail">
           <div class="card-header">
-            <h2 style="margin:0;font-size:1.25rem">${App._escHtml(post.title)}</h2>
-            ${isAdmin ? `<button type="button" class="btn btn-danger btn-xs" id="forum-del-post">删除帖子</button>` : ''}
+            <div>
+              <div class="forum-card__badges">
+                ${post.is_pinned ? '<span class="badge badge-pin">置顶</span>' : ''}
+                ${post.is_featured ? '<span class="badge badge-success">精华</span>' : ''}
+                ${post.status && post.status !== 'approved' ? `<span class="badge badge-warning">${post.status === 'pending' ? '审核中' : '未通过'}</span>` : ''}
+              </div>
+              <h2 style="margin:8px 0 0;font-size:1.25rem">${App._escHtml(post.title)}</h2>
+            </div>
+            <div class="forum-post-detail__actions">
+              ${canDelete ? `<button type="button" class="btn btn-danger btn-xs" id="forum-del-post">删除帖子</button>` : ''}
+              ${App.user ? `<button type="button" class="btn btn-outline btn-xs" id="forum-report-post"><i class="fas fa-flag"></i> 举报</button>` : ''}
+            </div>
           </div>
           <div class="card-body">
             <p class="forum-card__meta mb-2">
-              <span>${App._escHtml(post.author_name)}</span>
+              <span>${App._escHtml(post.author_name || '-')} ${post.class_name ? `· ${App._escHtml(post.class_name)}` : ''}</span>
               <span>${App.formatDate(post.created_at)}</span>
-              <span>${post.view_count || 0} 览览</span>
+              <span>${post.view_count || 0} 浏览</span>
+              <span>${post.reply_count || 0} 评论</span>
             </p>
-            <div class="detail-prose">${App._escHtml(post.content).replace(/\n/g, '<br>')}</div>
+            <div class="forum-card__tags">${tags.map((tag) => `<span>${App._escHtml(tag)}</span>`).join('')}</div>
+            <div class="detail-prose">${post.content || ''}</div>
+            ${attachments.length ? `<div class="forum-attachments">${attachments.map((item) => `<a href="${App._escAttr(item.url)}" target="_blank" rel="noopener" class="forum-attachment"><i class="fas fa-paperclip"></i> ${App._escHtml(item.name || '附件')}</a>`).join('')}</div>` : ''}
+            ${App.user ? `<div class="forum-interactions">
+              <button type="button" class="btn btn-outline btn-sm" id="forum-like-btn"><i class="fas fa-heart"></i> ${post.liked ? '已点赞' : '点赞'} (${post.like_count || 0})</button>
+              <button type="button" class="btn btn-outline btn-sm" id="forum-favorite-btn"><i class="fas fa-star"></i> ${post.favorited ? '已收藏' : '收藏'} (${post.favorite_count || 0})</button>
+            </div>` : ''}
           </div>
         </article>
-        <h3 class="mt-4 mb-2" style="font-size:1rem">回复 (${replies.length})</h3>
+        <h3 class="mt-4 mb-2" style="font-size:1rem">评论 (${replies.length})</h3>
         <div id="forum-replies">${replies.length ? replies.map(r => `
           <div class="forum-reply card mb-2">
             <div class="card-body">
               <div class="forum-card__meta mb-1">
                 <strong>${App._escHtml(r.author_name)}</strong>
                 <span>${App.formatDate(r.created_at)}</span>
-                ${isAdmin ? `<button type="button" class="btn btn-danger btn-xs forum-del-reply" data-id="${r.id}">删除</button>` : ''}
+                ${r.status && r.status !== 'approved' ? `<span class="badge badge-warning">${r.status === 'pending' ? '待审核' : '已驳回'}</span>` : ''}
+                ${(isAdmin || Number(r.user_id) === Number(App.user?.id)) ? `<button type="button" class="btn btn-danger btn-xs forum-del-reply" data-id="${r.id}">删除</button>` : ''}
               </div>
               <p style="margin:0;line-height:1.7">${App._escHtml(r.content).replace(/\n/g, '<br>')}</p>
             </div>
@@ -113,8 +239,8 @@ const Forum = {
         ${App.user ? `
           <div class="card mt-3">
             <div class="card-body">
-              <div class="form-group"><label>发表回复</label><textarea id="forum-reply-text" class="form-input" rows="3" placeholder="输入回复内容…"></textarea></div>
-              <button type="button" class="btn btn-primary btn-sm" id="forum-reply-submit">提交回复</button>
+              <div class="form-group"><label>发表评论</label><textarea id="forum-reply-text" class="form-input" rows="3" placeholder="输入评论内容，支持文明交流"></textarea></div>
+              <button type="button" class="btn btn-primary btn-sm" id="forum-reply-submit">提交评论</button>
             </div>
           </div>
         ` : '<p class="text-muted mt-3"><a href="#/login">登录</a> 後可回复</p>'}
@@ -137,41 +263,144 @@ const Forum = {
       });
       document.getElementById('forum-reply-submit')?.addEventListener('click', async () => {
         const content = document.getElementById('forum-reply-text')?.value?.trim();
-        if (!content) return App.showToast('请输入回复内容', 'warning');
+        if (!content) return App.showToast('请输入评论内容', 'warning');
         const r = await API.forum.reply(id, content);
-        if (r.success) { App.showToast(App.user?.role==='admin'?'回复成功':'回复已提交，待管理员审核', 'success'); this.renderPost(id); }
-        else App.showToast(r.error || '回复失败', 'error');
+        if (r.success) { App.showToast(r.message || '评论已提交', 'success'); this.renderPost(id); }
+        else App.showToast(r.error || '评论失败', 'error');
       });
+      document.getElementById('forum-like-btn')?.addEventListener('click', async () => {
+        const r = await API.forum.likePost(id);
+        if (r.success) this.renderPost(id);
+        else App.showToast(r.error || '操作失败', 'error');
+      });
+      document.getElementById('forum-favorite-btn')?.addEventListener('click', async () => {
+        const r = await API.forum.favoritePost(id);
+        if (r.success) this.renderPost(id);
+        else App.showToast(r.error || '操作失败', 'error');
+      });
+      document.getElementById('forum-report-post')?.addEventListener('click', () => this._showReportModal(id));
     } catch (e) {
       root.innerHTML = `<div class="empty-state"><p>${App._escHtml(e.message)}</p></div>`;
     }
   },
 
-  _showNewPostForm() {
+  async _showNewPostForm() {
     if (!App.user) { window.location.hash = '#/login'; return; }
+    await this._ensureMeta();
+    this._composerAttachments = [];
     App.showModal(`
       <div class="modal-header"><h3>发表帖子</h3><button type="button" class="modal-close" onclick="App.hideModal()">&times;</button></div>
       <div class="modal-body">
-        <div class="form-group"><label>标题</label><input type="text" id="forum-post-title" class="form-input" maxlength="120"></div>
-        <div class="form-group"><label>内容</label><textarea id="forum-post-content" class="form-input" rows="5"></textarea></div>
+        <div class="form-group"><label>标题</label><input type="text" id="forum-post-title" class="form-input" maxlength="120" placeholder="请输入帖子标题"></div>
+        <div class="form-row">
+          <div class="form-group"><label>分类</label><select id="forum-post-category" class="form__select">${(this._meta.categories || []).map((item) => `<option value="${App._escHtml(item.value)}">${App._escHtml(item.label)}</option>`).join('')}</select></div>
+          <div class="form-group"><label>附件上传</label><input type="file" id="forum-post-files" class="form-input" multiple></div>
+        </div>
+        <div class="form-group">
+          <label>标签</label>
+          <div class="forum-tag-picker">${(this._meta.tags || []).map((tag) => `<label><input type="checkbox" value="${App._escHtml(tag)}"> ${App._escHtml(tag)}</label>`).join('')}</div>
+        </div>
+        <div class="form-group">
+          <label>正文</label>
+          <div class="forum-editor__toolbar">
+            <button type="button" class="btn btn-outline btn-xs forum-editor-cmd" data-cmd="bold">加粗</button>
+            <button type="button" class="btn btn-outline btn-xs forum-editor-cmd" data-cmd="italic">斜体</button>
+            <button type="button" class="btn btn-outline btn-xs forum-editor-cmd" data-cmd="insertUnorderedList">列表</button>
+            <button type="button" class="btn btn-outline btn-xs" id="forum-editor-link">链接</button>
+          </div>
+          <div id="forum-post-content" class="forum-editor__input" contenteditable="true"></div>
+          <div class="form__hint">支持基础富文本格式，内容将自动过滤不安全标签。</div>
+        </div>
+        <div id="forum-uploaded-files" class="forum-upload-list"></div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="App.hideModal()">取消</button>
         <button type="button" class="btn btn-primary" id="forum-post-submit">发布</button>
       </div>
     `);
+    document.querySelectorAll('.forum-editor-cmd').forEach((btn) => {
+      btn.addEventListener('click', () => document.execCommand(btn.dataset.cmd, false));
+    });
+    document.getElementById('forum-editor-link')?.addEventListener('click', () => {
+      const url = window.prompt('请输入链接地址');
+      if (url) document.execCommand('createLink', false, url);
+    });
+    document.getElementById('forum-post-files')?.addEventListener('change', async (e) => {
+      const files = Array.from(e.target.files || []);
+      if (!files.length) return;
+      const formData = new FormData();
+      files.forEach((file) => formData.append('files', file));
+      const res = await API.forum.uploadAttachments(formData);
+      if (res.success) {
+        this._composerAttachments = (this._composerAttachments || []).concat(res.data || []).slice(0, 4);
+        this._renderComposerAttachments();
+        App.showToast('附件上传成功', 'success');
+      } else {
+        App.showToast(res.error || '附件上传失败', 'error');
+      }
+      e.target.value = '';
+    });
     document.getElementById('forum-post-submit').addEventListener('click', async () => {
       const title = document.getElementById('forum-post-title')?.value?.trim();
-      const content = document.getElementById('forum-post-content')?.value?.trim();
-      if (!title || !content) return App.showToast('请填寫标题和内容', 'warning');
-      const r = await API.forum.createPost({ title, content });
+      const content = document.getElementById('forum-post-content')?.innerHTML?.trim();
+      const category = document.getElementById('forum-post-category')?.value || 'general';
+      const tags = Array.from(document.querySelectorAll('.forum-tag-picker input:checked')).map((item) => item.value);
+      if (!title || !content) return App.showToast('请填写标题和内容', 'warning');
+      const r = await API.forum.createPost({ title, content, category, tags, attachments: this._composerAttachments });
       if (r.success) {
         App.hideModal();
-        App.showToast('发布成功', 'success');
+        App.showToast(r.message || '发布成功', 'success');
         window.location.hash = `#/forum/${r.data?.id || ''}`;
         if (r.data?.id) this.renderPost(r.data.id);
         else this.renderList();
       } else App.showToast(r.error || '发布失败', 'error');
+    });
+  },
+
+  _renderComposerAttachments() {
+    const wrap = document.getElementById('forum-uploaded-files');
+    if (!wrap) return;
+    if (!this._composerAttachments.length) {
+      wrap.innerHTML = '';
+      return;
+    }
+    wrap.innerHTML = this._composerAttachments.map((item, index) => `
+      <div class="forum-upload-item">
+        <span><i class="fas fa-paperclip"></i> ${App._escHtml(item.name || '附件')}</span>
+        <button type="button" class="btn btn-danger btn-xs forum-remove-upload" data-index="${index}">移除</button>
+      </div>
+    `).join('');
+    wrap.querySelectorAll('.forum-remove-upload').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this._composerAttachments.splice(Number(btn.dataset.index), 1);
+        this._renderComposerAttachments();
+      });
+    });
+  },
+
+  async _showReportModal(postId) {
+    await this._ensureMeta();
+    App.showModal(`
+      <div class="modal-header"><h3>举报帖子</h3><button type="button" class="modal-close" onclick="App.hideModal()">&times;</button></div>
+      <div class="modal-body">
+        <div class="form-group"><label>举报原因</label><select id="forum-report-reason" class="form__select">${(this._meta.report_reasons || []).map((item) => `<option value="${App._escHtml(item)}">${App._escHtml(item)}</option>`).join('')}</select></div>
+        <div class="form-group"><label>补充说明</label><textarea id="forum-report-detail" class="form-input" rows="4" placeholder="可选，最多 300 字"></textarea></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="App.hideModal()">取消</button>
+        <button type="button" class="btn btn-primary" id="forum-report-submit">提交举报</button>
+      </div>
+    `);
+    document.getElementById('forum-report-submit')?.addEventListener('click', async () => {
+      const reason = document.getElementById('forum-report-reason')?.value || '';
+      const detail = document.getElementById('forum-report-detail')?.value?.trim() || '';
+      const res = await API.forum.reportPost(postId, { reason, detail });
+      if (res.success) {
+        App.hideModal();
+        App.showToast(res.message || '举报已提交', 'success');
+      } else {
+        App.showToast(res.error || '举报失败', 'error');
+      }
     });
   },
 

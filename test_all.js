@@ -17,6 +17,8 @@ let adminUser = null;
 let studentPrimaryToken = null;
 let studentSecondaryToken = null;
 let studentTertiaryToken = null;
+let forumTestPostId = null;
+let forumTestReplyId = null;
 
 // ========== HTTP ==========
 function request(method, path, opts = {}) {
@@ -480,9 +482,196 @@ async function runAllTests() {
   }
 
   // =====================================================
-  // 4. 管理员功能
+  // 4. 论坛功能
   // =====================================================
-  console.log('\n━━━ 4. 管理员功能（需登录token） ━━━');
+  console.log('\n━━━ 4. 论坛功能 ━━━');
+
+  await test('论坛', 'GET /api/forum/meta', async () => {
+    const res = await request('GET', '/api/forum/meta');
+    if (res.status !== 200) return `状态码 ${res.status}`;
+    if (!Array.isArray(res.body?.data?.categories)) return '分类数据缺失';
+    console.log(` (分类${res.body.data.categories.length}项, 标签${res.body.data.tags?.length || 0}项)`);
+    return true;
+  });
+
+  await test('论坛', 'GET /api/forum/posts', async () => {
+    const res = await request('GET', '/api/forum/posts?page=1&limit=5');
+    if (res.status !== 200) return `状态码 ${res.status}`;
+    if (!Array.isArray(res.body?.data?.list)) return '帖子列表不是数组';
+    console.log(` (列表${res.body.data.list.length}条, total:${res.body.data.total || 0})`);
+    return true;
+  });
+
+  if (adminToken && studentPrimaryToken && studentSecondaryToken && studentTertiaryToken) {
+    const primaryProfile = await request('GET', '/api/student/profile', { token: studentPrimaryToken });
+    const secondaryProfile = await request('GET', '/api/student/profile', { token: studentSecondaryToken });
+    const tertiaryProfile = await request('GET', '/api/student/profile', { token: studentTertiaryToken });
+    const preflightUserIds = [primaryProfile.body?.data?.id, secondaryProfile.body?.data?.id, tertiaryProfile.body?.data?.id].filter(Boolean);
+    for (const userId of preflightUserIds) {
+      await request('PUT', `/api/forum/admin/users/${userId}/mute`, {
+        token: adminToken,
+        body: { duration_hours: 0 }
+      });
+    }
+
+    const postStamp = Date.now();
+    const postTitle = `论坛联调测试帖-${postStamp}`;
+    const replyContent = `论坛联调评论-${postStamp}`;
+    const forumAuthorToken = studentTertiaryToken;
+    const forumViewerToken = studentSecondaryToken;
+    const forumActorToken = studentPrimaryToken;
+
+    await test('论坛', '学生发布待审帖子', async () => {
+      const res = await request('POST', '/api/forum/posts', {
+        token: forumAuthorToken,
+        body: {
+          title: postTitle,
+          content: `<p>${replyContent} 正文 <strong>加粗</strong></p>`,
+          category: 'general',
+          tags: ['报名', '赛程'],
+          attachments: []
+        }
+      });
+      if (res.status !== 200 || !res.body?.success) return `发帖失败: ${JSON.stringify(res.body).slice(0, 120)}`;
+      forumTestPostId = res.body?.data?.id || null;
+      if (!forumTestPostId) return '返回缺少帖子ID';
+      if (res.body?.data?.status !== 'pending') return `预期 pending，实际 ${res.body?.data?.status}`;
+      console.log(` (post:${forumTestPostId})`);
+      return true;
+    });
+
+    await test('论坛', '管理员审核通过帖子', async () => {
+      if (!forumTestPostId) return '缺少帖子ID';
+      const res = await request('PUT', `/api/forum/admin/posts/${forumTestPostId}/audit`, {
+        token: adminToken,
+        body: { action: 'approve', comment: '自动化测试通过' }
+      });
+      if (res.status !== 200 || !res.body?.success) return `审核失败: ${JSON.stringify(res.body).slice(0, 120)}`;
+      return true;
+    });
+
+    await test('论坛', '帖子详情可见且支持互动状态', async () => {
+      if (!forumTestPostId) return '缺少帖子ID';
+      const res = await request('GET', `/api/forum/posts/${forumTestPostId}`, { token: forumViewerToken });
+      if (res.status !== 200) return `状态码 ${res.status}`;
+      if (Number(res.body?.data?.post?.id) !== Number(forumTestPostId)) return '帖子详情返回异常';
+      return true;
+    });
+
+    await test('论坛', '第二学生点赞与收藏帖子', async () => {
+      if (!forumTestPostId) return '缺少帖子ID';
+      const likeRes = await request('POST', `/api/forum/posts/${forumTestPostId}/like`, {
+        token: forumViewerToken,
+        body: {}
+      });
+      const favRes = await request('POST', `/api/forum/posts/${forumTestPostId}/favorite`, {
+        token: forumViewerToken,
+        body: {}
+      });
+      if (likeRes.status !== 200 || !likeRes.body?.data?.liked) return `点赞失败: ${JSON.stringify(likeRes.body).slice(0, 120)}`;
+      if (favRes.status !== 200 || !favRes.body?.data?.favorited) return `收藏失败: ${JSON.stringify(favRes.body).slice(0, 120)}`;
+      return true;
+    });
+
+    await test('论坛', '第二学生提交待审评论', async () => {
+      if (!forumTestPostId) return '缺少帖子ID';
+      const res = await request('POST', `/api/forum/posts/${forumTestPostId}/replies`, {
+        token: forumActorToken,
+        body: { content: `<p>${replyContent}</p>` }
+      });
+      if (res.status !== 200 || !res.body?.success) return `评论失败: ${JSON.stringify(res.body).slice(0, 120)}`;
+      return true;
+    });
+
+    await test('论坛', '管理员审核通过评论', async () => {
+      const pendingRes = await request('GET', '/api/forum/admin/replies/pending', { token: adminToken });
+      if (pendingRes.status !== 200) return `获取待审评论失败: ${pendingRes.status}`;
+      const reply = (pendingRes.body?.data || []).find((item) => Number(item.post_id) === Number(forumTestPostId) && String(item.content || '').includes(replyContent));
+      if (!reply) return '未找到刚提交的待审评论';
+      forumTestReplyId = reply.id;
+      const auditRes = await request('PUT', `/api/forum/admin/replies/${reply.id}/audit`, {
+        token: adminToken,
+        body: { action: 'approve', comment: '自动化测试通过' }
+      });
+      if (auditRes.status !== 200 || !auditRes.body?.success) return `评论审核失败: ${JSON.stringify(auditRes.body).slice(0, 120)}`;
+      return true;
+    });
+
+    await test('论坛', '评论审核后详情页可见', async () => {
+      if (!forumTestPostId) return '缺少帖子ID';
+      const res = await request('GET', `/api/forum/posts/${forumTestPostId}`, { token: forumAuthorToken });
+      if (res.status !== 200) return `状态码 ${res.status}`;
+      const hasReply = Array.isArray(res.body?.data?.replies) && res.body.data.replies.some((item) => Number(item.id) === Number(forumTestReplyId));
+      if (!hasReply) return '审核通过的评论未出现在详情页';
+      return true;
+    });
+
+    await test('论坛', '第二学生举报帖子', async () => {
+      if (!forumTestPostId) return '缺少帖子ID';
+      const res = await request('POST', `/api/forum/posts/${forumTestPostId}/report`, {
+        token: forumActorToken,
+        body: { reason: '广告灌水', detail: '自动化测试举报流程' }
+      });
+      if (res.status !== 200 || !res.body?.success) return `举报失败: ${JSON.stringify(res.body).slice(0, 120)}`;
+      return true;
+    });
+
+    await test('论坛', '管理员处理举报并触发禁言', async () => {
+      const statsRes = await request('GET', '/api/forum/admin/stats', { token: adminToken });
+      if (statsRes.status !== 200) return `获取论坛统计失败: ${statsRes.status}`;
+      const report = (statsRes.body?.data?.reports || []).find((item) => Number(item.post_id) === Number(forumTestPostId) && item.status === 'pending');
+      if (!report) return '未找到待处理举报';
+      const handleRes = await request('PUT', `/api/forum/admin/reports/${report.id}/handle`, {
+        token: adminToken,
+        body: { action: 'resolve', post_action: 'none', mute_user_hours: 1, comment: '自动化测试处理' }
+      });
+      if (handleRes.status !== 200 || !handleRes.body?.success) return `处理举报失败: ${JSON.stringify(handleRes.body).slice(0, 120)}`;
+      return true;
+    });
+
+    await test('论坛', '被禁言用户无法继续发帖', async () => {
+      const res = await request('POST', '/api/forum/posts', {
+        token: forumAuthorToken,
+        body: {
+          title: `禁言校验帖-${Date.now()}`,
+          content: '<p>禁言状态发帖校验</p>',
+          category: 'general',
+          tags: ['规则']
+        }
+      });
+      if (res.status !== 403) return `预期 403，实际 ${res.status}`;
+      if (!String(res.body?.error || '').includes('禁言')) return `错误信息异常: ${JSON.stringify(res.body).slice(0, 120)}`;
+      return true;
+    });
+
+    await test('论坛', '管理员解除禁言', async () => {
+      const profile = await request('GET', '/api/student/profile', { token: forumAuthorToken });
+      const userId = profile.body?.data?.id;
+      if (!userId) return '未获取到被禁言用户ID';
+      const res = await request('PUT', `/api/forum/admin/users/${userId}/mute`, {
+        token: adminToken,
+        body: { duration_hours: 0 }
+      });
+      if (res.status !== 200 || !res.body?.success) return `解除禁言失败: ${JSON.stringify(res.body).slice(0, 120)}`;
+      return true;
+    });
+
+    await test('论坛', '管理员清理自动化测试帖子', async () => {
+      if (!forumTestPostId) return '缺少帖子ID';
+      const res = await request('DELETE', `/api/forum/posts/${forumTestPostId}`, { token: adminToken });
+      if (res.status !== 200 || !res.body?.success) return `清理失败: ${JSON.stringify(res.body).slice(0, 120)}`;
+      return true;
+    });
+  } else {
+    for (const name of ['GET meta','GET posts','create post','approve post','detail','like/favorite','reply','approve reply','report','handle report','mute verify','unmute','cleanup']) {
+      await testSkip('论坛', name, '缺少管理员或学生 token');
+    }
+  }
+
+  // =====================================================
+  // 5. 管理员功能
+  // =====================================================
+  console.log('\n━━━ 5. 管理员功能（需登录token） ━━━');
 
   if (adminToken) {
     const adminEndpoints = [
@@ -513,9 +702,9 @@ async function runAllTests() {
   }
 
   // =====================================================
-  // 5. 前端页面
+  // 6. 前端页面
   // =====================================================
-  console.log('\n━━━ 5. 前端页面 ━━━');
+  console.log('\n━━━ 6. 前端页面 ━━━');
 
   const pages = [
     { path: '/', name: '首页' },

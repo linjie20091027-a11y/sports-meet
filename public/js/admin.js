@@ -40,6 +40,9 @@ const Admin = {
             <li class="admin-menu-item" data-tab="announcements" style="display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;font-size:0.875rem;color:#6b7280;transition:all 150ms;border-left:3px solid transparent;">
               <i class="fas fa-bullhorn" style="width:18px;text-align:center;"></i> 公告管理
             </li>
+            <li class="admin-menu-item" data-tab="forum" style="display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;font-size:0.875rem;color:#6b7280;transition:all 150ms;border-left:3px solid transparent;">
+              <i class="fas fa-comments" style="width:18px;text-align:center;"></i> 论坛管理
+            </li>
             <li class="admin-menu-item" data-tab="settings" style="display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;font-size:0.875rem;color:#6b7280;transition:all 150ms;border-left:3px solid transparent;">
               <i class="fas fa-cog" style="width:18px;text-align:center;"></i> 系统设置
             </li>
@@ -105,6 +108,7 @@ const Admin = {
       case 'results': this.renderResults(content); break;
       case 'stats': this.renderStats(content); break;
       case 'announcements': this.renderAnnouncements(content); break;
+      case 'forum': this.renderForumManagement(content); break;
       case 'settings': this.renderSettings(content); break;
       case 'logs': this.renderLogs(content); break;
       case 'grades': this._renderGrades(content); break;
@@ -159,6 +163,152 @@ const Admin = {
   // 生成空状态 HTML
   _emptyState(icon, title, desc) {
     return '<div class="empty-state"><div class="empty-state__icon"><i class="' + (icon || 'fas fa-inbox') + '"></i></div><div class="empty-state__title">' + (title || '暂无数据') + '</div>' + (desc ? '<div class="empty-state__desc">' + desc + '</div>' : '') + '</div>';
+  },
+
+  _normalizeFilterValues(value) {
+    if (Array.isArray(value)) return [...new Set(value.map((item) => String(item || '').trim()).filter(Boolean))];
+    if (!value) return [];
+    return [...new Set(String(value).split(',').map((item) => item.trim()).filter(Boolean))];
+  },
+
+  _escapeRegExp(value) {
+    return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  },
+
+  _buildGradeClassDictionary(raw) {
+    const grades = (raw?.grades || []).slice().sort((a, b) => {
+      if ((a.sort_order || 0) !== (b.sort_order || 0)) return (a.sort_order || 0) - (b.sort_order || 0);
+      return String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hans-CN-u-co-pinyin');
+    });
+    const classes = (raw?.classes || []).slice().sort((a, b) => {
+      const gradeDiff = (a.grade_sort_order || 0) - (b.grade_sort_order || 0);
+      if (gradeDiff !== 0) return gradeDiff;
+      const sortDiff = (a.sort_order || 0) - (b.sort_order || 0);
+      if (sortDiff !== 0) return sortDiff;
+      return String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hans-CN-u-co-pinyin');
+    });
+    return { grades, classes };
+  },
+
+  _getLinkedClasses(dictionary, gradeNames) {
+    const selectedGrades = this._normalizeFilterValues(gradeNames);
+    if (!selectedGrades.length) return (dictionary?.classes || []).slice();
+    return (dictionary?.classes || []).filter((item) => selectedGrades.includes(item.grade_name));
+  },
+
+  _setSelectMode(select, isMulti, placeholder) {
+    if (!select) return;
+    select.multiple = !!isMulti;
+    select.size = isMulti ? Math.min(6, Math.max(3, select.options.length || 3)) : 1;
+    if (!isMulti) {
+      const hasPlaceholder = select.options.length && select.options[0].value === '';
+      if (!hasPlaceholder) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = placeholder || '全部';
+        select.insertBefore(option, select.firstChild);
+      }
+    } else if (select.options.length && select.options[0].value === '') {
+      select.remove(0);
+    }
+  },
+
+  _setSelectValues(select, values) {
+    if (!select) return;
+    const selectedValues = this._normalizeFilterValues(values);
+    Array.from(select.options).forEach((option) => {
+      option.selected = selectedValues.includes(option.value);
+    });
+    if (!select.multiple && !selectedValues.length) select.value = '';
+  },
+
+  _getSelectValues(select) {
+    if (!select) return [];
+    return Array.from(select.selectedOptions || [])
+      .map((option) => String(option.value || '').trim())
+      .filter(Boolean);
+  },
+
+  _renderGradeClassPicker(prefix, dictionary, state, options = {}) {
+    const gradeSelect = document.getElementById(prefix + '-grade');
+    const classSelect = document.getElementById(prefix + '-class');
+    const gradeMulti = document.getElementById(prefix + '-grade-multi');
+    const classMulti = document.getElementById(prefix + '-class-multi');
+    if (!gradeSelect || !classSelect) return;
+
+    const gradeValues = this._normalizeFilterValues(state.grade);
+    const classValues = this._normalizeFilterValues(state.class_name);
+    const gradeSingleLabel = options.gradeSingleLabel || '全部年级';
+    const classSingleLabel = options.classSingleLabel || '全部班级';
+
+    gradeSelect.innerHTML = '';
+    if (!(gradeMulti && gradeMulti.checked)) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = gradeSingleLabel;
+      gradeSelect.appendChild(option);
+    }
+    (dictionary.grades || []).forEach((item) => {
+      const option = document.createElement('option');
+      option.value = item.name;
+      option.textContent = item.name;
+      gradeSelect.appendChild(option);
+    });
+    this._setSelectMode(gradeSelect, !!(gradeMulti && gradeMulti.checked), gradeSingleLabel);
+    this._setSelectValues(gradeSelect, gradeValues);
+
+    const linkedClasses = this._getLinkedClasses(dictionary, gradeValues);
+    const linkedSet = new Set(linkedClasses.map((item) => item.name));
+    const nextClassValues = classValues.filter((item) => linkedSet.has(item));
+    state.class_name = nextClassValues;
+
+    classSelect.innerHTML = '';
+    if (!(classMulti && classMulti.checked)) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = classSingleLabel;
+      classSelect.appendChild(option);
+    }
+    linkedClasses.forEach((item) => {
+      const option = document.createElement('option');
+      option.value = item.name;
+      option.textContent = item.grade_name ? item.grade_name + ' / ' + item.name : item.name;
+      classSelect.appendChild(option);
+    });
+    this._setSelectMode(classSelect, !!(classMulti && classMulti.checked), classSingleLabel);
+    this._setSelectValues(classSelect, nextClassValues);
+
+    const hint = document.getElementById(prefix + '-link-hint');
+    if (hint) {
+      hint.textContent = gradeValues.length ? '已按所选年级联动展示 ' + linkedClasses.length + ' 个班级' : '未选择年级时显示全部班级';
+    }
+  },
+
+  _bindGradeClassPicker(prefix, dictionary, state, options = {}) {
+    const applyGradeChange = () => {
+      const gradeSelect = document.getElementById(prefix + '-grade');
+      state.grade = this._getSelectValues(gradeSelect);
+      this._renderGradeClassPicker(prefix, dictionary, state, options);
+    };
+    const applyClassChange = () => {
+      const classSelect = document.getElementById(prefix + '-class');
+      state.class_name = this._getSelectValues(classSelect);
+    };
+
+    document.getElementById(prefix + '-grade-multi')?.addEventListener('change', () => {
+      state.grade = state.grade.slice(0, 1);
+      this._renderGradeClassPicker(prefix, dictionary, state, options);
+      applyGradeChange();
+    });
+    document.getElementById(prefix + '-class-multi')?.addEventListener('change', () => {
+      state.class_name = state.class_name.slice(0, 1);
+      this._renderGradeClassPicker(prefix, dictionary, state, options);
+      applyClassChange();
+    });
+    document.getElementById(prefix + '-grade')?.addEventListener('change', applyGradeChange);
+    document.getElementById(prefix + '-class')?.addEventListener('change', applyClassChange);
+
+    this._renderGradeClassPicker(prefix, dictionary, state, options);
   },
 
   // ==================== 控制台 ====================
@@ -763,7 +913,7 @@ const Admin = {
   // ==================== 报名管理 ====================
   _regPage: 1,
   _regLimit: 20,
-  _regFilters: { class_name: '', gender: '', event_id: '', status: '' },
+  _regFilters: { grade: [], class_name: [], grade_multi: true, class_multi: true, gender: '', event_id: '', status: '' },
   _regFilterData: null,
 
   async renderRegistrations(container) {
@@ -794,7 +944,8 @@ const Admin = {
     const bar = container.querySelector('#reg-filter-bar');
     const f = this._regFilters;
     const labels = [];
-    if (f.class_name) labels.push('班级：' + f.class_name);
+    if (f.grade.length) labels.push('年级：' + f.grade.join('、'));
+    if (f.class_name.length) labels.push('班级：' + f.class_name.join('、'));
     if (f.gender) labels.push('性别：' + (f.gender === 'male' ? '男' : '女'));
     if (f.status) labels.push('状态：' + ({pending:'待审核',approved:'已通过',rejected:'已驳回'}[f.status] || f.status));
     if (f.event_id && this._regFilterData) {
@@ -806,7 +957,7 @@ const Admin = {
       ${labels.length > 0 ? '<span class="text-sm" style="color:var(--red);margin-left:8px">当前筛选：' + labels.join(' / ') + ' <a href="javascript:void(0)" id="btn-reg-clear" style="color:var(--text3)">[清除]</a></span>' : ''}
     `;
     bar.querySelector('#btn-reg-clear')?.addEventListener('click', () => {
-      this._regFilters = { class_name: '', gender: '', event_id: '', status: '' };
+      this._regFilters = { grade: [], class_name: [], grade_multi: true, class_multi: true, gender: '', event_id: '', status: '' };
       this._regPage = 1;
       this._renderRegFilter(container);
       this._loadRegistrations(container);
@@ -820,15 +971,12 @@ const Admin = {
         const gradesRes = await API.public.getGrades();
         const eventsRes = await API.get('/admin/events');
         this._regFilterData = {
-          classes: (gradesRes.data && gradesRes.data.classes) ? gradesRes.data.classes : [],
+          dictionary: this._buildGradeClassDictionary(gradesRes.data || {}),
           events: eventsRes.data || []
         };
       } catch (e) { App.showToast('加载筛选数据失败','error'); return; }
     }
     const f = this._regFilters;
-    const classOpts = this._regFilterData.classes.map(c =>
-      `<option value="${c.name}" ${f.class_name===c.name?'selected':''}>${c.name}</option>`
-    ).join('');
     const eventOpts = this._regFilterData.events.map(e =>
       `<option value="${e.id}" ${f.event_id==e.id?'selected':''}>${e.name}</option>`
     ).join('');
@@ -843,7 +991,17 @@ const Admin = {
     const html = `
       <div class="modal-header"><h3>报名筛选</h3><button class="modal-close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>
       <div class="modal-body">
-        <div class="form-group"><label>班级</label><select id="reg-filter-class" class="form__select"><option value="">全部班级</option>${classOpts}</select></div>
+        <div class="form-group">
+          <label>年级</label>
+          <label class="text-sm" style="display:flex;align-items:center;gap:6px;margin-bottom:6px;color:var(--text2);"><input type="checkbox" id="reg-filter-grade-multi" ${f.grade_multi ? 'checked' : ''}> 下拉多选</label>
+          <select id="reg-filter-grade" class="form__select"></select>
+        </div>
+        <div class="form-group">
+          <label>班级</label>
+          <label class="text-sm" style="display:flex;align-items:center;gap:6px;margin-bottom:6px;color:var(--text2);"><input type="checkbox" id="reg-filter-class-multi" ${f.class_multi ? 'checked' : ''}> 下拉多选</label>
+          <select id="reg-filter-class" class="form__select"></select>
+          <div class="form__hint" id="reg-filter-link-hint"></div>
+        </div>
         <div class="form-group"><label>性别</label><select id="reg-filter-gender" class="form__select">${genderOpts}</select></div>
         <div class="form-group"><label>项目</label><select id="reg-filter-event" class="form__select"><option value="">全部项目</option>${eventOpts}</select></div>
         <div class="form-group"><label>状态</label><select id="reg-filter-status" class="form__select">${statusOpts}</select></div>
@@ -853,14 +1011,23 @@ const Admin = {
         <button class="btn btn--primary btn--sm" id="btn-reg-filter-apply">确定筛选</button>
       </div>`;
     App.showModal(html);
+    const pickerState = {
+      grade: this._normalizeFilterValues(f.grade),
+      class_name: this._normalizeFilterValues(f.class_name)
+    };
+    this._bindGradeClassPicker('reg-filter', this._regFilterData.dictionary, pickerState);
 
     document.getElementById('btn-reg-filter-cancel').onclick = () => App.hideModal();
     document.getElementById('btn-reg-filter-apply').onclick = () => {
-      const className = document.getElementById('reg-filter-class')?.value || '';
+      const gradeValues = this._getSelectValues(document.getElementById('reg-filter-grade'));
+      const classValues = this._getSelectValues(document.getElementById('reg-filter-class'));
       const gender = document.getElementById('reg-filter-gender')?.value || '';
       const eventId = document.getElementById('reg-filter-event')?.value || '';
       const status = document.getElementById('reg-filter-status')?.value || '';
-      this._regFilters.class_name = className;
+      this._regFilters.grade = gradeValues;
+      this._regFilters.class_name = classValues;
+      this._regFilters.grade_multi = !!document.getElementById('reg-filter-grade-multi')?.checked;
+      this._regFilters.class_multi = !!document.getElementById('reg-filter-class-multi')?.checked;
       this._regFilters.gender = gender;
       this._regFilters.event_id = eventId;
       this._regFilters.status = status;
@@ -895,7 +1062,8 @@ const Admin = {
       App.showLoading();
       const f = this._regFilters;
       const params = { page: this._regPage, limit: this._regLimit };
-      if (f.class_name) params.class_name = f.class_name;
+      if (f.grade.length) params.grade = f.grade.join(',');
+      if (f.class_name.length) params.class_name = f.class_name.join(',');
       if (f.gender) params.gender = f.gender;
       if (f.event_id) params.event_id = f.event_id;
       if (f.status) params.status = f.status;
@@ -1413,7 +1581,7 @@ const Admin = {
   // ==================== 成绩管理 ====================
   _resultsPage: 1,
   _resultsLimit: 20,
-  _resultsFilters: { grade: '', class_name: '', event_id: '', award: '', is_published: '' },
+  _resultsFilters: { grade: [], class_name: [], grade_multi: true, class_multi: true, event_id: '', award: '', is_published: '' },
   _resultsFilterData: null,
   _resultDraftStorageKey: 'sportsMeet.admin.resultDrafts',
   _studentDirectoryCache: null,
@@ -1445,12 +1613,182 @@ const Admin = {
     this._bindResultsEvents(container);
   },
 
+  async renderForumManagement(container) {
+    container.innerHTML = '<div class="text-center p-8"><div class="spinner"></div><p class="text-muted mt-2">正在加载论坛管理数据...</p></div>';
+    try {
+      const [statsRes, postsRes, repliesRes] = await Promise.all([
+        API.forum.getAdminStats(),
+        API.forum.getAdminPosts({ status: 'pending', limit: 8 }),
+        API.forum.getPendingReplies()
+      ]);
+      const stats = statsRes.data || {};
+      const overview = stats.overview || {};
+      const pendingPosts = postsRes.data?.list || [];
+      const pendingReplies = repliesRes.data || [];
+      const reports = stats.reports || [];
+      const hotPosts = stats.hot_posts || [];
+
+      let html = '<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:20px">';
+      [
+        { label: '帖子总数', value: overview.total_posts || 0, icon: 'fa-file-lines' },
+        { label: '待审帖子', value: overview.pending_posts || 0, icon: 'fa-hourglass-half' },
+        { label: '已审帖子', value: overview.approved_posts || 0, icon: 'fa-circle-check' },
+        { label: '待审评论', value: overview.pending_replies || 0, icon: 'fa-comment-dots' },
+        { label: '待处理举报', value: overview.pending_reports || 0, icon: 'fa-flag' },
+        { label: '当前禁言', value: overview.muted_users || 0, icon: 'fa-user-lock' }
+      ].forEach((item) => {
+        html += `<div class="stat-card"><i class="fas ${item.icon}"></i><div class="stat-num">${item.value}</div><div class="stat-label">${item.label}</div></div>`;
+      });
+      html += '</div>';
+
+      html += '<div class="card-grid card-grid--2" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">';
+      html += '<div class="card"><div class="card__header"><h3 class="card__title">待审核帖子</h3></div><div class="card__body">';
+      if (pendingPosts.length) {
+        html += pendingPosts.map((post) => `
+          <div class="friend-card" style="margin-bottom:12px;">
+            <div class="friend-card__body">
+              <div class="friend-card__top"><strong>${this._escapeHtml(post.title)}</strong><small>${this._escapeHtml(post.author_name || '-')}</small></div>
+              <p>${this._escapeHtml(post.summary || '')}</p>
+              <div class="friend-card__actions">
+                <button class="btn btn--success btn--xs forum-admin-post-action" data-action="approve" data-id="${post.id}">通过</button>
+                <button class="btn btn--warning btn--xs forum-admin-post-action" data-action="reject" data-id="${post.id}">驳回</button>
+                <button class="btn btn--outline btn--xs forum-admin-post-action" data-action="feature" data-id="${post.id}">设为精华</button>
+                <button class="btn btn--danger btn--xs forum-admin-post-action" data-action="delete" data-id="${post.id}">删除</button>
+                <button class="btn btn--outline btn--xs forum-admin-mute-user" data-user-id="${post.user_id}">禁言作者</button>
+              </div>
+            </div>
+          </div>
+        `).join('');
+      } else {
+        html += this._emptyState('fas fa-check-circle', '暂无待审核帖子');
+      }
+      html += '</div></div>';
+
+      html += '<div class="card"><div class="card__header"><h3 class="card__title">待审核评论</h3></div><div class="card__body">';
+      if (pendingReplies.length) {
+        html += pendingReplies.map((reply) => `
+          <div class="friend-card friend-card--request" style="margin-bottom:12px;">
+            <div class="friend-card__body">
+              <div class="friend-card__top"><strong>${this._escapeHtml(reply.author_name || '-')}</strong><small>${this._escapeHtml(reply.post_title || '-')}</small></div>
+              <p>${this._escapeHtml(reply.content || '')}</p>
+              <div class="friend-card__actions">
+                <button class="btn btn--success btn--xs forum-admin-reply-action" data-action="approve" data-id="${reply.id}">通过</button>
+                <button class="btn btn--warning btn--xs forum-admin-reply-action" data-action="reject" data-id="${reply.id}">驳回</button>
+                <button class="btn btn--danger btn--xs forum-admin-reply-action" data-action="delete" data-id="${reply.id}">删除</button>
+              </div>
+            </div>
+          </div>
+        `).join('');
+      } else {
+        html += this._emptyState('fas fa-comment-slash', '暂无待审核评论');
+      }
+      html += '</div></div>';
+      html += '</div>';
+
+      html += '<div class="card" style="margin-top:20px;"><div class="card__header"><h3 class="card__title">举报与热帖概览</h3></div><div class="card__body">';
+      html += '<div class="detail-grid" style="margin-bottom:16px;">';
+      html += `<div><strong>待处理举报</strong><br>${reports.length} 条最新举报</div>`;
+      html += `<div><strong>热门帖子</strong><br>${hotPosts.length} 条互动热帖</div>`;
+      html += '</div>';
+      html += '<div class="table-container"><table class="table"><thead><tr><th>类型</th><th>标题/原因</th><th>状态</th><th>时间</th><th>操作</th></tr></thead><tbody>';
+      if (reports.length) {
+        reports.slice(0, 10).forEach((item) => {
+          const targetLabel = item.target_type === 'reply' ? '评论举报' : '帖子举报';
+          const actions = item.status === 'pending'
+            ? `<div class="table-actions">
+                 <button class="btn btn--warning btn--xs forum-admin-report-action" data-action="resolve" data-id="${item.id}">处理</button>
+                 <button class="btn btn--outline btn--xs forum-admin-report-action" data-action="dismiss" data-id="${item.id}">驳回</button>
+               </div>`
+            : '<span class="text-muted">已处理</span>';
+          html += `<tr><td>${this._escapeHtml(targetLabel)}</td><td>${this._escapeHtml((item.post_title || '帖子') + ' / ' + (item.reason || ''))}</td><td>${this._escapeHtml(item.status || '-')}</td><td>${this._escapeHtml(item.created_at || '-')}</td><td>${actions}</td></tr>`;
+        });
+      }
+      if (hotPosts.length) {
+        hotPosts.slice(0, 8).forEach((item) => {
+          html += `<tr><td>热帖</td><td>${this._escapeHtml(item.title || '-')}</td><td>点赞 ${item.like_count || 0} / 收藏 ${item.favorite_count || 0}</td><td>评论 ${item.reply_count || 0}</td><td><span class="text-muted">概览</span></td></tr>`;
+        });
+      }
+      if (!reports.length && !hotPosts.length) {
+        html += `<tr><td colspan="5">${this._emptyState('fas fa-table', '暂无论坛统计数据')}</td></tr>`;
+      }
+      html += '</tbody></table></div></div></div>';
+
+      container.innerHTML = html;
+      container.querySelectorAll('.forum-admin-post-action').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const action = btn.dataset.action;
+          const comment = action === 'reject' ? (window.prompt('请输入驳回原因') || '') : '';
+          const res = await API.forum.auditPost(btn.dataset.id, { action, comment });
+          if (res.success) {
+            App.showToast(res.message || '操作成功', 'success');
+            this.renderForumManagement(container);
+          } else App.showToast(res.error || '操作失败', 'error');
+        });
+      });
+      container.querySelectorAll('.forum-admin-reply-action').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const action = btn.dataset.action;
+          const comment = action === 'reject' ? (window.prompt('请输入驳回原因') || '') : '';
+          const res = await API.forum.auditReply(btn.dataset.id, { action, comment });
+          if (res.success) {
+            App.showToast(res.message || '操作成功', 'success');
+            this.renderForumManagement(container);
+          } else App.showToast(res.error || '操作失败', 'error');
+        });
+      });
+      container.querySelectorAll('.forum-admin-report-action').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const action = btn.dataset.action;
+          const comment = window.prompt(action === 'resolve' ? '请输入处理备注，可留空' : '请输入驳回备注，可留空', '') || '';
+          let postAction = 'none';
+          let muteHours = 0;
+          if (action === 'resolve') {
+            const postActionInput = window.prompt('请输入内容处理方式：none=仅结案，hide=隐藏内容，delete=删除内容', 'none');
+            if (postActionInput === null) return;
+            const normalizedAction = String(postActionInput || 'none').trim().toLowerCase();
+            if (!['none', 'hide', 'delete'].includes(normalizedAction)) {
+              App.showToast('内容处理方式无效', 'error');
+              return;
+            }
+            postAction = normalizedAction;
+            const muteInput = window.prompt('如需禁言请输入小时数，输入 0 表示不禁言', '0');
+            if (muteInput === null) return;
+            muteHours = Math.max(0, Number(muteInput) || 0);
+          }
+          const res = await API.forum.handleReport(btn.dataset.id, {
+            action,
+            comment,
+            post_action: postAction,
+            mute_user_hours: muteHours
+          });
+          if (res.success) {
+            App.showToast(res.message || '操作成功', 'success');
+            this.renderForumManagement(container);
+          } else App.showToast(res.error || '操作失败', 'error');
+        });
+      });
+      container.querySelectorAll('.forum-admin-mute-user').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const hours = window.prompt('请输入禁言小时数，输入 0 解除禁言', '24');
+          if (hours === null) return;
+          const res = await API.forum.muteUser(btn.dataset.userId, { duration_hours: Number(hours) || 0 });
+          if (res.success) {
+            App.showToast(res.message || '操作成功', 'success');
+            this.renderForumManagement(container);
+          } else App.showToast(res.error || '操作失败', 'error');
+        });
+      });
+    } catch (e) {
+      container.innerHTML = '<div class="empty-state"><p class="empty-state__desc">论坛管理加载失败：' + this._escapeHtml(e.message) + '</p></div>';
+    }
+  },
+
   _renderResultsFilter(container) {
     const bar = container.querySelector('#results-filter-bar');
     const f = this._resultsFilters;
     const labels = [];
-    if (f.grade) labels.push('年级：' + f.grade);
-    if (f.class_name) labels.push('班级：' + f.class_name);
+    if (f.grade.length) labels.push('年级：' + f.grade.join('、'));
+    if (f.class_name.length) labels.push('班级：' + f.class_name.join('、'));
     if (f.event_id && this._resultsFilterData) {
       const evt = this._resultsFilterData.events.find(e => e.id == f.event_id);
       if (evt) labels.push('项目：' + evt.name);
@@ -1462,7 +1800,7 @@ const Admin = {
       ${labels.length > 0 ? '<span class="text-sm" style="color:var(--red);margin-left:8px">当前筛选：' + labels.join(' / ') + ' <a href="javascript:void(0)" id="btn-results-clear" style="color:var(--text3)">[清除]</a></span>' : ''}
     `;
     bar.querySelector('#btn-results-clear')?.addEventListener('click', () => {
-      this._resultsFilters = { grade: '', class_name: '', event_id: '', award: '', is_published: '' };
+      this._resultsFilters = { grade: [], class_name: [], grade_multi: true, class_multi: true, event_id: '', award: '', is_published: '' };
       this._resultsPage = 1;
       this._renderResultsFilter(container);
       this._loadResults(container);
@@ -1476,15 +1814,12 @@ const Admin = {
         const gradesRes = await API.public.getGrades();
         const eventsRes = await API.get('/admin/events');
         this._resultsFilterData = {
-          classes: (gradesRes.data && gradesRes.data.classes) ? gradesRes.data.classes : [],
+          dictionary: this._buildGradeClassDictionary(gradesRes.data || {}),
           events: eventsRes.data || []
         };
       } catch (e) { App.showToast('加载筛选数据失败','error'); return; }
     }
     const f = this._resultsFilters;
-    const classOpts = this._resultsFilterData.classes.map(c =>
-      `<option value="${c.name}" ${f.class_name===c.name?'selected':''}>${c.name}</option>`
-    ).join('');
     const eventOpts = this._resultsFilterData.events.map(e =>
       `<option value="${e.id}" ${f.event_id==e.id?'selected':''}>${e.name}</option>`
     ).join('');
@@ -1500,8 +1835,17 @@ const Admin = {
     const html = `
       <div class="modal-header"><h3>成绩筛选</h3><button class="modal-close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>
       <div class="modal-body">
-        <div class="form-group"><label>年级</label><input type="text" id="results-filter-grade" class="form__input" placeholder="如：高一" value="${f.grade}"></div>
-        <div class="form-group"><label>班级</label><select id="results-filter-class" class="form__select"><option value="">全部班级</option>${classOpts}</select></div>
+        <div class="form-group">
+          <label>年级</label>
+          <label class="text-sm" style="display:flex;align-items:center;gap:6px;margin-bottom:6px;color:var(--text2);"><input type="checkbox" id="results-filter-grade-multi" ${f.grade_multi ? 'checked' : ''}> 下拉多选</label>
+          <select id="results-filter-grade" class="form__select"></select>
+        </div>
+        <div class="form-group">
+          <label>班级</label>
+          <label class="text-sm" style="display:flex;align-items:center;gap:6px;margin-bottom:6px;color:var(--text2);"><input type="checkbox" id="results-filter-class-multi" ${f.class_multi ? 'checked' : ''}> 下拉多选</label>
+          <select id="results-filter-class" class="form__select"></select>
+          <div class="form__hint" id="results-filter-link-hint"></div>
+        </div>
         <div class="form-group"><label>项目</label><select id="results-filter-event" class="form__select"><option value="">全部项目</option>${eventOpts}</select></div>
         <div class="form-group"><label>奖项</label><select id="results-filter-award" class="form__select">${awardOpts}</select></div>
         <div class="form-group"><label>公示状态</label><select id="results-filter-published" class="form__select">${publishOpts}</select></div>
@@ -1511,16 +1855,23 @@ const Admin = {
         <button class="btn btn--primary btn--sm" id="btn-results-filter-apply">确定筛选</button>
       </div>`;
     App.showModal(html);
+    const pickerState = {
+      grade: this._normalizeFilterValues(f.grade),
+      class_name: this._normalizeFilterValues(f.class_name)
+    };
+    this._bindGradeClassPicker('results-filter', this._resultsFilterData.dictionary, pickerState);
 
     document.getElementById('btn-results-filter-cancel').onclick = () => App.hideModal();
     document.getElementById('btn-results-filter-apply').onclick = () => {
-      const grade = document.getElementById('results-filter-grade')?.value?.trim() || '';
-      const className = document.getElementById('results-filter-class')?.value || '';
+      const grade = this._getSelectValues(document.getElementById('results-filter-grade'));
+      const className = this._getSelectValues(document.getElementById('results-filter-class'));
       const eventId = document.getElementById('results-filter-event')?.value || '';
       const award = document.getElementById('results-filter-award')?.value || '';
       const published = document.getElementById('results-filter-published')?.value;
       this._resultsFilters.grade = grade;
       this._resultsFilters.class_name = className;
+      this._resultsFilters.grade_multi = !!document.getElementById('results-filter-grade-multi')?.checked;
+      this._resultsFilters.class_multi = !!document.getElementById('results-filter-class-multi')?.checked;
       this._resultsFilters.event_id = eventId;
       this._resultsFilters.award = award;
       this._resultsFilters.is_published = published;
@@ -1545,8 +1896,8 @@ const Admin = {
       App.showLoading();
       const f = this._resultsFilters;
       const params = { page: this._resultsPage, limit: this._resultsLimit };
-      if (f.grade) params.grade = f.grade;
-      if (f.class_name) params.class_name = f.class_name;
+      if (f.grade.length) params.grade = f.grade.join(',');
+      if (f.class_name.length) params.class_name = f.class_name.join(',');
       if (f.event_id) params.event_id = f.event_id;
       if (f.award) params.award = f.award;
       if (f.is_published !== '') params.is_published = f.is_published;
@@ -1633,6 +1984,8 @@ const Admin = {
   _collectResultFormData() {
     return {
       schedule_id: document.getElementById('result-schedule') ? document.getElementById('result-schedule').value : '',
+      grade: document.getElementById('result-grade') ? document.getElementById('result-grade').value : '',
+      class_name: document.getElementById('result-class') ? document.getElementById('result-class').value : '',
       user_id: document.getElementById('result-user-id') ? document.getElementById('result-user-id').value : '',
       student_name: document.getElementById('result-student-name') ? document.getElementById('result-student-name').value : '',
       performance: document.getElementById('result-performance') ? document.getElementById('result-performance').value : '',
@@ -1644,6 +1997,8 @@ const Admin = {
 
   _applyResultFormData(data) {
     if (document.getElementById('result-schedule')) document.getElementById('result-schedule').value = data.schedule_id || document.getElementById('result-schedule').value;
+    if (document.getElementById('result-grade')) document.getElementById('result-grade').value = data.grade || '';
+    if (document.getElementById('result-class')) document.getElementById('result-class').value = data.class_name || '';
     if (document.getElementById('result-user-id')) document.getElementById('result-user-id').value = data.user_id || '';
     if (document.getElementById('result-student-name')) document.getElementById('result-student-name').value = data.student_name || '';
     if (document.getElementById('result-performance')) document.getElementById('result-performance').value = data.performance || '';
@@ -1657,6 +2012,8 @@ const Admin = {
   _serializeResultForm(data) {
     return JSON.stringify({
       schedule_id: String(data.schedule_id || ''),
+      grade: String(data.grade || ''),
+      class_name: String(data.class_name || ''),
       user_id: String(data.user_id || ''),
       student_name: String(data.student_name || ''),
       performance: String(data.performance || ''),
@@ -1684,11 +2041,11 @@ const Admin = {
   _sanitizeResultDraftData(raw) {
     return {
       schedule_id: String(raw.schedule_id || '').replace(/[^\d]/g, '').slice(0, 10),
+      grade: String(raw.grade || '').replace(/[<>{}\[\]$^|~`]/g, '').slice(0, 50),
+      class_name: String(raw.class_name || '').replace(/[<>{}\[\]$^|~`]/g, '').slice(0, 50),
       user_id: String(raw.user_id || '').replace(/[^\d]/g, '').slice(0, 10),
       student_name: String(raw.student_name || '').replace(/[<>{}\[\]$^|~`]/g, '').slice(0, 50),
       student_id: String(raw.student_id || '').replace(/[<>{}\[\]$^|~`]/g, '').slice(0, 30),
-      class_name: String(raw.class_name || '').replace(/[<>{}\[\]$^|~`]/g, '').slice(0, 50),
-      grade: String(raw.grade || '').replace(/[<>{}\[\]$^|~`]/g, '').slice(0, 50),
       performance: String(raw.performance || '').toUpperCase().replace(/[^0-9A-Z:.]/g, '').slice(0, 20),
       award: String(raw.award || ''),
       note: String(raw.note || '').replace(/[<>{}\[\]$^|~`]/g, '').slice(0, 500),
@@ -1703,6 +2060,8 @@ const Admin = {
     const performancePattern = /^(?:\d{1,2}:\d{1,2}(?:\.\d{1,3})?|\d{1,5}(?:\.\d{1,3})?|DNS|DNF|DQ|NM)$/i;
 
     if (strict && !data.schedule_id) errors.schedule = '请选择赛程';
+    if (strict && !data.grade) errors.grade = '请选择年级';
+    if (strict && !data.class_name) errors.class = '请选择班级';
     if (strict && !data.student_name) errors['student-name'] = '请输入并选择学生姓名';
     if (strict && !data.user_id) errors['student-name'] = '请选择有效的学生账号';
     if (data.user_id && (!/^\d+$/.test(data.user_id) || Number(data.user_id) <= 0)) errors['student-name'] = '学生账号映射无效，请重新选择';
@@ -1812,9 +2171,10 @@ const Admin = {
     this._renderStudentPickerShell('选择班级', '<div style="padding:24px;text-align:center;color:#6b7280;"><div class="spinner" style="margin:0 auto 12px;"></div><div>正在加载班级列表...</div></div>');
     try {
       const directory = await this._getStudentDirectory(false);
-      const classes = directory.classes || [];
+      const selectedGrade = document.getElementById('result-grade')?.value || '';
+      const classes = (directory.classes || []).filter((item) => !selectedGrade || item.grade_name === selectedGrade);
       if (classes.length === 0) {
-        this._renderStudentPickerShell('选择班级', this._emptyState('fas fa-users', '暂无班级', '请先在年级班级管理中添加班级'));
+        this._renderStudentPickerShell('选择班级', this._emptyState('fas fa-users', '暂无班级', selectedGrade ? '当前年级下暂无班级，请重新选择年级' : '请先在年级班级管理中添加班级'));
         return;
       }
       let html = '<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:12px;">';
@@ -1828,6 +2188,8 @@ const Admin = {
       this._renderStudentPickerShell('选择班级', html);
       document.querySelectorAll('.student-class-option').forEach((btn) => {
         btn.addEventListener('click', () => {
+          if (document.getElementById('result-grade')) document.getElementById('result-grade').value = btn.dataset.gradeName || '';
+          if (document.getElementById('result-class')) document.getElementById('result-class').value = btn.dataset.className || '';
           this._openStudentListPicker({
             class_name: btn.dataset.className,
             grade_name: btn.dataset.gradeName
@@ -1916,13 +2278,30 @@ const Admin = {
   _bindResultStudentSearch() {
     const input = document.getElementById('result-student-name');
     const hiddenId = document.getElementById('result-user-id');
+    const gradeInput = document.getElementById('result-grade');
+    const classInput = document.getElementById('result-class');
     if (!input || !hiddenId) return;
     input.readOnly = true;
-    input.addEventListener('click', () => this._openStudentClassPicker());
+    input.addEventListener('click', () => {
+      if (!gradeInput?.value) {
+        this._setResultFieldError('grade', '请选择年级');
+        App.showToast('请先选择年级', 'warning');
+        return;
+      }
+      if (!classInput?.value) {
+        this._setResultFieldError('class', '请选择班级');
+        App.showToast('请先选择班级', 'warning');
+        return;
+      }
+      this._openStudentListPicker({
+        class_name: classInput.value,
+        grade_name: gradeInput.value
+      });
+    });
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        this._openStudentClassPicker();
+        input.click();
       }
     });
   },
@@ -1976,6 +2355,8 @@ const Admin = {
   _runResultValidation(strict) {
     const validation = this._validateResultForm(this._collectResultFormData(), { strict });
     this._setResultFieldError('schedule', validation.errors.schedule || '');
+    this._setResultFieldError('grade', validation.errors.grade || '');
+    this._setResultFieldError('class', validation.errors.class || '');
     this._setResultFieldError('student-name', validation.errors['student-name'] || '');
     this._setResultFieldError('performance', validation.errors.performance || '');
     this._setResultFieldError('note', validation.errors.note || '');
@@ -2012,8 +2393,10 @@ const Admin = {
     let html = '<div class="modal__header"><h3 class="modal__title">' + title + '</h3><button class="modal__close" id="btn-close-result-modal"><i class="fas fa-times"></i></button></div>';
     html += '<div class="modal__body"><div class="form">';
     html += '<div class="form__group"><label class="form__label form__label--required">赛程</label><select class="form__select" id="result-schedule">' + schedOpts + '</select><div class="form__hint" id="result-schedule-error" style="display:none;color:#dc2626;"></div></div>';
+      html += '<div class="form__group"><label class="form__label form__label--required">年级</label><select class="form__select" id="result-grade"></select><div class="form__hint">年级数据同步自学校教务字典</div><div class="form__hint" id="result-grade-error" style="display:none;color:#dc2626;"></div></div>';
+      html += '<div class="form__group"><label class="form__label form__label--required">班级</label><select class="form__select" id="result-class"></select><div class="form__hint">选择年级后自动筛出对应班级</div><div class="form__hint" id="result-class-error" style="display:none;color:#dc2626;"></div></div>';
     html += '<input type="hidden" id="result-user-id" value="' + this._escapeHtml(initialData.user_id) + '">';
-    html += '<div class="form__group"><label class="form__label form__label--required">学生姓名</label><input class="form__input" id="result-student-name" placeholder="点击选择班级和学生" autocomplete="off" readonly value="' + this._escapeHtml(initialData.student_name) + '"><div class="form__hint" id="result-selected-student" style="display:none;"></div><div class="form__hint">点击学生姓名字段后，先选择班级，再选择该班学生</div><div class="form__hint" id="result-student-name-error" style="display:none;color:#dc2626;"></div></div>';
+    html += '<div class="form__group"><label class="form__label form__label--required">学生姓名</label><input class="form__input" id="result-student-name" placeholder="请先选择年级和班级，再点击选择学生" autocomplete="off" readonly value="' + this._escapeHtml(initialData.student_name) + '"><div class="form__hint" id="result-selected-student" style="display:none;"></div><div class="form__hint">点击学生姓名字段后，只会展示当前年级和班级下的学生</div><div class="form__hint" id="result-student-name-error" style="display:none;color:#dc2626;"></div></div>';
     html += '<div class="form__group"><label class="form__label form__label--required">成绩</label><input class="form__input" id="result-performance" placeholder="如: 12.34、1:23.45、DNS" value="' + this._escapeHtml(initialData.performance) + '"><div class="form__hint">支持纯数字、时间格式，或 DNS / DNF / DQ / NM</div><div class="form__hint" id="result-performance-error" style="display:none;color:#dc2626;"></div></div>';
     html += '<div class="form__group"><label class="form__label">奖项</label><select class="form__select" id="result-award"><option value="">无</option><option value="一等"' + (initialData.award === '一等' ? ' selected' : '') + '>一等</option><option value="二等"' + (initialData.award === '二等' ? ' selected' : '') + '>二等</option><option value="三等"' + (initialData.award === '三等' ? ' selected' : '') + '>三等</option><option value="优秀"' + (initialData.award === '优秀' ? ' selected' : '') + '>优秀</option><option value="团体"' + (initialData.award === '团体' ? ' selected' : '') + '>团体</option></select></div>';
     html += '<div class="form__group"><label class="form__label form__label--required">输入备注</label><textarea class="form__textarea" id="result-note" rows="4" placeholder="请输入补充说明，最多500字">' + this._escapeHtml(initialData.note) + '</textarea><div style="display:flex;justify-content:space-between;gap:12px;"><div class="form__hint">支持中文、英文、数字及常用标点</div><div class="form__hint" id="result-note-counter">0/500</div></div><div class="form__hint" id="result-note-error" style="display:none;color:#dc2626;"></div></div>';
@@ -2045,11 +2428,46 @@ const Admin = {
     };
 
     const scheduleInput = document.getElementById('result-schedule');
+    const gradeInput = document.getElementById('result-grade');
+    const classInput = document.getElementById('result-class');
     const performanceInput = document.getElementById('result-performance');
     const noteInput = document.getElementById('result-note');
+    const studentDirectory = await this._getStudentDirectory(false);
+    const dictionary = this._buildGradeClassDictionary(studentDirectory);
+
+    const syncResultClassOptions = (preserveSelection) => {
+      const selectedGrade = gradeInput.value || '';
+      const classes = this._getLinkedClasses(dictionary, selectedGrade ? [selectedGrade] : []);
+      const previousClass = preserveSelection ? (classInput.value || initialData.class_name || '') : '';
+      classInput.innerHTML = '<option value="">请选择班级</option>';
+      classes.forEach((item) => {
+        const option = document.createElement('option');
+        option.value = item.name;
+        option.textContent = item.name;
+        classInput.appendChild(option);
+      });
+      classInput.value = classes.some((item) => item.name === previousClass) ? previousClass : '';
+    };
+    gradeInput.innerHTML = '<option value="">请选择年级</option>' + dictionary.grades.map((item) => '<option value="' + this._escapeHtml(item.name) + '">' + this._escapeHtml(item.name) + '</option>').join('');
+    gradeInput.value = initialData.grade || '';
+    syncResultClassOptions(true);
+    if (initialData.class_name) classInput.value = initialData.class_name;
 
     const handleLiveInput = () => this._runResultValidation(false);
     scheduleInput.addEventListener('change', handleLiveInput);
+    gradeInput.addEventListener('change', () => {
+      syncResultClassOptions(false);
+      document.getElementById('result-user-id').value = '';
+      document.getElementById('result-student-name').value = '';
+      this._updateSelectedStudentInfo({});
+      handleLiveInput();
+    });
+    classInput.addEventListener('change', () => {
+      document.getElementById('result-user-id').value = '';
+      document.getElementById('result-student-name').value = '';
+      this._updateSelectedStudentInfo({});
+      handleLiveInput();
+    });
     this._bindResultStudentSearch();
     performanceInput.addEventListener('input', () => {
       const sanitized = performanceInput.value.toUpperCase().replace(/[^0-9A-Z:.]/g, '').slice(0, 20);
