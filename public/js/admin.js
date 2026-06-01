@@ -1087,12 +1087,19 @@ const Admin = {
 
   async _loadRegStats(container) {
     try {
-      const list = this._regListData || [];
+      const f = this._regFilters;
+      const params = { limit: 99999 };
+      if (f.class_name) params.class_name = f.class_name;
+      if (f.gender) params.gender = f.gender;
+      if (f.event_id) params.event_id = f.event_id;
+      if (f.status) params.status = f.status;
+      const res = await API.admin.getRegistrations(params);
+      const list = (res.data?.list || res.data || []);
+      this._regAllData = list;
+
       const categoryMap = { track: '径赛', field: '田赛', relay: '接力', team: '集体' };
       const genderMap = { male: '男子', female: '女子', mixed: '混合' };
-      const statusLabel = { pending: '待审核', approved: '已通过', rejected: '已驳回' };
 
-      // 统计卡片
       const total = list.length;
       const pending = list.filter(r => r.status === 'pending').length;
       const approved = list.filter(r => r.status === 'approved').length;
@@ -1105,7 +1112,6 @@ const Admin = {
       statsHtml += `<div class="stat-card"><div class="stat-num" style="color:#dc2626">${rejected}</div><div class="stat-label">已驳回</div></div>`;
       statsHtml += '</div>';
 
-      // 按项目统计表
       const eventMap = {};
       list.forEach(r => {
         const key = r.event_name || '未知';
@@ -1128,7 +1134,6 @@ const Admin = {
       statsHtml += '</tbody></table>';
       container.querySelector('#reg-stats-table').innerHTML = statsHtml;
 
-      // 未报名学生
       try {
         const statsRes = await API.get('/admin/registrations/stats');
         const sData = statsRes.data || {};
