@@ -790,6 +790,8 @@ const App = {
         document.getElementById('home-results').innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无更多信息</p>';
       }
     } catch (e) {
+      console.error('renderHome error:', e);
+      this.showToast('首页加载异常，请刷新重试', 'error');
     }
   },
 
