@@ -206,24 +206,51 @@ const Admin = {
 
       container.innerHTML = html;
 
-      // 渲染图表
-      const eventRegs = d.event_registrations || [];
-      if (eventRegs.length > 0 && typeof Chart !== 'undefined') {
-        setTimeout(() => {
-          const ctx = document.getElementById('dash-chart');
-          if (ctx) new Chart(ctx, {
-            type: 'bar',
-            data: { labels: eventRegs.map(e=>e.name), datasets: [{label:'报名数',data:eventRegs.map(e=>e.count||0),backgroundColor:'#2d6a4f',borderRadius:4}] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
-          });
-        }, 200);
-      } else {
-        const chartEl = document.getElementById('dash-chart');
-        if (chartEl) chartEl.parentElement.innerHTML = '<p class="text-muted text-center">暂无报名数据</p>';
-      }
+      this._renderDashboardRegChart();
     } catch(e) {
       container.innerHTML = '<div class="empty-state"><p class="empty-state__desc">加载失败：' + e.message + '</p><button class="btn btn-outline mt-2" onclick="Admin.render()">重新加载</button></div>';
     }
+  },
+
+  async _renderDashboardRegChart() {
+    const canvas = document.getElementById('dash-chart');
+    if (!canvas || typeof Chart === 'undefined') return;
+    try {
+      const res = await API.admin.getRegistrations({ limit: 99999 });
+      const list = (res.data?.list || res.data || []);
+      if (list.length === 0) {
+        canvas.parentElement.innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无报名数据</p>';
+        return;
+      }
+      const eventMap = {};
+      list.forEach(r => {
+        const key = r.event_name || '未知项目';
+        eventMap[key] = (eventMap[key] || 0) + 1;
+      });
+      const labels = Object.keys(eventMap);
+      const data = Object.values(eventMap);
+      const colors = ['#a51d2d','#2d6a4f','#1e6091','#e07a5f','#b8860b','#7c3aed','#0284c7','#f59e0b','#10b981','#ef4444','#8b5cf6','#06b6d4','#f97316','#84cc16'];
+      const chart = new Chart(canvas, {
+        type: 'doughnut',
+        data: {
+          labels,
+          datasets: [{ data, backgroundColor: colors.slice(0, labels.length), borderColor: '#fff', borderWidth: 2 }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { padding: 10, usePointStyle: true } },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => ` ${ctx.label}: ${ctx.raw} 人 (${((ctx.raw / data.reduce((a,b)=>a+b,0)) * 100).toFixed(1)}%)`
+              }
+            }
+          }
+        }
+      });
+      this._chartInstances.push(chart);
+    } catch (e) {}
   },
 
   // ==================== 用户管理 ====================
