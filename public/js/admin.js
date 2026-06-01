@@ -1252,6 +1252,8 @@ const Admin = {
   // ==================== 成绩管理 ====================
   _resultsPage: 1,
   _resultsLimit: 20,
+  _resultsFilters: { grade: '', class_name: '', event_id: '', award: '', is_published: '' },
+  _resultsFilterData: null,
   _resultDraftStorageKey: 'sportsMeet.admin.resultDrafts',
   _studentDirectoryCache: null,
 
@@ -1278,46 +1280,97 @@ const Admin = {
       </div>
     `;
     this._renderResultsFilter(container);
-    this._loadResultFilters(container);
     this._loadResults(container);
     this._bindResultsEvents(container);
   },
 
   _renderResultsFilter(container) {
     const bar = container.querySelector('#results-filter-bar');
+    const f = this._resultsFilters;
+    const labels = [];
+    if (f.grade) labels.push('年级：' + f.grade);
+    if (f.class_name) labels.push('班级：' + f.class_name);
+    if (f.event_id && this._resultsFilterData) {
+      const evt = this._resultsFilterData.events.find(e => e.id == f.event_id);
+      if (evt) labels.push('项目：' + evt.name);
+    }
+    if (f.award) labels.push('奖项：' + f.award);
+    if (f.is_published !== '') labels.push('公示：' + (f.is_published === '1' ? '已公示' : '未公示'));
     bar.innerHTML = `
-      <select id="results-grade" class="form__select"><option value="">全部年级</option></select>
-      <select id="results-class" class="form__select"><option value="">全部班级</option></select>
-      <select id="results-award" class="form__select"><option value="">全部奖项</option><option value="一等">一等</option><option value="二等">二等</option><option value="三等">三等</option></select>
-      <select id="results-published" class="form__select"><option value="">公示状态</option><option value="1">已公示</option><option value="0">未公示</option></select>
       <button class="btn btn--primary btn--sm" id="btn-results-search"><i class="fas fa-search"></i> 筛选</button>
+      ${labels.length > 0 ? '<span class="text-sm" style="color:var(--red);margin-left:8px">当前筛选：' + labels.join(' / ') + ' <a href="javascript:void(0)" id="btn-results-clear" style="color:var(--text3)">[清除]</a></span>' : ''}
     `;
+    bar.querySelector('#btn-results-clear')?.addEventListener('click', () => {
+      this._resultsFilters = { grade: '', class_name: '', event_id: '', award: '', is_published: '' };
+      this._resultsPage = 1;
+      this._renderResultsFilter(container);
+      this._loadResults(container);
+    });
+    bar.querySelector('#btn-results-search')?.addEventListener('click', () => this._showResultsFilterModal(container));
   },
 
-  async _loadResultFilters(container) {
-    try {
-      const gradesRes = await API.public.getGrades();
-      const grades = gradesRes.data && gradesRes.data.grades ? gradesRes.data.grades : [];
-      const classes = gradesRes.data && gradesRes.data.classes ? gradesRes.data.classes : [];
-      const gradeSel = container.querySelector('#results-grade');
-      const classSel = container.querySelector('#results-class');
-      grades.forEach((g) => {
-        const option = document.createElement('option');
-        option.value = g.name;
-        option.textContent = g.name;
-        gradeSel.appendChild(option);
-      });
-      classes.forEach((c) => {
-        const option = document.createElement('option');
-        option.value = c.name;
-        option.textContent = c.name;
-        classSel.appendChild(option);
-      });
-    } catch (e) {}
+  async _showResultsFilterModal(container) {
+    if (!this._resultsFilterData) {
+      try {
+        const gradesRes = await API.public.getGrades();
+        const eventsRes = await API.get('/admin/events');
+        this._resultsFilterData = {
+          classes: (gradesRes.data && gradesRes.data.classes) ? gradesRes.data.classes : [],
+          events: eventsRes.data || []
+        };
+      } catch (e) { App.showToast('加载筛选数据失败','error'); return; }
+    }
+    const f = this._resultsFilters;
+    const classOpts = this._resultsFilterData.classes.map(c =>
+      `<option value="${c.name}" ${f.class_name===c.name?'selected':''}>${c.name}</option>`
+    ).join('');
+    const eventOpts = this._resultsFilterData.events.map(e =>
+      `<option value="${e.id}" ${f.event_id==e.id?'selected':''}>${e.name}</option>`
+    ).join('');
+    const awardOpts = `<option value="" ${!f.award?'selected':''}>全部奖项</option>
+      <option value="一等" ${f.award==='一等'?'selected':''}>一等奖</option>
+      <option value="二等" ${f.award==='二等'?'selected':''}>二等奖</option>
+      <option value="三等" ${f.award==='三等'?'selected':''}>三等奖</option>
+      <option value="优秀" ${f.award==='优秀'?'selected':''}>优秀奖</option>`;
+    const publishOpts = `<option value="" ${f.is_published===''?'selected':''}>全部</option>
+      <option value="1" ${f.is_published==='1'?'selected':''}>已公示</option>
+      <option value="0" ${f.is_published==='0'?'selected':''}>未公示</option>`;
+
+    const html = `
+      <div class="modal-header"><h3>成绩筛选</h3><button class="modal-close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>
+      <div class="modal-body">
+        <div class="form-group"><label>年级</label><input type="text" id="results-filter-grade" class="form__input" placeholder="如：高一" value="${f.grade}"></div>
+        <div class="form-group"><label>班级</label><select id="results-filter-class" class="form__select"><option value="">全部班级</option>${classOpts}</select></div>
+        <div class="form-group"><label>项目</label><select id="results-filter-event" class="form__select"><option value="">全部项目</option>${eventOpts}</select></div>
+        <div class="form-group"><label>奖项</label><select id="results-filter-award" class="form__select">${awardOpts}</select></div>
+        <div class="form-group"><label>公示状态</label><select id="results-filter-published" class="form__select">${publishOpts}</select></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn--outline btn--sm" id="btn-results-filter-cancel">取消</button>
+        <button class="btn btn--primary btn--sm" id="btn-results-filter-apply">确定筛选</button>
+      </div>`;
+    App.showModal(html);
+
+    document.getElementById('btn-results-filter-cancel').onclick = () => App.hideModal();
+    document.getElementById('btn-results-filter-apply').onclick = () => {
+      const grade = document.getElementById('results-filter-grade')?.value?.trim() || '';
+      const className = document.getElementById('results-filter-class')?.value || '';
+      const eventId = document.getElementById('results-filter-event')?.value || '';
+      const award = document.getElementById('results-filter-award')?.value || '';
+      const published = document.getElementById('results-filter-published')?.value;
+      this._resultsFilters.grade = grade;
+      this._resultsFilters.class_name = className;
+      this._resultsFilters.event_id = eventId;
+      this._resultsFilters.award = award;
+      this._resultsFilters.is_published = published;
+      this._resultsPage = 1;
+      App.hideModal();
+      this._renderResultsFilter(container);
+      this._loadResults(container);
+    };
   },
 
   _bindResultsEvents(container) {
-    container.querySelector('#btn-results-search').addEventListener('click', () => { this._resultsPage = 1; this._loadResults(container); });
     container.querySelector('#btn-add-result').addEventListener('click', () => this._showResultModal(null, container));
     container.querySelector('#btn-import-results').addEventListener('click', () => this._showResultsImport(container));
     container.querySelector('#btn-auto-rank').addEventListener('click', () => this._autoRank());
@@ -1329,15 +1382,13 @@ const Admin = {
   async _loadResults(container) {
     try {
       App.showLoading();
+      const f = this._resultsFilters;
       const params = { page: this._resultsPage, limit: this._resultsLimit };
-      const grade = container.querySelector('#results-grade').value;
-      const className = container.querySelector('#results-class').value;
-      const award = container.querySelector('#results-award').value;
-      const published = container.querySelector('#results-published').value;
-      if (grade) params.grade = grade;
-      if (className) params.class_name = className;
-      if (award) params.award = award;
-      if (published !== '') params.is_published = published;
+      if (f.grade) params.grade = f.grade;
+      if (f.class_name) params.class_name = f.class_name;
+      if (f.event_id) params.event_id = f.event_id;
+      if (f.award) params.award = f.award;
+      if (f.is_published !== '') params.is_published = f.is_published;
 
       const res = await API.get('/admin/results' + API._qs(params));
       const d = res.data || res;
