@@ -195,6 +195,9 @@ const Admin = {
       // 报名统计图表
       html += '<div class="card mb-3"><div class="card-header"><h3>报名统计</h3></div><div class="card-body"><canvas id="dash-chart" style="max-height:280px"></canvas></div></div>';
 
+      // 最新报名列表
+      html += '<div class="card mb-3"><div class="card-header" style="display:flex;justify-content:space-between;align-items:center"><h3>最新报名</h3><a href="javascript:void(0)" id="dash-view-all-reg" class="btn btn-outline btn-sm">查看全部 <i class="fas fa-arrow-right"></i></a></div><div class="card-body" id="dash-reg-list"><p class="text-muted text-center">加载中...</p></div></div>';
+
       // 最近日志
       html += '<div class="card"><div class="card-header"><h3>最近日志</h3></div><div class="card-body">';
       if (logs.length > 0) {
@@ -205,6 +208,15 @@ const Admin = {
       html += '</div></div>';
 
       container.innerHTML = html;
+
+      // 绑定查看全部报名
+      document.getElementById('dash-view-all-reg')?.addEventListener('click', () => {
+        this.currentTab = 'registrations';
+        this.render();
+      });
+
+      // 加载最新报名
+      this._loadDashboardRegistrations();
 
       // 渲染图表
       const eventRegs = d.event_registrations || [];
@@ -224,6 +236,39 @@ const Admin = {
     } catch(e) {
       container.innerHTML = '<div class="empty-state"><p class="empty-state__desc">加载失败：' + e.message + '</p><button class="btn btn-outline mt-2" onclick="Admin.render()">重新加载</button></div>';
     }
+  },
+
+  async _loadDashboardRegistrations() {
+    try {
+      const res = await API.admin.getRegistrations({ page: 1, limit: 10 });
+      const d = res.data || res;
+      const list = d.list || [];
+      const el = document.getElementById('dash-reg-list');
+      if (!el) return;
+      if (list.length === 0) {
+        el.innerHTML = '<p class="text-muted text-center">暂无报名记录</p>';
+        return;
+      }
+      const statusMap = { pending: '<span class="badge badge--pending">待审核</span>', approved: '<span class="badge badge--approved">已通过</span>', rejected: '<span class="badge badge--rejected">已驳回</span>' };
+      let html = '<table class="table table--striped"><thead><tr><th>学号</th><th>姓名</th><th>班级</th><th>项目</th><th>状态</th><th>时间</th></tr></thead><tbody>';
+      list.forEach(r => {
+        html += `<tr style="cursor:pointer" onclick="Admin._showRegDetail(${r.id})">
+          <td>${r.student_id || '-'}</td>
+          <td>${r.user_name || '-'}</td>
+          <td>${r.class_name || '-'}</td>
+          <td>${r.event_name || '-'}</td>
+          <td>${statusMap[r.status] || r.status}</td>
+          <td>${App.formatDate(r.created_at)}</td>
+        </tr>`;
+      });
+      html += '</tbody></table>';
+      el.innerHTML = html;
+    } catch (e) {}
+  },
+
+  _showRegDetail(id) {
+    this.currentTab = 'registrations';
+    this.render();
   },
 
   // ==================== 用户管理 ====================
