@@ -891,6 +891,7 @@ const Admin = {
           html += '<td>' + (r.event_name || '-') + '</td>';
           html += '<td>' + (statusMap[r.status] || r.status) + '</td>';
           html += '<td><div class="table__actions">';
+          html += '<button class="btn btn--outline btn--xs btn-detail-reg" data-id="' + r.id + '"><i class="fas fa-eye"></i> 详情</button>';
           if (r.status === 'pending') {
             html += '<button class="btn btn--success btn--xs btn-approve-reg" data-id="' + r.id + '"><i class="fas fa-check"></i> 通过</button>';
             html += '<button class="btn btn--warning btn--xs btn-reject-reg" data-id="' + r.id + '"><i class="fas fa-times"></i> 驳回</button>';
@@ -926,6 +927,9 @@ const Admin = {
       container.querySelectorAll('.btn-reject-reg').forEach(btn => {
         btn.addEventListener('click', () => this._showRejectReason(btn.dataset.id, container));
       });
+      container.querySelectorAll('.btn-detail-reg').forEach(btn => {
+        btn.addEventListener('click', () => this._showRegDetail(btn.dataset.id, container));
+      });
     } catch (e) {
       App.hideLoading();
       App.showToast(e.message, 'error');
@@ -951,6 +955,48 @@ const Admin = {
         App.showToast(e.message, 'error');
       }
     });
+  },
+
+  async _showRegDetail(id, container) {
+    try {
+      App.showLoading();
+      const res = await API.admin.getRegistrationDetail(id);
+      App.hideLoading();
+      const r = res.data;
+      if (!r) return App.showToast('报名记录不存在', 'error');
+      const statusMap = { pending: '待审核', approved: '已通过', rejected: '已驳回' };
+      const categoryMap = { track: '径赛', field: '田赛', relay: '接力', team: '集体' };
+      const typeMap = { individual: '个人', team: '团体' };
+      const genderMap = { male: '男子', female: '女子', mixed: '混合' };
+      let html = '<div class="modal-header"><h3>报名详情</h3><button class="modal-close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>';
+      html += '<div class="modal-body">';
+      html += '<div class="detail-grid">';
+      html += '<div><strong>学号</strong><br>' + (r.student_id || '-') + '</div>';
+      html += '<div><strong>姓名</strong><br>' + (r.user_name || '-') + '</div>';
+      html += '<div><strong>班级</strong><br>' + (r.class_name || '-') + '</div>';
+      html += '<div><strong>年级</strong><br>' + (r.grade || '-') + '</div>';
+      html += '<div><strong>性别</strong><br>' + (genderMap[r.gender] || r.gender || '-') + '</div>';
+      html += '<div><strong>邮箱</strong><br>' + (r.email || '-') + '</div>';
+      html += '</div>';
+      html += '<hr style="margin:12px 0">';
+      html += '<div class="detail-grid">';
+      html += '<div><strong>报名项目</strong><br>' + (r.event_name || '-') + '</div>';
+      html += '<div><strong>项目分类</strong><br>' + (categoryMap[r.category] || r.category || '-') + '</div>';
+      html += '<div><strong>项目类型</strong><br>' + (typeMap[r.event_type] || r.event_type || '-') + '</div>';
+      html += '<div><strong>性别组别</strong><br>' + (genderMap[r.gender_group] || r.gender_group || '-') + '</div>';
+      html += '<div><strong>比赛场地</strong><br>' + (r.venue || '-') + '</div>';
+      html += '<div><strong>审核状态</strong><br><span style="color:' + (r.status === 'approved' ? 'var(--green)' : r.status === 'rejected' ? 'var(--red)' : '#e07a5f') + ';font-weight:600">' + (statusMap[r.status] || r.status) + '</span></div>';
+      html += '</div>';
+      html += '<hr style="margin:12px 0">';
+      html += '<div class="detail-grid">';
+      html += '<div><strong>报名时间</strong><br>' + App.formatDate(r.created_at) + '</div>';
+      html += '<div><strong>审核时间</strong><br>' + (r.reviewed_at ? App.formatDate(r.reviewed_at) : '-') + '</div>';
+      html += '<div><strong>审核人</strong><br>' + (r.reviewer_name || '-') + '</div>';
+      html += '<div><strong>驳回原因</strong><br>' + (r.reject_reason || '-') + '</div>';
+      html += '</div>';
+      html += '</div><div class="modal-footer"><button class="btn btn-secondary" onclick="App.hideModal()">关闭</button></div>';
+      App.showModal(html);
+    } catch(e) { App.hideLoading(); App.showToast(e.message, 'error'); }
   },
 
   async _batchApprove(container) {

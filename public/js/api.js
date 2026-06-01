@@ -147,6 +147,7 @@ const API = {
 
     // 报名管理
     getRegistrations(params) { return API.get('/admin/registrations' + API._qs(params)); },
+    getRegistrationDetail(id) { return API.get('/admin/registrations/' + id); },
     approveRegistration(id) { return API.put('/admin/registrations/' + id + '/approve'); },
     rejectRegistration(id) { return API.put('/admin/registrations/' + id + '/reject'); },
 
