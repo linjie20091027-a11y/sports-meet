@@ -145,7 +145,7 @@ function resolveStudentUser(db, payload, options = {}) {
 
 function paginate(query, params, page, limit) {
   const p = Math.max(1, parseInt(page) || 1);
-  const l = Math.min(100, Math.max(1, parseInt(limit) || 20));
+  const l = Math.min(99999, Math.max(1, parseInt(limit) || 20));
   const offset = (p - 1) * l;
   const db = getDb();
   const countRow = db.prepare(`SELECT COUNT(*) as total FROM (${query})`).get(...params);
