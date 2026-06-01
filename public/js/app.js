@@ -693,7 +693,6 @@ const App = {
         document.getElementById('home-results').innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无更多信息</p>';
       }
     } catch (e) {
-      this.showToast('载入首页失败', 'error');
     }
   },
 
@@ -771,7 +770,7 @@ const App = {
               <a href="#/events/${e.id}" class="btn btn-outline btn-sm">查看详情</a>
             </div>
           </div>`).join('') : '<div class="empty-state" style="grid-column:1/-1"><p class="text-muted">暂无符合条件的赛事</p></div>';
-      } catch (e) { this.showToast(e.message, 'error'); }
+      } catch (e) { }
       finally { this.hideLoading(); }
     };
     load();
@@ -996,7 +995,7 @@ const App = {
             <div class="card-body"><p class="announcement-preview">${(a.content||'').substring(0,120)}...</p></div>
             <div class="card-footer"><span class="text-sm text-muted">${this.formatDate(a.publish_time)} · ${a.view_count||0}阅读</span><button class="btn btn-outline btn-sm" onclick="App.showAnnouncementDetail(${a.id})">查看详情</button></div>
           </div>`).join('') : '<p class="text-muted p-8 text-center">暂无公告</p>';
-      } catch (e) { this.showToast(e.message, 'error'); }
+      } catch (e) { }
       finally { this.hideLoading(); }
     };
     load();
@@ -1021,7 +1020,6 @@ const App = {
       );
     } catch (e) {
       this.hideLoading();
-      this.showToast('加载失败', 'error');
     }
   },
 
