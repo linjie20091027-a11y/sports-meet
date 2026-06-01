@@ -1615,23 +1615,41 @@ const App = {
       var res = await API.get('/public/results');
       var data = res.data || [];
       this.hideLoading();
-      if (!data.length) { table.innerHTML = '<p class="text-muted p-8 text-center">暂无成绩数据</p>'; return; }
+      if (!data.length) { table.innerHTML = '<div class="results-empty"><i class="fas fa-inbox"></i>暂无成绩数据</div>'; return; }
 
       // 统计各组人数
       var grpCount = {};
       data.forEach(function(r){ var sg=(r.user_sport_group||'A'); grpCount[sg]=(grpCount[sg]||0)+1; });
+      var activeGroups = ['A','B','C','D','E'].filter(function(sg){ return !!grpCount[sg]; });
+      var eventCount = new Set(data.map(function(r){ return r.event_name || ''; }).filter(Boolean)).size;
 
-      var html = '<div class="section-title">成绩公示<small>请选择组别</small></div>';
-      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px">';
-      ['A','B','C','D','E'].forEach(function(sg) {
-        var cnt = grpCount[sg] || 0;
-        if (!cnt) return;
-        html += '<a href="#/results/group/'+sg+'" class="card" style="text-decoration:none;text-align:center;padding:2rem 1rem;border-left:4px solid var(--red)">';
-        html += '<div style="font-size:2.5rem;font-weight:900;color:var(--red)">'+sg+'</div><div class="text-sm mt-1">'+cnt+'条成绩</div></a>';
-      });
+      var html = '<div class="results-shell">';
+      html += '<section class="results-hero card">';
+      html += '<div class="results-hero__top">';
+      html += '<div class="results-hero__intro"><div class="section-title">成绩公示<small>按组别逐层查看完整成绩与排名</small></div>';
+      html += '<p>先选择运动组别，再进入男女组与具体项目查看完整排名，页面信息会按层级逐步展开，浏览更清晰。</p>';
+      html += '<div class="results-hero__tips"><span class="badge badge-pin">先看组别</span><span class="badge badge-info">再看男女组</span><span class="badge badge-primary">最后看项目排名</span></div></div>';
       html += '</div>';
+      html += '<div class="results-summary">';
+      html += '<div class="results-summary-card"><strong>'+data.length+'</strong><span>已公示成绩</span></div>';
+      html += '<div class="results-summary-card"><strong>'+activeGroups.length+'</strong><span>开放组别</span></div>';
+      html += '<div class="results-summary-card"><strong>'+eventCount+'</strong><span>覆盖项目</span></div>';
+      html += '<div class="results-summary-card"><strong>'+data.filter(function(r){ return (r.award||'').trim(); }).length+'</strong><span>获奖记录</span></div>';
+      html += '</div></section>';
+      html += '<section class="results-section">';
+      html += '<div class="results-section__head"><h3>选择运动组别</h3><p>所有内容均匀分布展示，点击卡片进入下一层级。</p></div>';
+      html += '<div class="results-nav-grid">';
+      activeGroups.forEach(function(sg) {
+        var cnt = grpCount[sg] || 0;
+        html += '<a href="#/results/group/'+sg+'" class="results-nav-card">';
+        html += '<div class="results-nav-card__icon"><i class="fas fa-layer-group"></i></div>';
+        html += '<div class="results-nav-card__title"><strong>'+sg+'</strong>组</div>';
+        html += '<div class="results-nav-card__desc">查看 '+sg+' 组全部成绩、男女分组和项目排名。</div>';
+        html += '<div class="results-nav-card__meta"><span>'+cnt+' 条成绩</span><span>进入查看 <i class="fas fa-angle-right"></i></span></div></a>';
+      });
+      html += '</div></section></div>';
       table.innerHTML = html;
-    } catch(e) { table.innerHTML = '<p class="text-muted p-8 text-center">加载失败</p>'; }
+    } catch(e) { table.innerHTML = '<div class="results-empty"><i class="fas fa-circle-exclamation"></i>加载失败，请稍后重试</div>'; }
   },
 
   // 组详情 → 选择男女
@@ -1642,17 +1660,28 @@ const App = {
     try {
       var res = await API.get('/public/results');
       var data = (res.data||[]).filter(function(r){return (r.user_sport_group||'A')===sg});
-      if (!data.length) { table.innerHTML = '<p class="text-muted p-8 text-center">该组暂无成绩</p>'; return; }
+      if (!data.length) { table.innerHTML = '<div class="results-empty"><i class="fas fa-inbox"></i>该组暂无成绩</div>'; return; }
       var maleCount=data.filter(function(r){return (r.user_gender||'male')==='male'}).length;
       var femaleCount=data.length - maleCount;
+      var awardCount = data.filter(function(r){ return (r.award||'').trim(); }).length;
 
-      var html = '<div class="section-title"><a href="#/results">← 返回</a> '+sg+'组</div>';
-      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">';
-      if(maleCount) html += '<a href="#/results/group/'+sg+'/male" class="card" style="text-decoration:none;text-align:center;padding:2rem;border-left:4px solid #1e6091"><i class="fas fa-male" style="font-size:2.5rem;color:#1e6091"></i><div style="font-size:1.3rem;font-weight:700;margin-top:8px">男子组</div><div class="text-sm text-muted mt-1">'+maleCount+'条</div></a>';
-      if(femaleCount) html += '<a href="#/results/group/'+sg+'/female" class="card" style="text-decoration:none;text-align:center;padding:2rem;border-left:4px solid #e91e63"><i class="fas fa-female" style="font-size:2.5rem;color:#e91e63"></i><div style="font-size:1.3rem;font-weight:700;margin-top:8px">女子组</div><div class="text-sm text-muted mt-1">'+femaleCount+'条</div></a>';
-      html += '</div>';
+      var html = '<div class="results-shell">';
+      html += '<section class="results-hero card">';
+      html += '<div class="results-breadcrumb"><a href="#/results">成绩公示</a><span>/</span><span>'+sg+'组</span></div>';
+      html += '<div class="results-hero__intro"><div class="section-title">'+sg+'组<small>选择男子组或女子组继续查看</small></div>';
+      html += '<p>当前分组内的成绩记录已按性别拆分展示，方便快速进入对应项目的完整排名表。</p></div>';
+      html += '<div class="results-summary">';
+      html += '<div class="results-summary-card"><strong>'+data.length+'</strong><span>本组成绩</span></div>';
+      html += '<div class="results-summary-card"><strong>'+maleCount+'</strong><span>男子组成绩</span></div>';
+      html += '<div class="results-summary-card"><strong>'+femaleCount+'</strong><span>女子组成绩</span></div>';
+      html += '<div class="results-summary-card"><strong>'+awardCount+'</strong><span>获奖记录</span></div>';
+      html += '</div></section>';
+      html += '<section class="results-section"><div class="results-section__head"><h3>选择性别组别</h3><p>点击进入对应项目列表。</p></div><div class="results-nav-grid">';
+      if(maleCount) html += '<a href="#/results/group/'+sg+'/male" class="results-nav-card results-nav-card--male"><div class="results-nav-card__icon"><i class="fas fa-male"></i></div><div class="results-nav-card__title">男子组</div><div class="results-nav-card__desc">查看 '+sg+' 组男子项目排名与成绩详情。</div><div class="results-nav-card__meta"><span>'+maleCount+' 条成绩</span><span>进入查看 <i class="fas fa-angle-right"></i></span></div></a>';
+      if(femaleCount) html += '<a href="#/results/group/'+sg+'/female" class="results-nav-card results-nav-card--female"><div class="results-nav-card__icon"><i class="fas fa-female"></i></div><div class="results-nav-card__title">女子组</div><div class="results-nav-card__desc">查看 '+sg+' 组女子项目排名与成绩详情。</div><div class="results-nav-card__meta"><span>'+femaleCount+' 条成绩</span><span>进入查看 <i class="fas fa-angle-right"></i></span></div></a>';
+      html += '</div></section></div>';
       table.innerHTML = html;
-    } catch(e) { table.innerHTML = '<p class="text-muted p-8 text-center">加载失败</p>'; }
+    } catch(e) { table.innerHTML = '<div class="results-empty"><i class="fas fa-circle-exclamation"></i>加载失败，请稍后重试</div>'; }
   },
 
   // 性别详情 → 选择项目
@@ -1663,22 +1692,33 @@ const App = {
     try {
       var res = await API.get('/public/results');
       var data = (res.data||[]).filter(function(r){return (r.user_sport_group||'A')===sg && (r.user_gender||'male')===g});
-      if (!data.length) { table.innerHTML = '<p class="text-muted p-8 text-center">暂无成绩</p>'; return; }
+      if (!data.length) { table.innerHTML = '<div class="results-empty"><i class="fas fa-inbox"></i>暂无成绩</div>'; return; }
 
       var evtGrp = {};
       data.forEach(function(r){var en=r.event_name||'其他';evtGrp[en]=(evtGrp[en]||0)+1});
       var gLabel = g==='male'?'男子组':'女子组';
+      var eventNames = Object.keys(evtGrp).sort();
 
-      var html = '<div class="section-title"><a href="#/results/group/'+sg+'">← 返回</a> '+sg+'组 '+gLabel+'</div>';
-      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">';
-      Object.keys(evtGrp).sort().forEach(function(en){
+      var html = '<div class="results-shell">';
+      html += '<section class="results-hero card">';
+      html += '<div class="results-breadcrumb"><a href="#/results">成绩公示</a><span>/</span><a href="#/results/group/'+sg+'">'+sg+'组</a><span>/</span><span>'+gLabel+'</span></div>';
+      html += '<div class="results-hero__intro"><div class="section-title">'+sg+'组 '+gLabel+'<small>按项目查看完整名次</small></div>';
+      html += '<p>从项目卡片进入后可查看该项目的完整成绩排名表与奖项分布。</p></div>';
+      html += '<div class="results-summary">';
+      html += '<div class="results-summary-card"><strong>'+data.length+'</strong><span>当前成绩</span></div>';
+      html += '<div class="results-summary-card"><strong>'+eventNames.length+'</strong><span>项目数量</span></div>';
+      html += '<div class="results-summary-card"><strong>'+data.filter(function(r){ return Number(r.rank||0) && Number(r.rank||0) <= 3; }).length+'</strong><span>前三名次数</span></div>';
+      html += '<div class="results-summary-card"><strong>'+data.filter(function(r){ return (r.award||'').trim(); }).length+'</strong><span>获奖记录</span></div>';
+      html += '</div></section>';
+      html += '<section class="results-section"><div class="results-section__head"><h3>选择项目</h3><p>按项目进入查看详细排名。</p></div><div class="results-nav-grid">';
+      eventNames.forEach(function(en){
         var cnt = evtGrp[en];
         var safe = encodeURIComponent(en);
-        html += '<a href="#/results/group/'+sg+'/'+g+'/'+safe+'" class="card" style="text-decoration:none;color:inherit;border-left:3px solid var(--gold)"><div class="card-body" style="text-align:center"><strong style="font-size:1rem">'+en+'</strong><br><span class="text-sm text-muted">'+cnt+'人参赛</span></div></a>';
+        html += '<a href="#/results/group/'+sg+'/'+g+'/'+safe+'" class="results-nav-card results-nav-card--event"><div class="results-nav-card__icon"><i class="fas fa-trophy"></i></div><div class="results-nav-card__title">'+App._escHtml(en)+'</div><div class="results-nav-card__desc">查看该项目的完整成绩、公示名次与奖项情况。</div><div class="results-nav-card__meta"><span>'+cnt+' 人参赛</span><span>进入查看 <i class="fas fa-angle-right"></i></span></div></a>';
       });
-      html += '</div>';
+      html += '</div></section></div>';
       table.innerHTML = html;
-    } catch(e) { table.innerHTML = '<p class="text-muted p-8 text-center">加载失败</p>'; }
+    } catch(e) { table.innerHTML = '<div class="results-empty"><i class="fas fa-circle-exclamation"></i>加载失败，请稍后重试</div>'; }
   },
 
   // 项目完整排名表
@@ -1689,18 +1729,28 @@ const App = {
     try {
       var res = await API.get('/public/results');
       var data = (res.data||[]).filter(function(r){return (r.user_sport_group||'A')===sg && (r.user_gender||'male')===g && r.event_name===en});
-      if (!data.length) { table.innerHTML = '<p class="text-muted p-8 text-center">暂无排名</p>'; return; }
+      if (!data.length) { table.innerHTML = '<div class="results-empty"><i class="fas fa-inbox"></i>暂无排名</div>'; return; }
 
       var medals = {1:'🥇',2:'🥈',3:'🥉'};
       var results = data.sort(function(a,b){return (a.rank||99)-(b.rank||99)});
       var gLabel = g==='male'?'男子组':'女子组';
+      var awardCount = results.filter(function(r){ return (r.award||'').trim(); }).length;
 
-      var html = '<div class="section-title"><a href="#/results/group/'+sg+'/'+g+'">← 返回</a> '+sg+'组 '+gLabel+' → '+en+'</div>';
-      html += '<div class="table-container"><table class="table"><thead><tr><th>排名</th><th>姓名</th><th>班级</th><th>成绩</th><th>奖项</th></tr></thead><tbody>';
+      var html = '<div class="results-shell">';
+      html += '<section class="results-hero card">';
+      html += '<div class="results-breadcrumb"><a href="#/results">成绩公示</a><span>/</span><a href="#/results/group/'+sg+'">'+sg+'组</a><span>/</span><a href="#/results/group/'+sg+'/'+g+'">'+gLabel+'</a><span>/</span><span>'+this._escHtml(en)+'</span></div>';
+      html += '<div class="results-ranking-head"><div><div class="section-title">'+this._escHtml(en)+'<small>'+sg+'组 · '+gLabel+' 完整排名</small></div><p>按名次顺序展示该项目全部已公示成绩，奖项和前三名会在表格中高亮显示。</p></div></div>';
+      html += '<div class="results-summary">';
+      html += '<div class="results-summary-card"><strong>'+results.length+'</strong><span>参赛人数</span></div>';
+      html += '<div class="results-summary-card"><strong>'+awardCount+'</strong><span>获奖人数</span></div>';
+      html += '<div class="results-summary-card"><strong>'+results.filter(function(r){ return Number(r.rank||0) === 1; }).length+'</strong><span>冠军人数</span></div>';
+      html += '<div class="results-summary-card"><strong>'+results.filter(function(r){ return Number(r.rank||0) <= 3; }).length+'</strong><span>领奖台人数</span></div>';
+      html += '</div></section>';
+      html += '<section class="card results-table-wrap"><div class="card-header"><h3>项目排名表</h3><span class="text-sm text-muted">按名次从高到低排列</span></div><div class="table-container"><table class="table"><thead><tr><th>排名</th><th>姓名</th><th>班级</th><th>成绩</th><th>奖项</th></tr></thead><tbody>';
       results.forEach(function(r){html += '<tr class="'+(r.rank<=3?'award-row':'')+'"><td>'+(medals[r.rank]||r.rank||'-')+'</td><td>'+(r.name||'-')+'</td><td>'+(r.class_name||'-')+'</td><td>'+(r.performance||'-')+'</td><td><span class="badge badge-success">'+(r.award||'-')+'</span></td></tr>'});
-      html += '</tbody></table></div>';
+      html += '</tbody></table></div></section></div>';
       table.innerHTML = html;
-    } catch(e) { table.innerHTML = '<p class="text-muted p-8 text-center">加载失败</p>'; }
+    } catch(e) { table.innerHTML = '<div class="results-empty"><i class="fas fa-circle-exclamation"></i>加载失败，请稍后重试</div>'; }
   },
 
   async exportResults() {
