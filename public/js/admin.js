@@ -758,7 +758,6 @@ const Admin = {
     `;
     this._renderRegFilter(container);
     this._loadRegistrations(container);
-    this._loadRegStats(container);
     this._bindRegEvents(container);
   },
 
@@ -906,6 +905,7 @@ const Admin = {
 
       container.querySelector('#reg-table-container').innerHTML = html;
       this._renderRegPieChart(container);
+      this._loadRegStats(container);
       const pagInfo = this._paginate({ page: this._regPage, total, limit: this._regLimit, callback: (p) => { this._regPage = p; this._loadRegistrations(container); } });
       container.querySelector('#reg-pagination').innerHTML = this._renderPagination(pagInfo, 'reg-pagination');
 
@@ -1087,41 +1087,63 @@ const Admin = {
 
   async _loadRegStats(container) {
     try {
-      const heatRes = await API.get('/admin/registrations/heatmap');
-      const heatData = heatRes.data || [];
-      if (heatData.length > 0 && container.querySelector('#chart-reg-heat')) {
-        const chart = new Chart(container.querySelector('#chart-reg-heat'), {
-          type: 'pie',
-          data: { labels: heatData.map(h => h.name), datasets: [{ data: heatData.map(h => h.approved_count || h.total_count || 0), backgroundColor: ['#1a73e8','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#84cc16','#ec4899','#6366f1'] }] },
-          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
-        });
-        this._chartInstances.push(chart);
-      }
+      const list = this._regListData || [];
+      const categoryMap = { track: '径赛', field: '田赛', relay: '接力', team: '集体' };
+      const genderMap = { male: '男子', female: '女子', mixed: '混合' };
+      const statusLabel = { pending: '待审核', approved: '已通过', rejected: '已驳回' };
 
-      const statsRes = await API.get('/admin/registrations/stats');
-      const sData = statsRes.data || {};
-      const eventStats = sData.eventStats || [];
-      const unregistered = sData.unregistered || [];
+      // 统计卡片
+      const total = list.length;
+      const pending = list.filter(r => r.status === 'pending').length;
+      const approved = list.filter(r => r.status === 'approved').length;
+      const rejected = list.filter(r => r.status === 'rejected').length;
 
-      let tableHtml = '<table class="table table--striped"><thead><tr><th>项目</th><th>分类</th><th>性别组别</th><th>报名人数</th></tr></thead><tbody>';
+      let statsHtml = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">';
+      statsHtml += `<div class="stat-card"><div class="stat-num">${total}</div><div class="stat-label">报名总数</div></div>`;
+      statsHtml += `<div class="stat-card"><div class="stat-num" style="color:#e07a5f">${pending}</div><div class="stat-label">待审核</div></div>`;
+      statsHtml += `<div class="stat-card"><div class="stat-num" style="color:#52b788">${approved}</div><div class="stat-label">已通过</div></div>`;
+      statsHtml += `<div class="stat-card"><div class="stat-num" style="color:#dc2626">${rejected}</div><div class="stat-label">已驳回</div></div>`;
+      statsHtml += '</div>';
+
+      // 按项目统计表
+      const eventMap = {};
+      list.forEach(r => {
+        const key = r.event_name || '未知';
+        if (!eventMap[key]) eventMap[key] = { name: key, category: r.category || '', gender_group: r.gender_group || '', count: 0, pending: 0, approved: 0, rejected: 0 };
+        eventMap[key].count++;
+        if (r.status === 'pending') eventMap[key].pending++;
+        else if (r.status === 'approved') eventMap[key].approved++;
+        else eventMap[key].rejected++;
+      });
+      const eventStats = Object.values(eventMap).sort((a, b) => b.count - a.count);
+
+      statsHtml += '<table class="table table--striped"><thead><tr><th>项目</th><th>分类</th><th>组别</th><th>报名数</th><th>待审</th><th>通过</th><th>驳回</th></tr></thead><tbody>';
       if (eventStats.length > 0) {
-        eventStats.forEach(e => { tableHtml += '<tr><td>' + e.name + '</td><td>' + e.category + '</td><td>' + e.gender_group + '</td><td>' + e.count + '</td></tr>'; });
+        eventStats.forEach(e => {
+          statsHtml += `<tr><td>${e.name}</td><td>${categoryMap[e.category] || e.category}</td><td>${genderMap[e.gender_group] || e.gender_group}</td><td><strong>${e.count}</strong></td><td style="color:#e07a5f">${e.pending || '-'}</td><td style="color:#52b788">${e.approved || '-'}</td><td style="color:#dc2626">${e.rejected || '-'}</td></tr>`;
+        });
       } else {
-        tableHtml += '<tr><td colspan="4">' + this._emptyState('fas fa-chart-bar', '暂无统计数据') + '</td></tr>';
+        statsHtml += '<tr><td colspan="7"><p class="text-muted text-center">暂无报名数据</p></td></tr>';
       }
-      tableHtml += '</tbody></table>';
-      container.querySelector('#reg-stats-table').innerHTML = tableHtml;
+      statsHtml += '</tbody></table>';
+      container.querySelector('#reg-stats-table').innerHTML = statsHtml;
 
-      let unregHtml = '';
-      if (unregistered.length > 0) {
-        unregHtml = '<div style="max-height:300px;overflow-y:auto;"><table class="table table--striped"><thead><tr><th>学号</th><th>姓名</th><th>班级</th><th>年级</th></tr></thead><tbody>';
-        unregistered.forEach(u => { unregHtml += '<tr><td>' + u.student_id + '</td><td>' + u.name + '</td><td>' + u.class_name + '</td><td>' + u.grade + '</td></tr>'; });
-        unregHtml += '</tbody></table></div>';
-        unregHtml += '<div style="padding:8px;color:#6b7280;font-size:0.875rem;">共 ' + unregistered.length + ' 名学生未报名</div>';
-      } else {
-        unregHtml = this._emptyState('fas fa-check-circle', '全部学生已报名');
-      }
-      container.querySelector('#reg-unregistered').innerHTML = unregHtml;
+      // 未报名学生
+      try {
+        const statsRes = await API.get('/admin/registrations/stats');
+        const sData = statsRes.data || {};
+        const unregistered = sData.unregistered || [];
+        let unregHtml = '';
+        if (unregistered.length > 0) {
+          unregHtml = '<div style="max-height:300px;overflow-y:auto;"><table class="table table--striped"><thead><tr><th>学号</th><th>姓名</th><th>班级</th><th>年级</th></tr></thead><tbody>';
+          unregistered.forEach(u => { unregHtml += '<tr><td>' + u.student_id + '</td><td>' + u.name + '</td><td>' + u.class_name + '</td><td>' + u.grade + '</td></tr>'; });
+          unregHtml += '</tbody></table></div>';
+          unregHtml += '<div style="padding:8px;color:#6b7280;font-size:0.875rem;">共 ' + unregistered.length + ' 名学生未报名</div>';
+        } else {
+          unregHtml = this._emptyState('fas fa-check-circle', '全部学生已报名');
+        }
+        container.querySelector('#reg-unregistered').innerHTML = unregHtml;
+      } catch (_) {}
     } catch (e) {}
   },
 
