@@ -133,11 +133,11 @@ h1{font-family:var(--title-font);font-size:2.2rem}h2{font-size:1.4rem}h3{font-si
 .events-horiz-row::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 .events-horiz-row::-webkit-scrollbar-thumb:hover { background: var(--gold); }
 .event-horiz-card {
-  flex: 0 0 180px;
+  flex: 0 0 200px;
   background: var(--white);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 1.1rem 1rem;
+  padding: 1.25rem 1rem;
   text-decoration: none;
   color: inherit;
   cursor: pointer;
@@ -275,9 +275,9 @@ h1{font-family:var(--title-font);font-size:2.2rem}h2{font-size:1.4rem}h3{font-si
 .home-result-champs::-webkit-scrollbar{height:3px}
 .home-result-champs::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
 .home-result-card{
-  flex:0 0 140px;
+  flex:0 0 150px;
   text-align:center;
-  padding:.8rem .6rem;
+  padding:1rem .75rem;
   background:var(--white);
   border:1px solid var(--border);
   border-radius:var(--radius);
