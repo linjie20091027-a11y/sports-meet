@@ -210,11 +210,35 @@ const Student = {
   },
 
   // ===== 2. 在線报名 =====
+  _renderFriendsError(message) {
+    const c = document.getElementById('student-content');
+    if (!c) return;
+    c.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state__icon"><i class="fas fa-circle-exclamation"></i></div>
+        <p class="empty-state__desc">加载失败：${this._escape(message || '好友资料暂时无法获取')}</p>
+        <div class="friend-error-actions">
+          <button type="button" class="btn btn-outline" id="friends-retry-btn">重新加载</button>
+          <button type="button" class="btn btn-primary" id="friends-back-profile-btn">返回个人资料</button>
+        </div>
+      </div>
+    `;
+    c.querySelector('#friends-retry-btn')?.addEventListener('click', () => this._renderFriends());
+    c.querySelector('#friends-back-profile-btn')?.addEventListener('click', () => {
+      this.currentTab = 'profile';
+      window.location.hash = '#/student/profile';
+    });
+  },
+
   async _renderFriends() {
     const c = document.getElementById('student-content');
     c.innerHTML = '<div class="text-center p-8"><div class="spinner"></div><p class="text-muted mt-2">加载好友资料中…</p></div>';
     try {
-      const res = await API.student.getFriends();
+      const res = await API.student.getFriends({
+        timeoutMs: 8000,
+        retryCount: 2,
+        retryDelayMs: 800
+      });
       if (!res.success) throw new Error(res.error || '加载好友资料失败');
       const data = res.data || {};
       App.friendState = {
@@ -312,7 +336,7 @@ const Student = {
         </div>
       `;
     } catch (e) {
-      c.innerHTML = `<div class="empty-state"><div class="empty-state__icon"><i class="fas fa-circle-exclamation"></i></div><p class="empty-state__desc">加载失败：${this._escape(e.message)}</p></div>`;
+      this._renderFriendsError(e.message || '好友资料加载失败');
     }
   },
 

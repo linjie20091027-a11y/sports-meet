@@ -8,6 +8,7 @@ const { createNotification } = require('../utils/notify');
 router.use(authMiddleware);
 
 const DEFAULT_FRIEND_GROUP = '同学';
+let studentFeatureSchemaReady = false;
 
 function normalizeFriendGroup(value) {
   const groupName = String(value || '').trim();
@@ -18,12 +19,97 @@ function normalizeFriendRemark(value) {
   return String(value || '').trim().slice(0, 80);
 }
 
+function getTableColumns(db, tableName) {
+  try {
+    return new Set(
+      db.prepare(`PRAGMA table_info(${tableName})`)
+        .all()
+        .map((item) => String(item.name || '').trim())
+        .filter(Boolean)
+    );
+  } catch (_) {
+    return new Set();
+  }
+}
+
+function getColumnExpr(alias, columns, columnName, fallbackSql) {
+  return columns.has(columnName) ? `${alias}.${columnName}` : fallbackSql;
+}
+
+function ensureStudentFeatureSchema(db) {
+  if (studentFeatureSchemaReady) return;
+
+  [
+    "ALTER TABLE friend_requests ADD COLUMN remark TEXT DEFAULT ''",
+    "ALTER TABLE friend_requests ADD COLUMN friend_group TEXT DEFAULT '同学'",
+    "ALTER TABLE friend_requests ADD COLUMN handled_at TEXT",
+    "ALTER TABLE friend_requests ADD COLUMN updated_at TEXT DEFAULT ''",
+    "ALTER TABLE friendships ADD COLUMN group_name TEXT DEFAULT '同学'",
+    "ALTER TABLE friendships ADD COLUMN source_request_id INTEGER",
+    "ALTER TABLE friendships ADD COLUMN created_at TEXT DEFAULT ''",
+    "ALTER TABLE friendships ADD COLUMN updated_at TEXT DEFAULT ''",
+    "ALTER TABLE notifications ADD COLUMN sender_name TEXT DEFAULT ''",
+    "ALTER TABLE notifications ADD COLUMN sender_role TEXT DEFAULT 'system'",
+    "ALTER TABLE notifications ADD COLUMN attachments TEXT DEFAULT '[]'",
+    "ALTER TABLE notifications ADD COLUMN action_label TEXT DEFAULT ''"
+  ].forEach((sql) => {
+    try { db.prepare(sql).run(); } catch (_) { /* column exists or legacy table incompatible */ }
+  });
+
+  [
+    'CREATE INDEX IF NOT EXISTS idx_friend_requests_receiver ON friend_requests(receiver_id, status, created_at DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_friend_requests_requester ON friend_requests(requester_id, status, created_at DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_friendships_user ON friendships(user_id, created_at DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id)',
+    'CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(user_id, is_read)'
+  ].forEach((sql) => {
+    try { db.prepare(sql).run(); } catch (_) { /* ignore */ }
+  });
+
+  studentFeatureSchemaReady = true;
+}
+
+function parseNotificationAttachments(value) {
+  if (!value) return [];
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+    return Array.isArray(parsed) ? parsed.filter(Boolean).slice(0, 6) : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function mapNotificationDetail(row) {
+  if (!row) return null;
+  const attachments = parseNotificationAttachments(row.attachments);
+  return {
+    ...row,
+    sender_name: String(row.sender_name || '').trim() || '系统通知',
+    sender_role: String(row.sender_role || '').trim() || 'system',
+    attachments,
+    action_label: String(row.action_label || '').trim() || (row.target_url ? '前往相关业务' : '')
+  };
+}
+
 function getFriendData(db, userId) {
+  ensureStudentFeatureSchema(db);
+  const friendshipColumns = getTableColumns(db, 'friendships');
+  const requestColumns = getTableColumns(db, 'friend_requests');
+  const friendOrder = [];
+  const requestOrder = [];
+  if (friendshipColumns.has('created_at')) friendOrder.push('f.created_at DESC');
+  if (friendshipColumns.has('id')) friendOrder.push('f.id DESC');
+  if (!friendOrder.length) friendOrder.push('f.friend_id DESC');
+  if (requestColumns.has('status')) requestOrder.push("CASE fr.status WHEN 'pending' THEN 0 ELSE 1 END");
+  if (requestColumns.has('created_at')) requestOrder.push('fr.created_at DESC');
+  if (requestColumns.has('id')) requestOrder.push('fr.id DESC');
+  if (!requestOrder.length) requestOrder.push('fr.requester_id DESC');
+
   const friends = db.prepare(`
     SELECT
       f.friend_id,
-      f.group_name,
-      f.created_at,
+      ${getColumnExpr('f', friendshipColumns, 'group_name', `'${DEFAULT_FRIEND_GROUP}'`)} AS group_name,
+      ${getColumnExpr('f', friendshipColumns, 'created_at', "datetime('now','localtime')")} AS created_at,
       u.name,
       u.username,
       u.student_id,
@@ -42,19 +128,19 @@ function getFriendData(db, userId) {
       GROUP BY r.user_id
     ) ev ON ev.user_id = u.id
     WHERE f.user_id = ?
-    ORDER BY f.created_at DESC, f.id DESC
+    ORDER BY ${friendOrder.join(', ')}
   `).all(userId);
 
   const incoming = db.prepare(`
     SELECT
-      fr.id,
+      ${getColumnExpr('fr', requestColumns, 'id', '0')} AS id,
       fr.requester_id,
       fr.receiver_id,
-      fr.remark,
-      fr.friend_group,
-      fr.status,
-      fr.created_at,
-      fr.handled_at,
+      ${getColumnExpr('fr', requestColumns, 'remark', "''")} AS remark,
+      ${getColumnExpr('fr', requestColumns, 'friend_group', `'${DEFAULT_FRIEND_GROUP}'`)} AS friend_group,
+      ${getColumnExpr('fr', requestColumns, 'status', "'pending'")} AS status,
+      ${getColumnExpr('fr', requestColumns, 'created_at', "datetime('now','localtime')")} AS created_at,
+      ${getColumnExpr('fr', requestColumns, 'handled_at', 'NULL')} AS handled_at,
       u.name,
       u.username,
       u.student_id,
@@ -65,19 +151,19 @@ function getFriendData(db, userId) {
     FROM friend_requests fr
     JOIN users u ON u.id = fr.requester_id
     WHERE fr.receiver_id = ?
-    ORDER BY CASE fr.status WHEN 'pending' THEN 0 ELSE 1 END, fr.created_at DESC, fr.id DESC
+    ORDER BY ${requestOrder.join(', ')}
   `).all(userId);
 
   const outgoing = db.prepare(`
     SELECT
-      fr.id,
+      ${getColumnExpr('fr', requestColumns, 'id', '0')} AS id,
       fr.requester_id,
       fr.receiver_id,
-      fr.remark,
-      fr.friend_group,
-      fr.status,
-      fr.created_at,
-      fr.handled_at,
+      ${getColumnExpr('fr', requestColumns, 'remark', "''")} AS remark,
+      ${getColumnExpr('fr', requestColumns, 'friend_group', `'${DEFAULT_FRIEND_GROUP}'`)} AS friend_group,
+      ${getColumnExpr('fr', requestColumns, 'status', "'pending'")} AS status,
+      ${getColumnExpr('fr', requestColumns, 'created_at', "datetime('now','localtime')")} AS created_at,
+      ${getColumnExpr('fr', requestColumns, 'handled_at', 'NULL')} AS handled_at,
       u.name,
       u.username,
       u.student_id,
@@ -88,7 +174,7 @@ function getFriendData(db, userId) {
     FROM friend_requests fr
     JOIN users u ON u.id = fr.receiver_id
     WHERE fr.requester_id = ?
-    ORDER BY CASE fr.status WHEN 'pending' THEN 0 ELSE 1 END, fr.created_at DESC, fr.id DESC
+    ORDER BY ${requestOrder.join(', ')}
   `).all(userId);
 
   return {
@@ -186,6 +272,7 @@ router.get('/friends', (req, res) => {
 router.post('/friends/requests', (req, res) => {
   try {
     const db = getDb();
+    ensureStudentFeatureSchema(db);
     const targetUserId = parseInt(req.body.target_user_id, 10);
     const remark = normalizeFriendRemark(req.body.remark);
     const friendGroup = normalizeFriendGroup(req.body.friend_group);
@@ -237,7 +324,10 @@ router.post('/friends/requests', (req, res) => {
       type: 'info',
       title: '新的好友申请',
       content: `${req.user.name || req.user.username || '有同学'} 向你发送了好友申请`,
-      target_url: '#/student/friends'
+      target_url: '#/student/friends',
+      sender_name: req.user.name || req.user.username || '学生用户',
+      sender_role: 'student',
+      action_label: '前往好友中心'
     });
 
     res.json({
@@ -260,6 +350,7 @@ router.post('/friends/requests', (req, res) => {
 router.put('/friends/requests/:id/respond', (req, res) => {
   try {
     const db = getDb();
+    ensureStudentFeatureSchema(db);
     const requestId = parseInt(req.params.id, 10);
     const action = String(req.body.action || '').trim();
 
@@ -308,7 +399,10 @@ router.put('/friends/requests/:id/respond', (req, res) => {
       content: action === 'accept'
         ? `${req.user.name || req.user.username || '对方'} 已同意你的好友申请`
         : `${req.user.name || req.user.username || '对方'} 暂未通过你的好友申请`,
-      target_url: '#/student/friends'
+      target_url: '#/student/friends',
+      sender_name: req.user.name || req.user.username || '学生用户',
+      sender_role: 'student',
+      action_label: '查看好友状态'
     });
 
     res.json({
@@ -684,6 +778,7 @@ router.put('/announcements/:id/read', (req, res) => {
 router.get('/notifications', (req, res) => {
   try {
     const db = getDb();
+    ensureStudentFeatureSchema(db);
     const limit = parseInt(req.query.limit) || 50;
     const notifications = db.prepare(`
       SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT ?
@@ -694,6 +789,29 @@ router.get('/notifications', (req, res) => {
     res.json({ success: true, data: { list: notifications, unread: unread.cnt } });
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /notifications/:id
+router.get('/notifications/:id', (req, res) => {
+  try {
+    const db = getDb();
+    ensureStudentFeatureSchema(db);
+    const row = db.prepare(`
+      SELECT *
+      FROM notifications
+      WHERE id = ? AND user_id = ?
+      LIMIT 1
+    `).get(req.params.id, req.user.id);
+
+    if (!row) {
+      return res.status(404).json({ success: false, error: '通知不存在' });
+    }
+
+    res.json({ success: true, data: mapNotificationDetail(row) });
+  } catch (e) {
+    console.error('获取通知详情失败:', e.message);
+    res.status(500).json({ success: false, error: '获取通知详情失败' });
   }
 });
 

@@ -319,6 +319,10 @@ const App = {
         document.querySelector('[href="#/announcements"]')?.classList.add('active');
         this.renderAnnouncements();
       }
+    } else if (hash.startsWith('/notifications/')) {
+      const notificationId = hash.split('/')[2];
+      document.getElementById('page-notification-detail')?.classList.remove('hidden');
+      this.showNotificationDetail(notificationId);
     } else if (hash === '/admin') {
       if (!this.user || this.user.role !== 'admin') { window.location.hash = '#/login'; return; }
       document.getElementById('page-admin').classList.remove('hidden');
@@ -609,7 +613,7 @@ const App = {
               <div class="notify-item__body">${this._escHtml(item.content || '暂无内容')}</div>
               <div class="notify-item__tools">
                 ${item.is_read ? '' : '<button type="button" class="notify-item__read" data-action="read">标记已读</button>'}
-                ${item.target_url ? '<button type="button" class="notify-item__link" data-action="open">查看</button>' : ''}
+                <button type="button" class="notify-item__link" data-action="open">查看</button>
               </div>
             </div>
           </div>
@@ -738,9 +742,7 @@ const App = {
     }
     this._toggleNotificationPanel(false);
     this._closeSwipedNotifications();
-    if (targetUrl) {
-      window.location.hash = targetUrl.startsWith('#') ? targetUrl : '#' + targetUrl;
-    }
+    window.location.hash = '#/notifications/' + id;
   },
 
   async logout() {
@@ -1464,6 +1466,87 @@ const App = {
     };
     if (image.getAttribute('src') !== finalSrc) image.setAttribute('src', finalSrc);
     else if (image.complete && image.naturalWidth > 0) image.onload();
+  },
+
+  async showNotificationDetail(id) {
+    const root = document.getElementById('notification-detail-root');
+    if (!root) return;
+    if (!id || !/^\d+$/.test(String(id))) {
+      root.innerHTML = '<div class="empty-state"><div class="empty-state__icon"><i class="fas fa-bell-slash"></i></div><p class="empty-state__desc">通知不存在或链接无效</p><a href="#/student" class="btn btn-outline mt-2">返回个人中心</a></div>';
+      return;
+    }
+    try {
+      this.showLoading();
+      const res = await API.student.getNotificationDetail(id);
+      this.hideLoading();
+      const item = res.data;
+      if (!res.success || !item) {
+        root.innerHTML = '<div class="empty-state"><div class="empty-state__icon"><i class="fas fa-bell-slash"></i></div><p class="empty-state__desc">通知不存在或已被删除</p><a href="#/student" class="btn btn-outline mt-2">返回个人中心</a></div>';
+        return;
+      }
+      const attachments = Array.isArray(item.attachments) ? item.attachments : [];
+      const senderRoleMap = { system: '系统通知', admin: '管理员', student: '学生', teacher: '教师' };
+      const typeLabelMap = { info: '消息通知', success: '成功通知', warning: '提醒通知', danger: '风险通知' };
+      const senderName = this._escHtml(item.sender_name || '系统通知');
+      const senderRole = this._escHtml(senderRoleMap[item.sender_role] || item.sender_role || '系统');
+      const content = this._escHtml(item.content || '暂无正文').replace(/\n/g, '<br>');
+      const attachmentHtml = attachments.length
+        ? `<div class="notify-detail__attachments">${attachments.map((attachment) => {
+            const name = this._escHtml(attachment.name || attachment.title || '附件');
+            const url = String(attachment.url || '').trim();
+            return url
+              ? `<a class="notify-detail__attachment" href="${this._escAttr(url)}" target="_blank" rel="noopener noreferrer"><i class="fas fa-paperclip"></i><span>${name}</span></a>`
+              : `<div class="notify-detail__attachment is-disabled"><i class="fas fa-paperclip"></i><span>${name}</span></div>`;
+          }).join('')}</div>`
+        : '<div class="empty-state" style="padding:1rem 0"><p class="empty-state__desc">当前通知没有关联附件</p></div>';
+      const actionHtml = item.target_url
+        ? `<a href="${this._escAttr(item.target_url.startsWith('#') ? item.target_url : '#' + item.target_url)}" class="btn btn-primary">${this._escHtml(item.action_label || '前往相关业务')}</a>`
+        : '<button type="button" class="btn btn-outline" disabled>暂无可执行业务</button>';
+      const backHref = this.user && this.user.role === 'student' ? '#/student' : '#/';
+      root.innerHTML =
+        '<a href="' + backHref + '" class="btn-text" style="margin-bottom:1rem;display:inline-block"><i class="fas fa-arrow-left"></i> 返回上一页</a>' +
+        '<div class="card notify-detail">' +
+          '<div class="card-header">' +
+            '<div>' +
+              '<h2>' + this._escHtml(item.title || '通知详情') + '</h2>' +
+              '<div class="notify-detail__badges">' +
+                '<span class="badge badge-info">' + this._escHtml(typeLabelMap[item.type] || '消息通知') + '</span>' +
+                (item.is_read ? '<span class="badge badge-approved">已读</span>' : '<span class="badge badge-pending">未读</span>') +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="card-body">' +
+            '<div class="detail-grid notify-detail__meta">' +
+              '<div><strong>发送主体</strong><br>' + senderName + ' · ' + senderRole + '</div>' +
+              '<div><strong>发布时间</strong><br>' + this.formatDate(item.created_at) + '</div>' +
+              '<div><strong>关联业务</strong><br>' + this._escHtml(item.target_url || '无') + '</div>' +
+              '<div><strong>通知类型</strong><br>' + this._escHtml(typeLabelMap[item.type] || '消息通知') + '</div>' +
+            '</div>' +
+            '<div class="notify-detail__section">' +
+              '<h3>具体正文</h3>' +
+              '<div class="detail-content notify-detail__content">' + content + '</div>' +
+            '</div>' +
+            '<div class="notify-detail__section">' +
+              '<h3>关联附件</h3>' +
+              attachmentHtml +
+            '</div>' +
+            '<div class="notify-detail__section">' +
+              '<h3>业务操作</h3>' +
+              '<div class="notify-detail__actions">' + actionHtml + '<button type="button" class="btn btn-outline" id="notification-mark-read-btn">' + (item.is_read ? '已标记为已读' : '标记为已读') + '</button></div>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      root.querySelector('#notification-mark-read-btn')?.addEventListener('click', async () => {
+        if (item.is_read) return;
+        await this._markNotificationRead(Number(id));
+        this.showNotificationDetail(id);
+      });
+      window.scrollTo(0, 0);
+    } catch (e) {
+      this.hideLoading();
+      root.innerHTML = '<div class="empty-state"><div class="empty-state__icon"><i class="fas fa-circle-exclamation"></i></div><p class="empty-state__desc">通知详情加载失败：' + this._escHtml(e.message || '请稍后重试') + '</p><button type="button" class="btn btn-outline mt-2" id="notification-detail-retry-btn">重新加载</button></div>';
+      root.querySelector('#notification-detail-retry-btn')?.addEventListener('click', () => this.showNotificationDetail(id));
+    }
   },
 
   _escAttr(s) {

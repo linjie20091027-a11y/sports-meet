@@ -15,41 +15,71 @@ const API = {
 
   async request(method, path, data = null, opts = {}) {
     const url = this.baseURL + path;
-    const headers = { 'Content-Type': 'application/json' };
-    if (this.token) headers['Authorization'] = 'Bearer ' + this.token;
+    const retryCount = Math.max(0, Number(opts.retryCount) || 0);
+    const retryDelayMs = Math.max(0, Number(opts.retryDelayMs) || 500);
+    const timeoutMs = Math.max(0, Number(opts.timeoutMs) || 0);
 
-    const options = { method, headers };
-    if (data && method !== 'GET') {
-      options.body = JSON.stringify(data);
-    }
+    for (let attempt = 0; attempt <= retryCount; attempt++) {
+      const headers = { 'Content-Type': 'application/json' };
+      if (this.token) headers['Authorization'] = 'Bearer ' + this.token;
 
-    const res = await fetch(url, options);
-    let result = {};
-    try {
-      result = await res.json();
-    } catch (_) {
-      result = { error: '伺服器回应异常' };
-    }
-
-    if (res.status === 401) {
-      if (opts.silent401) {
-        return { success: false, error: result.error || '未授权', status: 401 };
+      const options = { method, headers };
+      if (data && method !== 'GET') {
+        options.body = JSON.stringify(data);
       }
-      this.clearToken();
-      if (!opts.noRedirect) window.location.hash = '#/login';
-      throw new Error(result.error || '请重新登录');
-    }
 
-    // 業务校验错误（4xx）仍返回 JSON，由呼叫方依 success / error 处理
-    if (res.status >= 500) {
-      throw new Error(result.error || '伺服器内部错误，请稍後再试');
-    }
+      let controller = null;
+      let timer = null;
 
-    if (!res.ok && result.success === undefined && !result.error) {
-      result.error = '请求失败';
-    }
+      try {
+        if (timeoutMs && typeof AbortController !== 'undefined') {
+          controller = new AbortController();
+          options.signal = controller.signal;
+          timer = setTimeout(() => controller.abort(), timeoutMs);
+        }
 
-    return result;
+        const res = await fetch(url, options);
+        let result = {};
+        try {
+          result = await res.json();
+        } catch (_) {
+          result = { error: '伺服器回应异常' };
+        }
+
+        if (res.status === 401) {
+          if (opts.silent401) {
+            return { success: false, error: result.error || '未授权', status: 401 };
+          }
+          this.clearToken();
+          if (!opts.noRedirect) window.location.hash = '#/login';
+          throw new Error(result.error || '请重新登录');
+        }
+
+        if (res.status >= 500) {
+          const serverError = new Error(result.error || '伺服器内部错误，请稍後再试');
+          serverError.retryable = true;
+          throw serverError;
+        }
+
+        if (!res.ok && result.success === undefined && !result.error) {
+          result.error = '请求失败';
+        }
+
+        return result;
+      } catch (error) {
+        const isTimeout = error?.name === 'AbortError';
+        const isNetworkError = error instanceof TypeError;
+        const retryable = !!error?.retryable || isTimeout || isNetworkError;
+        if (attempt < retryCount && retryable) {
+          await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+          continue;
+        }
+        if (isTimeout) throw new Error('请求超时，请稍后重试');
+        throw error;
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    }
   },
 
   get(path) { return this.request('GET', path); },
@@ -175,10 +205,24 @@ const API = {
     getMyProfile() { return API.get('/student/profile'); },
     updatePassword(data) { return API.put('/student/profile/password', data); },
     updateAvatar(avatar) { return API.put('/student/profile/avatar', { avatar }); },
-    getFriends() { return API.get('/student/friends'); },
+    getFriends(opts = {}) {
+      return API.request('GET', '/student/friends', null, {
+        timeoutMs: 8000,
+        retryCount: 2,
+        retryDelayMs: 700,
+        ...opts
+      });
+    },
     sendFriendRequest(data) { return API.post('/student/friends/requests', data); },
     respondFriendRequest(id, action) { return API.put('/student/friends/requests/' + id + '/respond', { action }); },
     getNotifications(params) { return API.get('/student/notifications' + API._qs(params)); },
+    getNotificationDetail(id) {
+      return API.request('GET', '/student/notifications/' + id, null, {
+        timeoutMs: 8000,
+        retryCount: 1,
+        retryDelayMs: 500
+      });
+    },
     markNotificationRead(id) { return API.put('/student/notifications/' + id + '/read'); },
     markAllNotificationsRead() { return API.put('/student/notifications/read-all'); },
     deleteNotification(id) { return API.delete('/student/notifications/' + id); },

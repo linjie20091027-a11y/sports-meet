@@ -205,6 +205,10 @@ function migrateSchema() {
     "ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT ''",
     "ALTER TABLE results ADD COLUMN is_school_record INTEGER DEFAULT 0",
     "ALTER TABLE users ADD COLUMN muted_until TEXT DEFAULT ''",
+    "ALTER TABLE notifications ADD COLUMN sender_name TEXT DEFAULT ''",
+    "ALTER TABLE notifications ADD COLUMN sender_role TEXT DEFAULT 'system'",
+    "ALTER TABLE notifications ADD COLUMN attachments TEXT DEFAULT '[]'",
+    "ALTER TABLE notifications ADD COLUMN action_label TEXT DEFAULT ''",
     "ALTER TABLE forum_posts ADD COLUMN summary TEXT DEFAULT ''",
     "ALTER TABLE forum_posts ADD COLUMN category TEXT DEFAULT 'general'",
     "ALTER TABLE forum_posts ADD COLUMN tags TEXT DEFAULT '[]'",
@@ -220,6 +224,14 @@ function migrateSchema() {
     "ALTER TABLE forum_posts ADD COLUMN is_featured INTEGER DEFAULT 0",
     "ALTER TABLE forum_posts ADD COLUMN last_interaction_at TEXT DEFAULT ''",
     "ALTER TABLE forum_replies ADD COLUMN status TEXT DEFAULT 'pending'",
+    "ALTER TABLE friend_requests ADD COLUMN remark TEXT DEFAULT ''",
+    "ALTER TABLE friend_requests ADD COLUMN friend_group TEXT DEFAULT '同学'",
+    "ALTER TABLE friend_requests ADD COLUMN handled_at TEXT",
+    "ALTER TABLE friend_requests ADD COLUMN updated_at TEXT DEFAULT ''",
+    "ALTER TABLE friendships ADD COLUMN group_name TEXT DEFAULT '同学'",
+    "ALTER TABLE friendships ADD COLUMN source_request_id INTEGER",
+    "ALTER TABLE friendships ADD COLUMN created_at TEXT DEFAULT ''",
+    "ALTER TABLE friendships ADD COLUMN updated_at TEXT DEFAULT ''",
   ];
   alters.forEach((sql) => {
     try { _db.run(sql); } catch (_) { /* 栏位已存在 */ }

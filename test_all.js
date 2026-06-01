@@ -394,6 +394,34 @@ async function runAllTests() {
       return true;
     });
 
+    await test('学生', 'GET /api/student/friends', async () => {
+      const res = await request('GET', '/api/student/friends', { token: studentToken });
+      if (res.status !== 200) return `状态码 ${res.status}: ${JSON.stringify(res.body).slice(0,120)}`;
+      if (!res.body?.success) return `接口返回失败: ${JSON.stringify(res.body).slice(0,120)}`;
+      if (!Array.isArray(res.body?.data?.friends)) return '好友列表不是数组';
+      return true;
+    });
+
+    await test('学生', 'GET /api/student/notifications', async () => {
+      const res = await request('GET', '/api/student/notifications', { token: studentToken });
+      if (res.status !== 200) return `状态码 ${res.status}: ${JSON.stringify(res.body).slice(0,120)}`;
+      if (!Array.isArray(res.body?.data?.list)) return '通知列表不是数组';
+      console.log(` (${res.body.data.list.length}条通知)`);
+      return true;
+    });
+
+    await test('学生', 'GET /api/student/notifications/:id', async () => {
+      const listRes = await request('GET', '/api/student/notifications', { token: studentToken });
+      if (listRes.status !== 200) return `获取通知列表失败: ${listRes.status}`;
+      const first = (listRes.body?.data?.list || [])[0];
+      if (!first?.id) return '暂无通知可验证详情接口';
+      const res = await request('GET', `/api/student/notifications/${first.id}`, { token: studentToken });
+      if (res.status !== 200) return `状态码 ${res.status}: ${JSON.stringify(res.body).slice(0,120)}`;
+      if (!res.body?.data?.title) return '通知详情缺少标题';
+      if (!Array.isArray(res.body?.data?.attachments)) return '通知附件字段不是数组';
+      return true;
+    });
+
     await test('学生', '好友申请同意流程闭环', async () => {
       if (!studentPrimaryToken || !studentSecondaryToken) return '缺少两个学生账号 token';
 
