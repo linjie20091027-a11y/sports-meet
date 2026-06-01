@@ -687,8 +687,8 @@ const App = {
       let [meet, stats, ann, results, events] = await Promise.allSettled([
         API.get('/public/meet-info'),
         API.get('/public/stats/overview'),
-        API.get('/public/announcements?limit=5'),
-        API.get('/public/results?limit=5'),
+        API.get('/public/announcements?limit=3'),
+        API.get('/public/results'),
         API.get('/public/events')
       ]);
 
@@ -706,16 +706,18 @@ const App = {
       document.getElementById('stat-done').textContent = s.completed_schedules || 0;
       document.getElementById('stat-awards').textContent = s.awarded_count || 0;
 
-      // ── 赛事项目总览：横向卡片行，5个 ──
+      // ── 赛事项目总览：横向4卡片 ──
       const homeEv = document.getElementById('home-events');
       const genderL = g => g === 'male' ? '男子' : g === 'female' ? '女子' : '混合';
       const typeL = t => t === 'team' ? '集体' : '个人';
       const eventList = (events.value?.data || []);
       if (eventList.length) {
         let evH = '<div class="events-horiz-row">';
-        eventList.slice(0, 5).forEach(e => {
+        eventList.slice(0, 4).forEach(e => {
+          const iconMap = {track:'fa-person-running',field:'fa-arrow-up-right-dots',relay:'fa-people-arrows',team:'fa-people-group'};
+          const icon = iconMap[e.category] || 'fa-running';
           evH += `<a href="#/events/${e.id}" class="event-horiz-card">
-            <div class="event-horiz-icon"><i class="fas fa-running"></i></div>
+            <div class="event-horiz-icon"><i class="fas ${icon}"></i></div>
             <h4>${e.name}</h4>
             <div class="event-horiz-tags">
               <span class="badge badge-info">${genderL(e.gender_group)}</span>
@@ -730,7 +732,7 @@ const App = {
         homeEv.innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无更多信息</p>';
       }
 
-      // ── 最新公告：卡片式展示，置頂優先 ──
+      // ── 最新公告：3卡片，置頂優先 ──
       const annData = ann.value?.data || [];
       let annH = '';
       if (annData.length) {
@@ -741,7 +743,7 @@ const App = {
           return 0;
         });
         annH = '<div class="home-ann-cards">';
-        sorted.slice(0, 5).forEach(a => {
+        sorted.slice(0, 3).forEach(a => {
           annH += `<a href="#/announcements/${a.id}" class="home-ann-card ${a.is_pinned ? 'pinned' : ''}">
             <div class="home-ann-card-top">
               <span class="badge badge-${a.category || 'general'}">${catL[a.category] || a.category}</span>
@@ -757,12 +759,32 @@ const App = {
         document.getElementById('home-announcements').innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无更多信息</p>';
       }
 
-      // ── 最新成绩 ──
+      // ── 最新成绩：A~E组第一名 ──
       const resData = results.value?.data || [];
       let resH = '';
       if (resData.length) {
-        const medals = { 1: '🥇', 2: '🥈', 3: '🥉' };
-        resData.forEach(r => resH += `<div class="result-item"><span class="rank-medal">${medals[r.rank] || r.rank}</span><span>${r.name || '-'} (${r.class_name || '-'})</span><span>${r.event_name || '-'}</span><span>${r.performance || '-'}</span></div>`);
+        const groups = ['A','B','C','D','E'];
+        const groupChamps = {};
+        resData.forEach(r => {
+          const g = r.user_sport_group || 'A';
+          if (r.rank === 1 && !groupChamps[g]) groupChamps[g] = r;
+        });
+        const champs = groups.map(g => groupChamps[g] || null).filter(Boolean);
+        if (champs.length) {
+          resH = '<div class="home-result-champs">';
+          champs.forEach(r => {
+            resH += `<a href="#/results" class="home-result-card">
+              <div class="home-result-group">${r.user_sport_group || 'A'}组</div>
+              <div class="home-result-medal">🥇</div>
+              <div class="home-result-name">${r.name || '-'}</div>
+              <div class="home-result-event">${r.event_name || '-'}</div>
+              <div class="home-result-perf">${r.performance || '-'}</div>
+            </a>`;
+          });
+          resH += '</div>';
+        } else {
+          resH = '<p class="text-muted text-center" style="padding:2rem">暂无更多信息</p>';
+        }
         document.getElementById('home-results').innerHTML = resH;
       } else {
         document.getElementById('home-results').innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无更多信息</p>';
