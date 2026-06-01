@@ -2800,18 +2800,18 @@ const Admin = {
   async _loadGradesClasses() {
     try {
       const res = await API.get('/admin/grades');
-      const data = res.data || [];
+      const grades = res.data?.grades || [];
+      const classes = res.data?.classes || [];
       let gh = '<table class="table"><thead><tr><th>名称</th><th>排序</th><th>操作</th></tr></thead><tbody>';
       let ch = '';
-      data.forEach(g => {
+      grades.forEach(g => {
         gh += `<tr><td>${g.name}</td><td>${g.sort_order||0}</td><td><button class="btn btn-danger btn-xs" onclick="Admin._deleteGrade(${g.id})">删除</button></td></tr>`;
-        if (g.classes) {
-          g.classes.forEach(c => {
-            ch += `<tr><td>${c.name} (${g.name})</td><td>${c.sort_order||0}</td><td><button class="btn btn-danger btn-xs" onclick="Admin._deleteClass(${c.id})">删除</button></td></tr>`;
-          });
-        }
       });
+      gh += grades.length === 0 ? '<tr><td colspan="3" class="text-muted">暂无年级</td></tr>' : '';
       gh += '</tbody></table>';
+      classes.forEach(c => {
+        ch += `<tr><td>${c.name} (${c.grade_name||''})</td><td>${c.sort_order||0}</td><td><button class="btn btn-danger btn-xs" onclick="Admin._deleteClass(${c.id})">删除</button></td></tr>`;
+      });
       ch = ch ? '<table class="table"><thead><tr><th>名称</th><th>排序</th><th>操作</th></tr></thead><tbody>' + ch + '</tbody></table>' : '<p class="text-muted">暂无班级</p>';
       document.getElementById('grade-list').innerHTML = gh;
       document.getElementById('class-list').innerHTML = ch;
@@ -2828,7 +2828,7 @@ const Admin = {
   },
   async _addClass() {
     try { App.showLoading(); const gRes = await API.get('/admin/grades'); App.hideLoading();
-      const grades = gRes.data||[]; if(!grades.length) return App.showToast('请先添加年级','warning');
+      const grades = gRes.data?.grades || []; if(!grades.length) return App.showToast('请先添加年级','warning');
       const gid = prompt('请选择年级:\n'+grades.map((g,i)=>`${i+1}. ${g.name}`).join('\n')+'\n输入序号:');
       const grade = grades[parseInt(gid)-1]; if(!grade) return;
       const cname = prompt('请输入班级名称（如：1班）:');
