@@ -1069,7 +1069,7 @@ const App = {
         list.innerHTML = data.length ? data.map(a => `
           <div class="announcement-card card ${a.is_pinned?'pinned':''}">
             <div class="card-header"><h3>${a.is_pinned?'📌 ':''}${a.title}</h3><span class="badge badge-${a.category||'general'}">${catL[a.category]||a.category}</span></div>
-            <div class="card-body"><p class="announcement-preview">${(a.content||'').substring(0,120)}...</p></div>
+            <div class="card-body"><p class="announcement-preview">${a.content || ''}</p></div>
             <div class="card-footer"><span class="text-sm text-muted">${this.formatDate(a.publish_time)} · ${a.view_count||0}阅读</span><a href="#/announcements/${a.id}" class="btn btn-outline btn-sm">查看详情</a></div>
           </div>`).join('') : '<p class="text-muted p-8 text-center">暂无公告</p>';
       } catch (e) { }
