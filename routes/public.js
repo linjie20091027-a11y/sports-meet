@@ -167,6 +167,7 @@ function queryUsers(db, terms, filters) {
       if (department) subtitleParts.push(department);
       return {
         id: row.id,
+        user_id: row.id,
         type: 'users',
         title: row.name,
         description: eventNames.length

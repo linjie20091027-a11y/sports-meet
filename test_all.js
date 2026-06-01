@@ -14,6 +14,9 @@ const SKIP = '\x1b[36m[SKIP]\x1b[0m';
 let results = { total: 0, passed: 0, failed: 0, skipped: 0 };
 let adminToken = null;
 let adminUser = null;
+let studentPrimaryToken = null;
+let studentSecondaryToken = null;
+let studentTertiaryToken = null;
 
 // ========== HTTP ==========
 function request(method, path, opts = {}) {
@@ -325,6 +328,11 @@ async function runAllTests() {
     const stuResult = await tryLogin('20250001@hkms.hktedu.com', '123456');
     if (stuResult) {
       studentToken = stuResult.token;
+      studentPrimaryToken = stuResult.token;
+      const stu2Result = await tryLogin('20250002@hkms.hktedu.com', '123456');
+      const stu3Result = await tryLogin('20250003@hkms.hktedu.com', '123456');
+      studentSecondaryToken = stu2Result?.token || null;
+      studentTertiaryToken = stu3Result?.token || null;
     } else {
       studentToken = adminToken; // 用管理员token回退
     }
@@ -383,8 +391,90 @@ async function runAllTests() {
       console.log(` (${len}条成绩)`);
       return true;
     });
+
+    await test('学生', '好友申请同意流程闭环', async () => {
+      if (!studentPrimaryToken || !studentSecondaryToken) return '缺少两个学生账号 token';
+
+      const me = await request('GET', '/api/student/friends', { token: studentPrimaryToken });
+      const peer = await request('GET', '/api/student/friends', { token: studentSecondaryToken });
+      if (me.status !== 200 || peer.status !== 200) return `好友接口状态异常 ${me.status}/${peer.status}`;
+
+      const myData = me.body?.data || {};
+      const peerData = peer.body?.data || {};
+      const alreadyFriends = (myData.friend_ids || []).includes(8) && (peerData.friend_ids || []).includes(7);
+
+      if (!alreadyFriends) {
+        const peerIncoming = (peerData.incoming || []).find(item => Number(item.requester_id) === 7 && item.status === 'pending');
+        const myOutgoing = (myData.outgoing || []).find(item => Number(item.receiver_id) === 8 && item.status === 'pending');
+
+        if (!peerIncoming && !myOutgoing) {
+          const sendRes = await request('POST', '/api/student/friends/requests', {
+            token: studentPrimaryToken,
+            body: { target_user_id: 8, remark: '测试好友申请', friend_group: '同学' }
+          });
+          if (sendRes.status !== 200 || !sendRes.body?.success) {
+            return `发送好友申请失败: ${JSON.stringify(sendRes.body).slice(0,120)}`;
+          }
+        }
+
+        const peerRefresh = await request('GET', '/api/student/friends', { token: studentSecondaryToken });
+        const pendingRequest = (peerRefresh.body?.data?.incoming || []).find(item => Number(item.requester_id) === 7 && item.status === 'pending');
+        if (!pendingRequest) return '发送后仍未出现在接收方申请箱';
+
+        const acceptRes = await request('PUT', `/api/student/friends/requests/${pendingRequest.id}/respond`, {
+          token: studentSecondaryToken,
+          body: { action: 'accept' }
+        });
+        if (acceptRes.status !== 200 || !acceptRes.body?.success) {
+          return `同意好友申请失败: ${JSON.stringify(acceptRes.body).slice(0,120)}`;
+        }
+      }
+
+      const doneA = await request('GET', '/api/student/friends', { token: studentPrimaryToken });
+      const doneB = await request('GET', '/api/student/friends', { token: studentSecondaryToken });
+      const pass = (doneA.body?.data?.friend_ids || []).includes(8) && (doneB.body?.data?.friend_ids || []).includes(7);
+      if (!pass) return '双方好友列表未同步更新';
+      console.log(' (7 <-> 8 已互为好友)');
+      return true;
+    });
+
+    await test('学生', '好友申请拒绝流程闭环', async () => {
+      if (!studentPrimaryToken || !studentTertiaryToken) return '缺少第三个学生账号 token';
+
+      const thirdInbox = await request('GET', '/api/student/friends', { token: studentTertiaryToken });
+      if (thirdInbox.status !== 200) return `获取第三个学生好友资料失败: ${thirdInbox.status}`;
+      let pendingRequest = (thirdInbox.body?.data?.incoming || []).find(item => Number(item.requester_id) === 7 && item.status === 'pending');
+
+      if (!pendingRequest) {
+        const sendRes = await request('POST', '/api/student/friends/requests', {
+          token: studentPrimaryToken,
+          body: { target_user_id: 9, remark: '测试拒绝流程', friend_group: '同学' }
+        });
+        if (!(sendRes.status === 200 && sendRes.body?.success) && !String(sendRes.body?.error || '').includes('请到好友中心处理')) {
+          return `发起拒绝测试申请失败: ${JSON.stringify(sendRes.body).slice(0,120)}`;
+        }
+        const refreshed = await request('GET', '/api/student/friends', { token: studentTertiaryToken });
+        pendingRequest = (refreshed.body?.data?.incoming || []).find(item => Number(item.requester_id) === 7 && item.status === 'pending');
+      }
+
+      if (!pendingRequest) return '拒绝流程未找到待处理申请';
+
+      const rejectRes = await request('PUT', `/api/student/friends/requests/${pendingRequest.id}/respond`, {
+        token: studentTertiaryToken,
+        body: { action: 'reject' }
+      });
+      if (rejectRes.status !== 200 || !rejectRes.body?.success) {
+        return `拒绝好友申请失败: ${JSON.stringify(rejectRes.body).slice(0,120)}`;
+      }
+
+      const done = await request('GET', '/api/student/friends', { token: studentPrimaryToken });
+      const outgoingRejected = (done.body?.data?.outgoing || []).some(item => Number(item.receiver_id) === 9 && item.status === 'rejected');
+      if (!outgoingRejected) return '发起方未看到申请被拒绝状态';
+      console.log(' (7 -> 9 已拒绝)');
+      return true;
+    });
   } else {
-    for (const name of ['profile','events','registrations POST','registrations GET','my-schedules','my-results']) {
+    for (const name of ['profile','events','registrations POST','registrations GET','my-schedules','my-results','friends accept flow','friends reject flow']) {
       await testSkip('学生', name, '无可用token');
     }
   }

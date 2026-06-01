@@ -7,6 +7,101 @@ const { createNotification } = require('../utils/notify');
 
 router.use(authMiddleware);
 
+const DEFAULT_FRIEND_GROUP = '同学';
+
+function normalizeFriendGroup(value) {
+  const groupName = String(value || '').trim();
+  return groupName ? groupName.slice(0, 20) : DEFAULT_FRIEND_GROUP;
+}
+
+function normalizeFriendRemark(value) {
+  return String(value || '').trim().slice(0, 80);
+}
+
+function getFriendData(db, userId) {
+  const friends = db.prepare(`
+    SELECT
+      f.friend_id,
+      f.group_name,
+      f.created_at,
+      u.name,
+      u.username,
+      u.student_id,
+      u.class_name,
+      u.grade,
+      u.avatar,
+      u.role,
+      COALESCE(ev.event_names, '') AS event_names
+    FROM friendships f
+    JOIN users u ON u.id = f.friend_id
+    LEFT JOIN (
+      SELECT r.user_id, GROUP_CONCAT(e.name, ' / ') AS event_names
+      FROM registrations r
+      JOIN events e ON e.id = r.event_id
+      WHERE r.status != 'rejected'
+      GROUP BY r.user_id
+    ) ev ON ev.user_id = u.id
+    WHERE f.user_id = ?
+    ORDER BY f.created_at DESC, f.id DESC
+  `).all(userId);
+
+  const incoming = db.prepare(`
+    SELECT
+      fr.id,
+      fr.requester_id,
+      fr.receiver_id,
+      fr.remark,
+      fr.friend_group,
+      fr.status,
+      fr.created_at,
+      fr.handled_at,
+      u.name,
+      u.username,
+      u.student_id,
+      u.class_name,
+      u.grade,
+      u.avatar,
+      u.role
+    FROM friend_requests fr
+    JOIN users u ON u.id = fr.requester_id
+    WHERE fr.receiver_id = ?
+    ORDER BY CASE fr.status WHEN 'pending' THEN 0 ELSE 1 END, fr.created_at DESC, fr.id DESC
+  `).all(userId);
+
+  const outgoing = db.prepare(`
+    SELECT
+      fr.id,
+      fr.requester_id,
+      fr.receiver_id,
+      fr.remark,
+      fr.friend_group,
+      fr.status,
+      fr.created_at,
+      fr.handled_at,
+      u.name,
+      u.username,
+      u.student_id,
+      u.class_name,
+      u.grade,
+      u.avatar,
+      u.role
+    FROM friend_requests fr
+    JOIN users u ON u.id = fr.receiver_id
+    WHERE fr.requester_id = ?
+    ORDER BY CASE fr.status WHEN 'pending' THEN 0 ELSE 1 END, fr.created_at DESC, fr.id DESC
+  `).all(userId);
+
+  return {
+    friends,
+    incoming,
+    outgoing,
+    friend_ids: friends.map(item => Number(item.friend_id)),
+    pending_received_ids: incoming.filter(item => item.status === 'pending').map(item => Number(item.requester_id)),
+    pending_sent_ids: outgoing.filter(item => item.status === 'pending').map(item => Number(item.receiver_id)),
+    groups: [...new Set(friends.map(item => item.group_name || DEFAULT_FRIEND_GROUP).filter(Boolean))]
+  };
+}
+
 // ==================== 个人中心 ====================
 
 // GET /profile - 获取个人资料
@@ -60,6 +155,169 @@ router.put('/profile/password', (req, res) => {
   } catch (e) {
     console.error('修改密码失败:', e.message);
     res.status(500).json({ error: '服务器内部错误' });
+  }
+});
+
+// ==================== 好友系统 ====================
+
+// GET /friends - 获取好友列表、申请箱与状态摘要
+router.get('/friends', (req, res) => {
+  try {
+    const db = getDb();
+    const data = getFriendData(db, req.user.id);
+    res.json({
+      success: true,
+      data: {
+        ...data,
+        summary: {
+          friends: data.friends.length,
+          incoming_pending: data.pending_received_ids.length,
+          outgoing_pending: data.pending_sent_ids.length
+        }
+      }
+    });
+  } catch (e) {
+    console.error('获取好友资料失败:', e.message);
+    res.status(500).json({ success: false, error: '获取好友资料失败' });
+  }
+});
+
+// POST /friends/requests - 发起好友申请
+router.post('/friends/requests', (req, res) => {
+  try {
+    const db = getDb();
+    const targetUserId = parseInt(req.body.target_user_id, 10);
+    const remark = normalizeFriendRemark(req.body.remark);
+    const friendGroup = normalizeFriendGroup(req.body.friend_group);
+
+    if (!targetUserId) {
+      return res.status(400).json({ success: false, error: '请选择要添加的好友' });
+    }
+    if (targetUserId === req.user.id) {
+      return res.status(400).json({ success: false, error: '不能添加自己为好友' });
+    }
+
+    const targetUser = db.prepare(`
+      SELECT id, name, status FROM users WHERE id = ? AND status = 'active'
+    `).get(targetUserId);
+    if (!targetUser) {
+      return res.status(404).json({ success: false, error: '目标用户不存在或已停用' });
+    }
+
+    const existingFriend = db.prepare(`
+      SELECT id FROM friendships WHERE user_id = ? AND friend_id = ?
+    `).get(req.user.id, targetUserId);
+    if (existingFriend) {
+      return res.status(400).json({ success: false, error: '你们已经是好友了' });
+    }
+
+    const pendingEither = db.prepare(`
+      SELECT id, requester_id, receiver_id
+      FROM friend_requests
+      WHERE status = 'pending'
+        AND (
+          (requester_id = ? AND receiver_id = ?)
+          OR
+          (requester_id = ? AND receiver_id = ?)
+        )
+      ORDER BY id DESC
+      LIMIT 1
+    `).get(req.user.id, targetUserId, targetUserId, req.user.id);
+    if (pendingEither) {
+      const msg = pendingEither.requester_id === req.user.id ? '好友申请已发送，请等待对方处理' : '对方已向你发送好友申请，请到好友中心处理';
+      return res.status(400).json({ success: false, error: msg });
+    }
+
+    const inserted = db.prepare(`
+      INSERT INTO friend_requests (requester_id, receiver_id, remark, friend_group, status, updated_at)
+      VALUES (?, ?, ?, ?, 'pending', datetime('now','localtime'))
+    `).run(req.user.id, targetUserId, remark, friendGroup);
+
+    createNotification(db, targetUserId, {
+      type: 'info',
+      title: '新的好友申请',
+      content: `${req.user.name || req.user.username || '有同学'} 向你发送了好友申请`,
+      target_url: '#/student/friends'
+    });
+
+    res.json({
+      success: true,
+      message: '好友申请已发送',
+      data: {
+        request_id: inserted.lastInsertRowid,
+        target_user_id: targetUserId,
+        friend_group: friendGroup,
+        remark
+      }
+    });
+  } catch (e) {
+    console.error('发送好友申请失败:', e.message);
+    res.status(500).json({ success: false, error: '发送好友申请失败' });
+  }
+});
+
+// PUT /friends/requests/:id/respond - 同意或拒绝好友申请
+router.put('/friends/requests/:id/respond', (req, res) => {
+  try {
+    const db = getDb();
+    const requestId = parseInt(req.params.id, 10);
+    const action = String(req.body.action || '').trim();
+
+    if (!requestId || !['accept', 'reject'].includes(action)) {
+      return res.status(400).json({ success: false, error: '请求参数无效' });
+    }
+
+    const requestRow = db.prepare(`
+      SELECT fr.*, u.name AS requester_name
+      FROM friend_requests fr
+      JOIN users u ON u.id = fr.requester_id
+      WHERE fr.id = ? AND fr.receiver_id = ?
+    `).get(requestId, req.user.id);
+
+    if (!requestRow) {
+      return res.status(404).json({ success: false, error: '好友申请不存在' });
+    }
+    if (requestRow.status !== 'pending') {
+      return res.status(400).json({ success: false, error: '该好友申请已处理，请刷新列表' });
+    }
+
+    const handleRequest = db.transaction(() => {
+      if (action === 'accept') {
+        db.prepare(`
+          INSERT OR IGNORE INTO friendships (user_id, friend_id, group_name, source_request_id, updated_at)
+          VALUES (?, ?, ?, ?, datetime('now','localtime'))
+        `).run(req.user.id, requestRow.requester_id, normalizeFriendGroup(requestRow.friend_group), requestId);
+        db.prepare(`
+          INSERT OR IGNORE INTO friendships (user_id, friend_id, group_name, source_request_id, updated_at)
+          VALUES (?, ?, ?, ?, datetime('now','localtime'))
+        `).run(requestRow.requester_id, req.user.id, DEFAULT_FRIEND_GROUP, requestId);
+      }
+
+      db.prepare(`
+        UPDATE friend_requests
+        SET status = ?, handled_at = datetime('now','localtime'), updated_at = datetime('now','localtime')
+        WHERE id = ?
+      `).run(action === 'accept' ? 'accepted' : 'rejected', requestId);
+    });
+
+    handleRequest();
+
+    createNotification(db, requestRow.requester_id, {
+      type: action === 'accept' ? 'success' : 'warning',
+      title: action === 'accept' ? '好友申请已通过' : '好友申请被拒绝',
+      content: action === 'accept'
+        ? `${req.user.name || req.user.username || '对方'} 已同意你的好友申请`
+        : `${req.user.name || req.user.username || '对方'} 暂未通过你的好友申请`,
+      target_url: '#/student/friends'
+    });
+
+    res.json({
+      success: true,
+      message: action === 'accept' ? '已添加为好友' : '已拒绝好友申请'
+    });
+  } catch (e) {
+    console.error('处理好友申请失败:', e.message);
+    res.status(500).json({ success: false, error: '处理好友申请失败' });
   }
 });
 

@@ -28,6 +28,16 @@ const App = {
   searchSuggestTimer: null,
   searchLastRequestId: 0,
   searchHistoryKey: 'sports_meet_search_history',
+  friendState: {
+    loaded: false,
+    friends: [],
+    incoming: [],
+    outgoing: [],
+    friendIds: [],
+    pendingReceivedIds: [],
+    pendingSentIds: [],
+    groups: []
+  },
   _shownReminders: new Set(),
   _reminderPollTimer: null,
 
@@ -89,6 +99,7 @@ const App = {
       }
     } else {
       this.user = null;
+      this._resetFriendState();
     }
   },
 
@@ -98,6 +109,7 @@ const App = {
     if (!token) {
       this.user = null;
       API.token = '';
+      this._resetFriendState();
       this.updateNav();
       return;
     }
@@ -110,11 +122,134 @@ const App = {
       } else if (res.status === 401) {
         API.clearToken();
         this.user = null;
+        this._resetFriendState();
       }
     } catch (_) {
       /* 网路异常时保留本地登录状态 */
     }
+    if (!this.user || this.user.role !== 'student') this._resetFriendState();
     this.updateNav();
+  },
+
+  _resetFriendState() {
+    this.friendState = {
+      loaded: false,
+      friends: [],
+      incoming: [],
+      outgoing: [],
+      friendIds: [],
+      pendingReceivedIds: [],
+      pendingSentIds: [],
+      groups: []
+    };
+  },
+
+  async ensureFriendState(force = false) {
+    if (!this.user || this.user.role !== 'student') {
+      this._resetFriendState();
+      return this.friendState;
+    }
+    if (this.friendState.loaded && !force) return this.friendState;
+    const res = await API.student.getFriends();
+    if (!res.success) throw new Error(res.error || '加载好友资料失败');
+    const data = res.data || {};
+    this.friendState = {
+      loaded: true,
+      friends: data.friends || [],
+      incoming: data.incoming || [],
+      outgoing: data.outgoing || [],
+      friendIds: (data.friend_ids || []).map(Number),
+      pendingReceivedIds: (data.pending_received_ids || []).map(Number),
+      pendingSentIds: (data.pending_sent_ids || []).map(Number),
+      groups: data.groups || []
+    };
+    return this.friendState;
+  },
+
+  _getFriendActionMeta(item) {
+    const targetId = Number(item?.user_id || item?.id || 0);
+    if (!targetId || !this.user || this.user.role !== 'student') return null;
+    if (Number(this.user.id) === targetId) {
+      return { state: 'self', label: '自己', disabled: true };
+    }
+    if (this.friendState.friendIds.includes(targetId)) {
+      return { state: 'friend', label: '已是好友', disabled: true };
+    }
+    if (this.friendState.pendingReceivedIds.includes(targetId)) {
+      return { state: 'incoming', label: '待你处理', disabled: true };
+    }
+    if (this.friendState.pendingSentIds.includes(targetId)) {
+      return { state: 'pending', label: '申请中', disabled: true };
+    }
+    return { state: 'ready', label: '添加好友', disabled: false };
+  },
+
+  showFriendRequestModal(targetUser) {
+    if (!this.user || this.user.role !== 'student') {
+      this.showToast('请先使用学生账号登录', 'warning');
+      return;
+    }
+    const userId = Number(targetUser?.user_id || targetUser?.id || 0);
+    if (!userId) return;
+    const groups = Array.from(new Set(['同学', '舍友', '同项目', ...(this.friendState.groups || [])]));
+    this.showModal(`
+      <div class="modal__header">
+        <h3 class="modal__title">添加好友</h3>
+        <button type="button" class="modal__close" data-close-modal><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal__body">
+        <div class="friend-request-card">
+          <div class="friend-request-card__avatar">
+            ${targetUser.avatar ? `<img src="${this._escAttr(targetUser.avatar)}" alt="${this._escAttr(targetUser.title || targetUser.name || '')}">` : '<i class="fas fa-user"></i>'}
+          </div>
+          <div>
+            <strong>${this._escHtml(targetUser.title || targetUser.name || '未命名用户')}</strong>
+            <small>${this._escHtml(targetUser.subtitle || targetUser.account || '发起好友申请')}</small>
+          </div>
+        </div>
+        <div class="form__group">
+          <label class="form__label">好友分组</label>
+          <select id="friend-group-input" class="form__input">
+            ${groups.map(group => `<option value="${this._escAttr(group)}">${this._escHtml(group)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form__group">
+          <label class="form__label">申请备注</label>
+          <textarea id="friend-remark-input" class="form__input" rows="4" placeholder="我是 ${this._escAttr(this.user.name || this.user.username || '')}，想加你为好友"></textarea>
+          <small class="form-hint">可填写身份说明、共同项目或想打招呼的话</small>
+        </div>
+      </div>
+      <div class="modal__footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-close-modal>取消</button>
+        <button type="button" class="btn btn-primary btn-sm" id="friend-request-submit-btn">发送申请</button>
+      </div>
+    `);
+    document.getElementById('friend-request-submit-btn')?.addEventListener('click', async () => {
+      const remark = document.getElementById('friend-remark-input')?.value || '';
+      const friendGroup = document.getElementById('friend-group-input')?.value || '同学';
+      try {
+        this.showLoading();
+        const res = await API.student.sendFriendRequest({
+          target_user_id: userId,
+          remark,
+          friend_group: friendGroup
+        });
+        if (!res.success) throw new Error(res.error || '发送好友申请失败');
+        await this.ensureFriendState(true);
+        this.hideLoading();
+        this.hideModal(true);
+        this.showToast(res.message || '好友申请已发送', 'success');
+        if (!document.getElementById('search-overlay')?.classList.contains('hidden')) {
+          this._showSearchResults(this.searchState);
+        }
+        if (typeof Student !== 'undefined' && Student.currentTab === 'friends') {
+          Student._renderFriends();
+        }
+      } catch (e) {
+        this.hideLoading();
+        this.showToast(e.message || '发送好友申请失败', 'error');
+      }
+    });
   },
 
   // ====== 路由 ======
@@ -197,7 +332,7 @@ const App = {
         return;
       }
       const tab = hash.split('/')[2];
-      if (tab === 'register') Student.currentTab = 'register';
+      if (tab) Student.currentTab = tab;
       document.getElementById('page-student').classList.remove('hidden');
       document.querySelector('#nav-register-link')?.classList.add('active');
       document.querySelector('[href="#/student"]')?.classList.add('active');
@@ -611,6 +746,7 @@ const App = {
   async logout() {
     API.clearToken();
     this.user = null;
+    this._resetFriendState();
     this._stopNotificationPolling();
     this._toggleNotificationPanel(false);
     this.updateNav();
@@ -685,6 +821,9 @@ const App = {
       if (!res.success) throw new Error(res.error || '搜索失败');
 
       const data = this._normalizeSearchResponse(res.data || {});
+      if (this.user?.role === 'student' && ((data.counts?.users || 0) > 0 || (data.items || []).some(item => item.type === 'users'))) {
+        await this.ensureFriendState();
+      }
       this.searchState = {
         ...this.searchState,
         query: data.query || this.searchState.query,
@@ -854,6 +993,13 @@ const App = {
         </div>
         <button class="search-close" type="button" onclick="App.hideSearch()">&times;</button>
       </div>
+      <div class="search-query-bar">
+        <div class="search-query-bar__input">
+          <i class="fas fa-search"></i>
+          <input type="text" id="search-query-inline" value="${this._escAttr(state.query)}" placeholder="搜索用户、项目、公告、成绩、精彩瞬间">
+        </div>
+        <button type="button" class="btn btn-primary btn-sm" id="search-query-inline-btn">重新搜索</button>
+      </div>
       <div class="search-toolbar">
         <div class="search-toolbar__filters">${filterBar}</div>
         <div class="search-toolbar__meta">
@@ -913,6 +1059,14 @@ const App = {
       ? `<div class="search-card-media"><img src="${this._escAttr(item.thumbnail || item.avatar)}" alt="${this._escAttr(item.title)}"></div>`
       : `<div class="search-card-icon ${this._escAttr(item.type)}"><i class="fas ${iconMap[item.type] || 'fa-search'}"></i></div>`;
     const hrefAttr = item.href ? `data-search-href="${this._escAttr(item.href)}"` : '';
+    const friendMeta = item.type === 'users' ? this._getFriendActionMeta(item) : null;
+    const actionBlock = friendMeta
+      ? `<div class="search-card-actions">
+          <button type="button" class="btn btn-sm ${friendMeta.state === 'ready' ? 'btn-primary' : 'btn-outline'}" data-friend-action="${friendMeta.state}" data-user-id="${this._escAttr(item.user_id || item.id)}" ${friendMeta.disabled ? 'disabled' : ''}>
+            ${this._escHtml(friendMeta.label)}
+          </button>
+        </div>`
+      : '';
     return `<article class="search-card search-card--detail" ${hrefAttr}>
       ${imageBlock}
       <div class="search-card-body">
@@ -920,6 +1074,7 @@ const App = {
         <small>${this._escHtml(item.subtitle || '')}</small>
         <p>${this._escHtml(item.description || '')}</p>
       </div>
+      ${actionBlock}
       <div class="search-card-arrow"><i class="fas fa-angle-right"></i></div>
     </article>`;
   },
@@ -944,6 +1099,18 @@ const App = {
   },
 
   _bindSearchResultEvents() {
+    document.getElementById('search-query-inline-btn')?.addEventListener('click', () => {
+      const nextQuery = document.getElementById('search-query-inline')?.value || '';
+      this._submitSearch({ q: nextQuery, page: 1 });
+    });
+
+    document.getElementById('search-query-inline')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        this._submitSearch({ q: e.target.value || '', page: 1 });
+      }
+    });
+
     document.querySelectorAll('[data-search-type]').forEach(button => {
       button.addEventListener('click', () => {
         const type = button.getAttribute('data-search-type') || 'all';
@@ -978,6 +1145,17 @@ const App = {
           return;
         }
         window.open(href, '_blank', 'noopener');
+      });
+    });
+
+    document.querySelectorAll('[data-friend-action="ready"]').forEach(button => {
+      button.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const targetUserId = Number(button.getAttribute('data-user-id') || 0);
+        const targetUser = (this.searchState.items || []).find(item => Number(item.user_id || item.id) === targetUserId);
+        if (!targetUser) return;
+        this.showFriendRequestModal(targetUser);
       });
     });
 

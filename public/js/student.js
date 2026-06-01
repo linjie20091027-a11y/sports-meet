@@ -18,6 +18,7 @@ const Student = {
           </div>
           <ul class="student-menu">
             <li class="student-menu-item active" data-tab="profile"><i class="fas fa-id-card"></i>个人资料</li>
+            <li class="student-menu-item" data-tab="friends"><i class="fas fa-user-group"></i>我的好友</li>
             <li class="student-menu-item" data-tab="register"><i class="fas fa-pen-to-square"></i>在線报名</li>
             <li class="student-menu-item" data-tab="my-registrations"><i class="fas fa-list-check"></i>我的报名</li>
             <li class="student-menu-item" data-tab="my-schedules"><i class="fas fa-calendar"></i>我的赛程</li>
@@ -47,6 +48,7 @@ const Student = {
     const tab = this.currentTab;
     switch (tab) {
       case 'profile': this._renderProfile(); break;
+      case 'friends': this._renderFriends(); break;
       case 'register': this._renderRegister(); break;
       case 'my-registrations': this._renderMyRegistrations(); break;
       case 'my-schedules': this._renderMySchedules(); break;
@@ -205,6 +207,131 @@ const Student = {
         else App.showToast(r.error || '修改失败', 'error');
       } catch (e) { App.hideLoading(); App.showToast(e.message || '修改失败', 'error'); }
     });
+  },
+
+  // ===== 2. 在線报名 =====
+  async _renderFriends() {
+    const c = document.getElementById('student-content');
+    c.innerHTML = '<div class="text-center p-8"><div class="spinner"></div><p class="text-muted mt-2">加载好友资料中…</p></div>';
+    try {
+      const res = await API.student.getFriends();
+      if (!res.success) throw new Error(res.error || '加载好友资料失败');
+      const data = res.data || {};
+      App.friendState = {
+        loaded: true,
+        friends: data.friends || [],
+        incoming: data.incoming || [],
+        outgoing: data.outgoing || [],
+        friendIds: (data.friend_ids || []).map(Number),
+        pendingReceivedIds: (data.pending_received_ids || []).map(Number),
+        pendingSentIds: (data.pending_sent_ids || []).map(Number),
+        groups: data.groups || []
+      };
+
+      const esc = (v) => this._escape(v);
+      const renderUserMeta = (user) => [user.student_id || user.username || '-', user.grade, user.class_name].filter(Boolean).join(' · ');
+      const renderAvatar = (user) => user.avatar
+        ? `<img src="${this._escAttr(user.avatar)}" alt="${this._escAttr(user.name || '')}">`
+        : '<i class="fas fa-user"></i>';
+
+      const friends = data.friends || [];
+      const incoming = (data.incoming || []).filter(item => item.status === 'pending');
+      const outgoing = data.outgoing || [];
+
+      const friendCards = friends.length
+        ? friends.map(friend => `
+            <article class="friend-card">
+              <div class="friend-card__avatar">${renderAvatar(friend)}</div>
+              <div class="friend-card__body">
+                <div class="friend-card__top">
+                  <strong>${esc(friend.name || '未命名用户')}</strong>
+                  <span class="badge badge-info">${esc(friend.group_name || '同学')}</span>
+                </div>
+                <small>${esc(renderUserMeta(friend) || '账号信息待补充')}</small>
+                <p>${esc(friend.event_names ? `常报项目：${friend.event_names}` : '已成为你的好友，可在搜索页继续发现更多同学')}</p>
+              </div>
+            </article>
+          `).join('')
+        : '<div class="empty-state"><div class="empty-state__icon"><i class="fas fa-user-group"></i></div><p class="empty-state__desc">暂无好友，可先到顶部搜索栏搜索同学并发送申请</p></div>';
+
+      const incomingCards = incoming.length
+        ? incoming.map(item => `
+            <article class="friend-card friend-card--request">
+              <div class="friend-card__avatar">${renderAvatar(item)}</div>
+              <div class="friend-card__body">
+                <div class="friend-card__top">
+                  <strong>${esc(item.name || '未命名用户')}</strong>
+                  <span class="badge badge-pending">待处理</span>
+                </div>
+                <small>${esc(renderUserMeta(item))}</small>
+                <p>${esc(item.remark || '对方没有填写备注')}</p>
+                <div class="friend-card__actions">
+                  <button type="button" class="btn btn-primary btn-sm" onclick="Student._respondFriendRequest(${item.id}, 'accept')">同意</button>
+                  <button type="button" class="btn btn-outline btn-sm" onclick="Student._respondFriendRequest(${item.id}, 'reject')">拒绝</button>
+                </div>
+              </div>
+            </article>
+          `).join('')
+        : '<div class="empty-state"><div class="empty-state__icon"><i class="fas fa-inbox"></i></div><p class="empty-state__desc">当前没有待处理的好友申请</p></div>';
+
+      const outgoingCards = outgoing.length
+        ? outgoing.map(item => `
+            <article class="friend-card friend-card--request">
+              <div class="friend-card__avatar">${renderAvatar(item)}</div>
+              <div class="friend-card__body">
+                <div class="friend-card__top">
+                  <strong>${esc(item.name || '未命名用户')}</strong>
+                  <span class="badge ${item.status === 'pending' ? 'badge-pending' : item.status === 'accepted' ? 'badge-approved' : 'badge-rejected'}">${esc(item.status === 'pending' ? '等待回应' : item.status === 'accepted' ? '已通过' : '已拒绝')}</span>
+                </div>
+                <small>${esc(renderUserMeta(item))}</small>
+                <p>${esc(item.remark || '你没有填写备注')}</p>
+              </div>
+            </article>
+          `).join('')
+        : '<div class="empty-state"><div class="empty-state__icon"><i class="fas fa-paper-plane"></i></div><p class="empty-state__desc">还没有发出的好友申请</p></div>';
+
+      c.innerHTML = `
+        <div class="student-section">
+          <div class="student-section-head">
+            <div>
+              <h2 class="student-section-title">我的好友</h2>
+              <p class="text-sm text-muted">从搜索结果直接发起申请，在这里统一查看好友和申请进度。</p>
+            </div>
+            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('nav-search-input')?.focus()">去搜索同学</button>
+          </div>
+          <div class="friend-summary-grid">
+            <div class="friend-summary-card"><strong>${friends.length}</strong><span>好友总数</span></div>
+            <div class="friend-summary-card"><strong>${incoming.length}</strong><span>待处理申请</span></div>
+            <div class="friend-summary-card"><strong>${(data.outgoing || []).filter(item => item.status === 'pending').length}</strong><span>已发出申请</span></div>
+          </div>
+          <div class="friend-panel-grid">
+            <section class="card"><div class="card-header"><h3>好友列表</h3></div><div class="card-body friend-card-list">${friendCards}</div></section>
+            <section class="card"><div class="card-header"><h3>收到的申请</h3></div><div class="card-body friend-card-list">${incomingCards}</div></section>
+          </div>
+          <section class="card mt-3"><div class="card-header"><h3>发出的申请</h3></div><div class="card-body friend-card-list">${outgoingCards}</div></section>
+        </div>
+      `;
+    } catch (e) {
+      c.innerHTML = `<div class="empty-state"><div class="empty-state__icon"><i class="fas fa-circle-exclamation"></i></div><p class="empty-state__desc">加载失败：${this._escape(e.message)}</p></div>`;
+    }
+  },
+
+  async _respondFriendRequest(id, action) {
+    const label = action === 'accept' ? '同意' : '拒绝';
+    const ok = await App.confirmDialog(`确认${label}这条好友申请？`);
+    if (!ok) return;
+    try {
+      App.showLoading();
+      const res = await API.student.respondFriendRequest(id, action);
+      App.hideLoading();
+      if (!res.success) throw new Error(res.error || `${label}失败`);
+      App.showToast(res.message || `${label}成功`, 'success');
+      await App.ensureFriendState(true);
+      this._renderFriends();
+    } catch (e) {
+      App.hideLoading();
+      App.showToast(e.message || `${label}失败`, 'error');
+    }
   },
 
   // ===== 2. 在線报名 =====

@@ -207,9 +207,42 @@ function migrateSchema() {
       FOREIGN KEY (deleted_by) REFERENCES users(id)
     )
   `);
+  _db.run(`
+    CREATE TABLE IF NOT EXISTS friend_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      requester_id INTEGER NOT NULL,
+      receiver_id INTEGER NOT NULL,
+      remark TEXT DEFAULT '',
+      friend_group TEXT DEFAULT '同学',
+      status TEXT DEFAULT 'pending' CHECK(status IN ('pending','accepted','rejected','cancelled')),
+      handled_at TEXT,
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      updated_at TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (requester_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+  _db.run(`
+    CREATE TABLE IF NOT EXISTS friendships (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      friend_id INTEGER NOT NULL,
+      group_name TEXT DEFAULT '同学',
+      source_request_id INTEGER,
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      updated_at TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (friend_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (source_request_id) REFERENCES friend_requests(id) ON DELETE SET NULL,
+      UNIQUE(user_id, friend_id)
+    )
+  `);
   _db.run('CREATE INDEX IF NOT EXISTS idx_forum_posts_updated ON forum_posts(updated_at DESC)');
   _db.run('CREATE INDEX IF NOT EXISTS idx_forum_posts_user ON forum_posts(user_id)');
   _db.run('CREATE INDEX IF NOT EXISTS idx_forum_replies_post ON forum_replies(post_id)');
+  _db.run('CREATE INDEX IF NOT EXISTS idx_friend_requests_receiver ON friend_requests(receiver_id, status, created_at DESC)');
+  _db.run('CREATE INDEX IF NOT EXISTS idx_friend_requests_requester ON friend_requests(requester_id, status, created_at DESC)');
+  _db.run('CREATE INDEX IF NOT EXISTS idx_friendships_user ON friendships(user_id, created_at DESC)');
   _db.run('CREATE INDEX IF NOT EXISTS idx_users_student_id ON users(student_id)');
   _db.run('CREATE INDEX IF NOT EXISTS idx_events_status ON events(status)');
   _db.run('CREATE INDEX IF NOT EXISTS idx_captchas_token ON captchas(token)');
