@@ -730,11 +730,28 @@ const App = {
         homeEv.innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无更多信息</p>';
       }
 
-      // ── 最新公告 ──
+      // ── 最新公告：卡片式展示，置頂優先 ──
       const annData = ann.value?.data || [];
       let annH = '';
       if (annData.length) {
-        annData.forEach(a => annH += `<div class="announcement-item"><a href="#/announcements/${a.id}" class="announcement-title">${a.title}</a><span class="announcement-time">${this.formatDate(a.publish_time)}</span></div>`);
+        const catL = {event:'赛事通知',registration:'报名截止',result:'成绩公示',urgent:'紧急通知',general:'一般'};
+        const sorted = [...annData].sort((a, b) => {
+          if (a.is_pinned && !b.is_pinned) return -1;
+          if (!a.is_pinned && b.is_pinned) return 1;
+          return 0;
+        });
+        annH = '<div class="home-ann-cards">';
+        sorted.slice(0, 5).forEach(a => {
+          annH += `<a href="#/announcements/${a.id}" class="home-ann-card ${a.is_pinned ? 'pinned' : ''}">
+            <div class="home-ann-card-top">
+              <span class="badge badge-${a.category || 'general'}">${catL[a.category] || a.category}</span>
+              ${a.is_pinned ? '<span class="badge badge-pin">置顶</span>' : ''}
+            </div>
+            <h4>${a.title}</h4>
+            <span class="home-ann-card-time"><i class="far fa-clock"></i> ${this.formatDate(a.publish_time)}</span>
+          </a>`;
+        });
+        annH += '</div>';
         document.getElementById('home-announcements').innerHTML = annH;
       } else {
         document.getElementById('home-announcements').innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无更多信息</p>';
