@@ -681,6 +681,37 @@ body::before {
   to { opacity: 1; transform: translateY(0) }
 }
 
+/* ═══ Aceternity UI 3D 卡片 — 完整复刻 ═══ */
+.card-3d-container {
+  perspective: 1200px;
+  transform-style: preserve-3d;
+  position: relative;
+}
+.card-3d-body {
+  transform-style: preserve-3d;
+  will-change: transform;
+  transition: none;
+  position: relative;
+  z-index: 1;
+}
+.card-3d-item {
+  will-change: transform;
+  transition: transform .2s ease-out;
+}
+.card-3d-light {
+  position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  border-radius: inherit;
+  transition: opacity .3s;
+  opacity: 0;
+}
+/* 应用到关键卡片 */
+.stat-card, .event-mini-card, .parallax-section {
+  perspective: 1200px;
+}
+.stat-card:hover, .event-mini-card:hover {
+  z-index: 10;
+}
+
 /* ═══ 背景音乐控制 ═══ */
 .music-control {
   position: fixed; bottom: 28px; right: 28px; z-index: 1500;
