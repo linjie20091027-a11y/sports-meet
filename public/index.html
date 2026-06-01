@@ -22,8 +22,9 @@
       </ul>
       <div class="nav-right">
         <div class="nav-search">
-          <input type="text" id="nav-search-input" placeholder="搜索...">
-          <button id="nav-search-btn"><i class="fas fa-search"></i></button>
+          <input type="text" id="nav-search-input" placeholder="搜索用户、项目、公告、成绩、精彩瞬间" autocomplete="off">
+          <button id="nav-search-btn" type="button"><i class="fas fa-search"></i></button>
+          <div id="nav-search-suggest" class="search-suggest hidden" aria-live="polite"></div>
         </div>
         <div id="auth-btns">
           <a href="#/login" class="btn btn-sm" style="background:var(--gold);color:var(--red);border:none;font-weight:700">登录</a>
@@ -97,7 +98,7 @@
 
   <div id="toast-container"></div>
   <div id="modal-overlay" class="modal-overlay hidden"><div class="modal" id="modal-content"></div></div>
-  <div id="search-overlay" class="modal-overlay hidden"><div class="modal modal-lg" id="search-results"></div></div>
+  <div id="search-overlay" class="modal-overlay hidden"><div class="modal modal-lg search-modal" id="search-results"></div></div>
   <div id="loading-overlay" class="hidden"><div class="spinner"></div></div>
 
   <footer class="footer">
@@ -113,8 +114,7 @@
   <script src="/js/student.js?v=5" defer></script>
   <script src="/js/admin.js?v=5" defer></script>
   <script src="/js/forum.js?v=6" defer></script>
-  <script src="/js/app.js?v=6" defer></script>
-  <script src="/js/app.js?v=999" defer></script>
+  <script src="/js/app.js?v=7" defer></script>
   <script src="/js/interactions.js?v=7" defer></script>
 
   <audio id="bg-music" loop preload="auto">

@@ -3,7 +3,7 @@ const url = require('url');
 const fs = require('fs');
 const path = require('path');
 
-const BASE = 'http://localhost:3000';
+const BASE = process.env.BASE_URL || 'http://localhost:3000';
 const DB_PATH = path.join(__dirname, 'database', 'sports_meet.db');
 
 const PASS = '\x1b[32m[PASS]\x1b[0m';
@@ -190,10 +190,58 @@ async function runAllTests() {
     if (res.status !== 200) return `状态码 ${res.status}`;
     if (res.body?.data) {
       const d = res.body.data;
-      console.log(` (events:${d.events?.length||0}, students:${d.students?.length||0})`);
+      console.log(` (items:${d.items?.length||0}, total:${d.total||0})`);
       return true;
     }
     return '响应缺少 data 字段';
+  });
+
+  await test('公开', 'GET /api/public/search 空输入', async () => {
+    const res = await request('GET', '/api/public/search?q=');
+    if (res.status !== 200) return `状态码 ${res.status}`;
+    if ((res.body?.data?.total || 0) !== 0) return `预期 total=0，实际 ${res.body?.data?.total}`;
+    return true;
+  });
+
+  await test('公开', 'GET /api/public/search 联想词', async () => {
+    const res = await request('GET', '/api/public/search/suggest?q=100');
+    if (res.status !== 200) return `状态码 ${res.status}`;
+    if (!Array.isArray(res.body?.data)) return '联想结果不是数组';
+    console.log(` (${res.body.data.length} 条联想)`);
+    return true;
+  });
+
+  await test('公开', 'GET /api/public/search 多关键字组合', async () => {
+    const res = await request('GET', '/api/public/search?q=100%E7%B1%B3%20%E7%94%B7%E5%AD%90&type=events');
+    if (res.status !== 200) return `状态码 ${res.status}`;
+    if (!Array.isArray(res.body?.data?.items)) return 'items 不是数组';
+    console.log(` (${res.body.data.items.length} 条项目结果)`);
+    return true;
+  });
+
+  await test('公开', 'GET /api/public/search 无匹配结果', async () => {
+    const res = await request('GET', '/api/public/search?q=__no_match_keyword__');
+    if (res.status !== 200) return `状态码 ${res.status}`;
+    if ((res.body?.data?.total || 0) !== 0) return `预期无匹配，实际 ${res.body?.data?.total}`;
+    return true;
+  });
+
+  await test('公开', 'GET /api/public/search 分类筛选与分页', async () => {
+    const res = await request('GET', '/api/public/search?q=%E7%B1%B3&type=events&page=1&limit=5&category=track');
+    if (res.status !== 200) return `状态码 ${res.status}`;
+    const data = res.body?.data || {};
+    if ((data.items || []).length > 5) return `分页失败，返回 ${(data.items || []).length} 条`;
+    return true;
+  });
+
+  await test('公开', 'GET /api/public/search 响应时长', async () => {
+    const startedAt = Date.now();
+    const res = await request('GET', '/api/public/search?q=100%E7%B1%B3&type=all&limit=12');
+    const elapsed = Date.now() - startedAt;
+    if (res.status !== 200) return `状态码 ${res.status}`;
+    console.log(` (${elapsed}ms)`);
+    if (elapsed > 500) return `响应超过 500ms: ${elapsed}ms`;
+    return true;
   });
 
   // =====================================================

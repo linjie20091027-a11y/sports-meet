@@ -6,6 +6,28 @@ const App = {
   notificationItems: [],
   notificationUnread: 0,
   notificationReady: false,
+  searchState: {
+    query: '',
+    type: 'all',
+    page: 1,
+    limit: 12,
+    filters: {
+      category: '',
+      grade: '',
+      start_date: '',
+      end_date: '',
+      department: '',
+      participant_event: ''
+    },
+    counts: {},
+    total: 0,
+    total_pages: 0,
+    items: [],
+    sections: {}
+  },
+  searchSuggestTimer: null,
+  searchLastRequestId: 0,
+  searchHistoryKey: 'sports_meet_search_history',
 
   async init() {
     this.bindNavigation();
@@ -198,6 +220,7 @@ const App = {
       document.querySelector('.user-dropdown')?.classList.remove('show');
       this._toggleNotificationPanel(false);
       this._closeSwipedNotifications();
+      this._hideSearchSuggest();
     });
   },
 
@@ -540,31 +563,371 @@ const App = {
   bindSearch() {
     const input = document.getElementById('nav-search-input');
     const btn = document.getElementById('nav-search-btn');
-    const doSearch = async () => {
-      const q = input?.value?.trim();
-      if (!q) return;
-      try {
-        this.showLoading();
-        const res = await API.get(`/public/search?q=${encodeURIComponent(q)}`);
-        this._showSearchResults(res.data || {});
-      } catch (e) { this.showToast(e.message, 'error'); }
-      finally { this.hideLoading(); }
-    };
-    btn?.addEventListener('click', doSearch);
-    input?.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
+    if (!input || !btn) return;
+
+    btn.addEventListener('click', () => this._submitSearch());
+    input.addEventListener('focus', () => {
+      const value = input.value.trim();
+      if (value.length >= 3) this._queueSearchSuggest(value);
+      else this._renderSearchSuggest([]);
+    });
+    input.addEventListener('input', () => {
+      const value = input.value.trim();
+      if (!value) {
+        this._renderSearchSuggest([]);
+        return;
+      }
+      if (value.length >= 3) this._queueSearchSuggest(value);
+      else this._renderSearchSuggest([], false);
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        this._submitSearch();
+      }
+    });
   },
 
-  _showSearchResults(data) {
+  async _submitSearch(override = {}) {
+    const input = document.getElementById('nav-search-input');
+    const query = String(override.q ?? input?.value ?? '').trim();
+    if (!query) {
+      this.showToast('请输入搜索关键词', 'warning');
+      return;
+    }
+
+    if (input) input.value = query;
+    this._saveSearchHistory(query);
+    this._hideSearchSuggest();
+    this.searchState.query = query;
+    this.searchState.type = override.type || this.searchState.type || 'all';
+    this.searchState.page = override.page || 1;
+    if (override.filters) {
+      this.searchState.filters = { ...this.searchState.filters, ...override.filters };
+    }
+
+    await this._loadSearchResults();
+  },
+
+  async _loadSearchResults() {
+    const reqId = ++this.searchLastRequestId;
+    const params = {
+      q: this.searchState.query,
+      type: this.searchState.type,
+      page: this.searchState.page,
+      limit: this.searchState.limit,
+      ...this.searchState.filters
+    };
+
+    try {
+      this.showLoading();
+      const res = await API.public.search(params);
+      if (reqId !== this.searchLastRequestId) return;
+      if (!res.success) throw new Error(res.error || '搜索失败');
+
+      const data = res.data || {};
+      this.searchState = {
+        ...this.searchState,
+        query: data.query || this.searchState.query,
+        type: data.type || this.searchState.type,
+        page: data.page || 1,
+        limit: data.limit || this.searchState.limit,
+        total: data.total || 0,
+        total_pages: data.total_pages || 0,
+        counts: data.counts || {},
+        items: data.items || [],
+        sections: data.sections || {}
+      };
+      this._showSearchResults(this.searchState, res.meta || {});
+    } catch (e) {
+      this.showToast(e.message || '搜索失败', 'error');
+    } finally {
+      this.hideLoading();
+    }
+  },
+
+  _showSearchResults(state, meta = {}) {
     const el = document.getElementById('search-results');
-    let html = '<div class="search-header"><h3>搜索结果</h3><button class="search-close" onclick="App.hideSearch()">&times;</button></div>';
-    if (data.events?.length) { html += '<h4>赛事项目</h4><ul>'; data.events.forEach(e => html += `<li><a href="#/events/${e.id}">${e.name}</a></li>`); html += '</ul>'; }
-    if (data.students?.length) { html += '<h4>学生</h4><ul>'; data.students.forEach(s => html += `<li>${s.name} - ${s.class_name||''}</li>`); html += '</ul>'; }
-    if (data.announcements?.length) { html += '<h4>公告</h4><ul>'; data.announcements.forEach(a => html += `<li><a href="#/announcements/${a.id}">${a.title}</a></li>`); html += '</ul>'; }
-    if (!data.events?.length && !data.students?.length && !data.announcements?.length) html += '<p class="text-muted">未找到相关结果</p>';
+    if (!el) return;
+
+    const typeLabels = {
+      all: '全部',
+      users: '用户',
+      events: '项目',
+      news: '新闻',
+      announcements: '公告',
+      results: '成绩',
+      highlights: '精彩瞬间'
+    };
+    const resultCards = (state.items || []).map(item => this._renderSearchItem(item)).join('');
+    const history = this._getSearchHistory();
+    const filterBar = ['all', 'users', 'events', 'news', 'announcements', 'results', 'highlights']
+      .map(type => {
+        const count = type === 'all'
+          ? Object.values(state.counts || {}).reduce((sum, value) => sum + (Number(value) || 0), 0)
+          : (state.counts?.[type] || 0);
+        return `<button type="button" class="search-tab ${state.type === type ? 'active' : ''}" data-search-type="${type}">
+          <span>${typeLabels[type]}</span><em>${count}</em>
+        </button>`;
+      }).join('');
+
+    const summarySections = state.type === 'all'
+      ? Object.entries(state.sections || {}).map(([type, rows]) => {
+          if (!rows?.length) return '';
+          return `<section class="search-summary-section">
+            <div class="search-summary-title">${typeLabels[type]}</div>
+            <div class="search-summary-list">${rows.map(item => this._renderSearchCompact(item)).join('')}</div>
+          </section>`;
+        }).join('')
+      : '';
+
+    let html = `
+      <div class="search-header">
+        <div>
+          <h3>搜索结果</h3>
+          <small>关键词“${this._escHtml(state.query)}” · ${state.total || 0} 条结果 · ${meta.elapsed_ms || 0}ms</small>
+        </div>
+        <button class="search-close" type="button" onclick="App.hideSearch()">&times;</button>
+      </div>
+      <div class="search-toolbar">
+        <div class="search-toolbar__filters">${filterBar}</div>
+        <div class="search-toolbar__meta">
+          <span>${typeLabels[state.type] || '全部'} · 第 ${state.page}/${state.total_pages || 1} 页</span>
+        </div>
+      </div>
+      <div class="search-advanced">
+        <input type="text" id="search-filter-department" class="form__input" placeholder="院系/班级" value="${this._escAttr(state.filters.department)}">
+        <input type="text" id="search-filter-event" class="form__input" placeholder="参赛项目" value="${this._escAttr(state.filters.participant_event)}">
+        <select id="search-filter-category" class="form__input">
+          <option value="">全部项目类别</option>
+          <option value="track"${state.filters.category === 'track' ? ' selected' : ''}>径赛</option>
+          <option value="field"${state.filters.category === 'field' ? ' selected' : ''}>田赛</option>
+          <option value="team"${state.filters.category === 'team' ? ' selected' : ''}>趣味项目</option>
+          <option value="relay"${state.filters.category === 'relay' ? ' selected' : ''}>接力</option>
+        </select>
+        <input type="text" id="search-filter-grade" class="form__input" placeholder="参赛年级" value="${this._escAttr(state.filters.grade)}">
+        <input type="date" id="search-filter-start" class="form__input" value="${this._escAttr(state.filters.start_date)}">
+        <input type="date" id="search-filter-end" class="form__input" value="${this._escAttr(state.filters.end_date)}">
+        <button type="button" class="btn btn-primary btn-sm" id="search-apply-filters">筛选</button>
+        <button type="button" class="btn btn-outline btn-sm" id="search-reset-filters">重置</button>
+      </div>
+      <div class="search-history-row">
+        <span>历史搜索</span>
+        <div class="search-history-list">
+          ${history.length ? history.map(item => `<button type="button" class="search-history-chip" data-history-keyword="${this._escAttr(item)}">${this._escHtml(item)}</button>`).join('') : '<small>暂无历史记录</small>'}
+        </div>
+      </div>
+      <div class="search-body">
+        ${summarySections}
+        ${state.items?.length ? `<div class="search-result-grid">${resultCards}</div>` : '<div class="search-none"><i class="fas fa-search"></i>未找到相关结果，请尝试调整关键词或筛选条件</div>'}
+      </div>
+      <div class="search-footer">
+        ${this._renderSearchPagination(state)}
+      </div>
+    `;
+
     el.innerHTML = html;
+    this._bindSearchResultEvents();
     document.getElementById('search-overlay')?.classList.remove('hidden');
   },
-  hideSearch() { document.getElementById('search-overlay')?.classList.add('hidden'); },
+  hideSearch() {
+    document.getElementById('search-overlay')?.classList.add('hidden');
+    this._hideSearchSuggest();
+  },
+
+  _renderSearchItem(item) {
+    const iconMap = {
+      users: 'fa-user',
+      events: 'fa-running',
+      news: 'fa-newspaper',
+      announcements: 'fa-bullhorn',
+      results: 'fa-trophy',
+      highlights: 'fa-image'
+    };
+    const imageBlock = item.thumbnail || item.avatar
+      ? `<div class="search-card-media"><img src="${this._escAttr(item.thumbnail || item.avatar)}" alt="${this._escAttr(item.title)}"></div>`
+      : `<div class="search-card-icon ${this._escAttr(item.type)}"><i class="fas ${iconMap[item.type] || 'fa-search'}"></i></div>`;
+    const hrefAttr = item.href ? `data-search-href="${this._escAttr(item.href)}"` : '';
+    return `<article class="search-card search-card--detail" ${hrefAttr}>
+      ${imageBlock}
+      <div class="search-card-body">
+        <h4>${this._escHtml(item.title || '')}</h4>
+        <small>${this._escHtml(item.subtitle || '')}</small>
+        <p>${this._escHtml(item.description || '')}</p>
+      </div>
+      <div class="search-card-arrow"><i class="fas fa-angle-right"></i></div>
+    </article>`;
+  },
+
+  _renderSearchCompact(item) {
+    const hrefAttr = item.href ? `data-search-href="${this._escAttr(item.href)}"` : '';
+    return `<button type="button" class="search-summary-item" ${hrefAttr}>
+      <strong>${this._escHtml(item.title || '')}</strong>
+      <small>${this._escHtml(item.subtitle || item.description || '')}</small>
+    </button>`;
+  },
+
+  _renderSearchPagination(state) {
+    if (!state.total_pages || state.total_pages <= 1) {
+      return `<small>单页最多 20 条，当前共 ${state.total || 0} 条</small>`;
+    }
+    return `
+      <button type="button" class="btn btn-outline btn-sm" data-search-page="${Math.max(1, state.page - 1)}" ${state.page <= 1 ? 'disabled' : ''}>上一页</button>
+      <small>第 ${state.page} / ${state.total_pages} 页，共 ${state.total} 条</small>
+      <button type="button" class="btn btn-outline btn-sm" data-search-page="${Math.min(state.total_pages, state.page + 1)}" ${state.page >= state.total_pages ? 'disabled' : ''}>下一页</button>
+    `;
+  },
+
+  _bindSearchResultEvents() {
+    document.querySelectorAll('[data-search-type]').forEach(button => {
+      button.addEventListener('click', () => {
+        const type = button.getAttribute('data-search-type') || 'all';
+        this.searchState.type = type;
+        this.searchState.page = 1;
+        this._loadSearchResults();
+      });
+    });
+
+    document.querySelectorAll('[data-search-page]').forEach(button => {
+      button.addEventListener('click', () => {
+        const nextPage = parseInt(button.getAttribute('data-search-page') || '1', 10);
+        this.searchState.page = nextPage > 0 ? nextPage : 1;
+        this._loadSearchResults();
+      });
+    });
+
+    document.querySelectorAll('[data-history-keyword]').forEach(button => {
+      button.addEventListener('click', () => {
+        const keyword = button.getAttribute('data-history-keyword') || '';
+        this._submitSearch({ q: keyword, page: 1 });
+      });
+    });
+
+    document.querySelectorAll('[data-search-href]').forEach(node => {
+      node.addEventListener('click', () => {
+        const href = node.getAttribute('data-search-href');
+        if (!href) return;
+        this.hideSearch();
+        if (/^#\//.test(href)) {
+          window.location.hash = href;
+          return;
+        }
+        window.open(href, '_blank', 'noopener');
+      });
+    });
+
+    document.getElementById('search-apply-filters')?.addEventListener('click', () => {
+      this.searchState.filters = {
+        ...this.searchState.filters,
+        category: document.getElementById('search-filter-category')?.value || '',
+        grade: document.getElementById('search-filter-grade')?.value.trim() || '',
+        start_date: document.getElementById('search-filter-start')?.value || '',
+        end_date: document.getElementById('search-filter-end')?.value || '',
+        department: document.getElementById('search-filter-department')?.value.trim() || '',
+        participant_event: document.getElementById('search-filter-event')?.value.trim() || ''
+      };
+      this.searchState.page = 1;
+      this._loadSearchResults();
+    });
+
+    document.getElementById('search-reset-filters')?.addEventListener('click', () => {
+      this.searchState.filters = {
+        category: '',
+        grade: '',
+        start_date: '',
+        end_date: '',
+        department: '',
+        participant_event: ''
+      };
+      this.searchState.page = 1;
+      this._loadSearchResults();
+    });
+  },
+
+  _queueSearchSuggest(query) {
+    clearTimeout(this.searchSuggestTimer);
+    this.searchSuggestTimer = setTimeout(() => this._loadSearchSuggest(query), 180);
+  },
+
+  async _loadSearchSuggest(query) {
+    const keyword = String(query || '').trim();
+    if (keyword.length < 3) {
+      this._renderSearchSuggest([]);
+      return;
+    }
+    try {
+      const res = await API.public.searchSuggest(keyword);
+      if (!res.success) return;
+      const input = document.getElementById('nav-search-input');
+      if (input && input.value.trim() !== keyword) return;
+      this._renderSearchSuggest(res.data || [], true);
+    } catch (_) {
+      this._renderSearchSuggest([]);
+    }
+  },
+
+  _renderSearchSuggest(items = [], allowHistory = true) {
+    const container = document.getElementById('nav-search-suggest');
+    const input = document.getElementById('nav-search-input');
+    if (!container || !input) return;
+
+    const keyword = input.value.trim();
+    const history = allowHistory && keyword.length < 3 ? this._getSearchHistory().slice(0, 6) : [];
+    const rows = items.length
+      ? items.map(item => `
+          <button type="button" class="search-suggest__item" data-suggest-keyword="${this._escAttr(item.title)}">
+            <strong>${this._escHtml(item.title)}</strong>
+            <small>${this._escHtml(item.subtitle || item.type || '')}</small>
+          </button>
+        `).join('')
+      : history.map(item => `
+          <button type="button" class="search-suggest__item" data-suggest-keyword="${this._escAttr(item)}">
+            <strong>${this._escHtml(item)}</strong>
+            <small>历史记录</small>
+          </button>
+        `).join('');
+
+    if (!rows) {
+      container.classList.add('hidden');
+      container.innerHTML = '';
+      return;
+    }
+
+    container.innerHTML = rows;
+    container.classList.remove('hidden');
+    container.querySelectorAll('[data-suggest-keyword]').forEach(button => {
+      button.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const nextKeyword = button.getAttribute('data-suggest-keyword') || '';
+        input.value = nextKeyword;
+        this._submitSearch({ q: nextKeyword, page: 1 });
+      });
+    });
+  },
+
+  _hideSearchSuggest() {
+    const container = document.getElementById('nav-search-suggest');
+    if (!container) return;
+    container.classList.add('hidden');
+    container.innerHTML = '';
+  },
+
+  _getSearchHistory() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(this.searchHistoryKey) || '[]');
+      return Array.isArray(raw) ? raw.filter(Boolean).slice(0, 10) : [];
+    } catch (_) {
+      return [];
+    }
+  },
+
+  _saveSearchHistory(keyword) {
+    const value = String(keyword || '').trim();
+    if (!value) return;
+    const history = this._getSearchHistory().filter(item => item !== value);
+    history.unshift(value);
+    localStorage.setItem(this.searchHistoryKey, JSON.stringify(history.slice(0, 10)));
+  },
 
   // ====== Toast ======
   showToast(message, type = 'success') {

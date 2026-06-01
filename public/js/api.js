@@ -97,7 +97,13 @@ const API = {
     getAnnouncements(params) { return API.get('/public/announcements' + API._qs(params)); },
     getAnnouncement(id) { return API.get('/public/announcements/' + id); },
     getGrades() { return API.get('/public/grades'); },
-    search(q) { return API.get('/public/search' + API._qs({ q })); },
+    search(params) {
+      const query = typeof params === 'string' ? { q: params } : params;
+      return API.get('/public/search' + API._qs(query));
+    },
+    searchSuggest(q) {
+      return API.get('/public/search/suggest' + API._qs({ q }));
+    },
   },
 
   // ==================== 管理员接口 ====================
