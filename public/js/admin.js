@@ -758,6 +758,8 @@ const Admin = {
     `;
     this._renderRegFilter(container);
     this._loadRegistrations(container);
+    this._renderRegPieChart(container);
+    this._loadRegStats(container);
     this._bindRegEvents(container);
   },
 
@@ -904,8 +906,6 @@ const Admin = {
       }
 
       container.querySelector('#reg-table-container').innerHTML = html;
-      this._renderRegPieChart(container);
-      this._loadRegStats(container);
       const pagInfo = this._paginate({ page: this._regPage, total, limit: this._regLimit, callback: (p) => { this._regPage = p; this._loadRegistrations(container); } });
       container.querySelector('#reg-pagination').innerHTML = this._renderPagination(pagInfo, 'reg-pagination');
 
@@ -1017,83 +1017,80 @@ const Admin = {
     }
   },
 
-  _renderRegPieChart(container) {
-    const list = this._regListData || [];
+  async _renderRegPieChart(container) {
     const canvas = container.querySelector('#chart-reg-heat');
     if (!canvas) return;
-    // 销毁旧图表
     this._chartInstances = this._chartInstances.filter(c => {
       if (c.canvas === canvas) { try { c.destroy(); } catch (_) {} return false; }
       return true;
     });
-    if (list.length === 0 || typeof Chart === 'undefined') {
-      canvas.parentElement.innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无报名数据</p>';
-      return;
-    }
-    // 按项目分组统计报名人数
-    const eventMap = {};
-    list.forEach(r => {
-      const key = r.event_name || '未知项目';
-      eventMap[key] = (eventMap[key] || 0) + 1;
-    });
-    const labels = Object.keys(eventMap);
-    const data = Object.values(eventMap);
-    const colors = ['#a51d2d','#2d6a4f','#1e6091','#e07a5f','#b8860b','#7c3aed','#0284c7','#f59e0b','#10b981','#ef4444','#8b5cf6','#06b6d4','#f97316','#84cc16'];
-    // 点击效果
-    const clickHandler = (evt, elements) => {
-      if (elements.length > 0) {
-        const idx = elements[0].index;
-        const eventName = labels[idx];
-        this._regFilters.event_id = '';
-        if (this._regFilterData) {
-          const evtObj = this._regFilterData.events.find(e => e.name === eventName);
-          if (evtObj) this._regFilters.event_id = String(evtObj.id);
-        }
-        this._regPage = 1;
-        this._renderRegFilter(container);
-        this._loadRegistrations(container);
+    if (typeof Chart === 'undefined') return;
+    try {
+      // 加载全部报名数据用于图表（不受筛选影响）
+      const res = await API.admin.getRegistrations({ limit: 99999 });
+      const list = (res.data?.list || res.data || []);
+      if (list.length === 0) {
+        canvas.parentElement.innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无报名数据</p>';
+        return;
       }
-    };
-    const chart = new Chart(canvas, {
-      type: 'doughnut',
-      data: {
-        labels,
-        datasets: [{
-          data,
-          backgroundColor: colors.slice(0, labels.length),
-          borderColor: '#fff',
-          borderWidth: 2
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        onClick: clickHandler,
-        plugins: {
-          legend: {
-            position: 'bottom',
-            labels: { padding: 12, usePointStyle: true, pointStyleWidth: 10 }
-          },
-          tooltip: {
-            callbacks: {
-              label: (ctx) => ` ${ctx.label}: ${ctx.raw} 人 (${((ctx.raw / data.reduce((a,b)=>a+b,0)) * 100).toFixed(1)}%)`
+      const eventMap = {};
+      list.forEach(r => {
+        const key = r.event_name || '未知项目';
+        eventMap[key] = (eventMap[key] || 0) + 1;
+      });
+      const labels = Object.keys(eventMap);
+      const data = Object.values(eventMap);
+      const colors = ['#a51d2d','#2d6a4f','#1e6091','#e07a5f','#b8860b','#7c3aed','#0284c7','#f59e0b','#10b981','#ef4444','#8b5cf6','#06b6d4','#f97316','#84cc16'];
+      const clickHandler = (evt, elements) => {
+        if (elements.length > 0) {
+          const idx = elements[0].index;
+          const eventName = labels[idx];
+          this._regFilters = { ...this._regFilters, event_id: '' };
+          if (this._regFilterData) {
+            const evtObj = this._regFilterData.events.find(e => e.name === eventName);
+            if (evtObj) this._regFilters.event_id = String(evtObj.id);
+          }
+          this._regPage = 1;
+          this._renderRegFilter(container);
+          this._loadRegistrations(container);
+        }
+      };
+      const chart = new Chart(canvas, {
+        type: 'doughnut',
+        data: {
+          labels,
+          datasets: [{
+            data,
+            backgroundColor: colors.slice(0, labels.length),
+            borderColor: '#fff',
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          onClick: clickHandler,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { padding: 12, usePointStyle: true, pointStyleWidth: 10 }
+            },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => ` ${ctx.label}: ${ctx.raw} 人 (${((ctx.raw / data.reduce((a,b)=>a+b,0)) * 100).toFixed(1)}%)`
+              }
             }
           }
         }
-      }
-    });
-    this._chartInstances.push(chart);
+      });
+      this._chartInstances.push(chart);
+    } catch (e) {}
   },
 
   async _loadRegStats(container) {
     try {
-      const f = this._regFilters;
-      const params = { limit: 99999 };
-      if (f.class_name) params.class_name = f.class_name;
-      if (f.gender) params.gender = f.gender;
-      if (f.event_id) params.event_id = f.event_id;
-      if (f.status) params.status = f.status;
-      const res = await API.admin.getRegistrations(params);
+      // 加载全部报名数据（不受筛选影响）
+      const res = await API.admin.getRegistrations({ limit: 99999 });
       const list = (res.data?.list || res.data || []);
       this._regAllData = list;
 
