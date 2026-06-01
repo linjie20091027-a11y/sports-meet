@@ -775,7 +775,6 @@ const Admin = {
     }
     bar.innerHTML = `
       <button class="btn btn--primary btn--sm" id="btn-reg-filter"><i class="fas fa-filter"></i> 筛选</button>
-      <select id="reg-status" class="form__select"><option value="">全部状态</option><option value="pending" ${f.status==='pending'?'selected':''}>待审核</option><option value="approved" ${f.status==='approved'?'selected':''}>已通过</option><option value="rejected" ${f.status==='rejected'?'selected':''}>已驳回</option></select>
       ${labels.length > 0 ? '<span class="text-sm" style="color:var(--red);margin-left:8px">当前筛选：' + labels.join(' / ') + ' <a href="javascript:void(0)" id="btn-reg-clear" style="color:var(--text3)">[清除]</a></span>' : ''}
     `;
     bar.querySelector('#btn-reg-clear')?.addEventListener('click', () => {
@@ -859,11 +858,6 @@ const Admin = {
   },
 
   _bindRegEvents(container) {
-    container.querySelector('#reg-status')?.addEventListener('change', () => {
-      this._regFilters.status = container.querySelector('#reg-status').value;
-      this._regPage = 1;
-      this._loadRegistrations(container);
-    });
     container.querySelector('#btn-batch-approve').addEventListener('click', () => this._batchApprove(container));
     container.querySelector('#btn-export-reg').addEventListener('click', () => this._exportRegistrations());
   },
