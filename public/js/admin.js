@@ -192,16 +192,6 @@ const Admin = {
       });
       html += '</div>';
 
-      // 快捷操作
-      html += '<div class="card mb-3" style="border-left:3px solid #2d6a4f">';
-      html += '<div class="card-header"><h3>快捷操作</h3></div>';
-      html += '<div class="card-body" style="display:flex;gap:8px;flex-wrap:wrap">';
-      html += '<button class="btn btn-primary btn-sm" onclick="Admin._showForumModeration()"><i class="fas fa-comments"></i> 论坛评论审核</button>';
-      html += '<button class="btn btn-success btn-sm" onclick="Admin._generateSchedule()"><i class="fas fa-calendar"></i> AI生成赛程表</button>';
-      html += '<button class="btn btn-warning btn-sm" onclick="Admin._generateAward()"><i class="fas fa-medal"></i> AI生成证书</button>';
-      html += '<a href="#/forum" class="btn btn-outline btn-sm"><i class="fas fa-robot"></i> AI助手</a>';
-      html += '</div></div>';
-
       // 报名统计图表
       html += '<div class="card mb-3"><div class="card-header"><h3>报名统计</h3></div><div class="card-body"><canvas id="dash-chart" style="max-height:280px"></canvas></div></div>';
 
@@ -216,24 +206,51 @@ const Admin = {
 
       container.innerHTML = html;
 
-      // 渲染图表
-      const eventRegs = d.event_registrations || [];
-      if (eventRegs.length > 0 && typeof Chart !== 'undefined') {
-        setTimeout(() => {
-          const ctx = document.getElementById('dash-chart');
-          if (ctx) new Chart(ctx, {
-            type: 'bar',
-            data: { labels: eventRegs.map(e=>e.name), datasets: [{label:'报名数',data:eventRegs.map(e=>e.count||0),backgroundColor:'#2d6a4f',borderRadius:4}] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
-          });
-        }, 200);
-      } else {
-        const chartEl = document.getElementById('dash-chart');
-        if (chartEl) chartEl.parentElement.innerHTML = '<p class="text-muted text-center">暂无报名数据</p>';
-      }
+      this._renderDashboardRegChart();
     } catch(e) {
       container.innerHTML = '<div class="empty-state"><p class="empty-state__desc">加载失败：' + e.message + '</p><button class="btn btn-outline mt-2" onclick="Admin.render()">重新加载</button></div>';
     }
+  },
+
+  async _renderDashboardRegChart() {
+    const canvas = document.getElementById('dash-chart');
+    if (!canvas || typeof Chart === 'undefined') return;
+    try {
+      const res = await API.admin.getRegistrations({ limit: 99999 });
+      const list = (res.data?.list || res.data || []);
+      if (list.length === 0) {
+        canvas.parentElement.innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无报名数据</p>';
+        return;
+      }
+      const eventMap = {};
+      list.forEach(r => {
+        const key = r.event_name || '未知项目';
+        eventMap[key] = (eventMap[key] || 0) + 1;
+      });
+      const labels = Object.keys(eventMap);
+      const data = Object.values(eventMap);
+      const colors = ['#a51d2d','#2d6a4f','#1e6091','#e07a5f','#b8860b','#7c3aed','#0284c7','#f59e0b','#10b981','#ef4444','#8b5cf6','#06b6d4','#f97316','#84cc16'];
+      const chart = new Chart(canvas, {
+        type: 'doughnut',
+        data: {
+          labels,
+          datasets: [{ data, backgroundColor: colors.slice(0, labels.length), borderColor: '#fff', borderWidth: 2 }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { padding: 10, usePointStyle: true } },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => ` ${ctx.label}: ${ctx.raw} 人 (${((ctx.raw / data.reduce((a,b)=>a+b,0)) * 100).toFixed(1)}%)`
+              }
+            }
+          }
+        }
+      });
+      this._chartInstances.push(chart);
+    } catch (e) {}
   },
 
   // ==================== 用户管理 ====================
@@ -746,6 +763,8 @@ const Admin = {
   // ==================== 报名管理 ====================
   _regPage: 1,
   _regLimit: 20,
+  _regFilters: { class_name: '', gender: '', event_id: '', status: '' },
+  _regFilterData: null,
 
   async renderRegistrations(container) {
     this._regPage = 1;
@@ -766,29 +785,96 @@ const Admin = {
     `;
     this._renderRegFilter(container);
     this._loadRegistrations(container);
+    this._renderRegPieChart(container);
     this._loadRegStats(container);
     this._bindRegEvents(container);
   },
 
   _renderRegFilter(container) {
     const bar = container.querySelector('#reg-filter-bar');
+    const f = this._regFilters;
+    const labels = [];
+    if (f.class_name) labels.push('班级：' + f.class_name);
+    if (f.gender) labels.push('性别：' + (f.gender === 'male' ? '男' : '女'));
+    if (f.status) labels.push('状态：' + ({pending:'待审核',approved:'已通过',rejected:'已驳回'}[f.status] || f.status));
+    if (f.event_id && this._regFilterData) {
+      const evt = this._regFilterData.events.find(e => e.id == f.event_id);
+      if (evt) labels.push('项目：' + evt.name);
+    }
     bar.innerHTML = `
-      <select id="reg-grade" class="form__select"><option value="">全部年级</option></select>
-      <select id="reg-class" class="form__select"><option value="">全部班级</option></select>
-      <select id="reg-event" class="form__select"><option value="">全部项目</option></select>
-      <select id="reg-status" class="form__select"><option value="">全部状态</option><option value="pending">待审核</option><option value="approved">已通过</option><option value="rejected">已驳回</option></select>
-      <button class="btn btn--primary btn--sm" id="btn-reg-search"><i class="fas fa-search"></i> 筛选</button>
+      <button class="btn btn--primary btn--sm" id="btn-reg-filter"><i class="fas fa-filter"></i> 筛选</button>
+      ${labels.length > 0 ? '<span class="text-sm" style="color:var(--red);margin-left:8px">当前筛选：' + labels.join(' / ') + ' <a href="javascript:void(0)" id="btn-reg-clear" style="color:var(--text3)">[清除]</a></span>' : ''}
     `;
-    this._loadRegFilters(container);
+    bar.querySelector('#btn-reg-clear')?.addEventListener('click', () => {
+      this._regFilters = { class_name: '', gender: '', event_id: '', status: '' };
+      this._regPage = 1;
+      this._renderRegFilter(container);
+      this._loadRegistrations(container);
+    });
+    bar.querySelector('#btn-reg-filter')?.addEventListener('click', () => this._showRegFilterModal(container));
+  },
+
+  async _showRegFilterModal(container) {
+    if (!this._regFilterData) {
+      try {
+        const gradesRes = await API.public.getGrades();
+        const eventsRes = await API.get('/admin/events');
+        this._regFilterData = {
+          classes: (gradesRes.data && gradesRes.data.classes) ? gradesRes.data.classes : [],
+          events: eventsRes.data || []
+        };
+      } catch (e) { App.showToast('加载筛选数据失败','error'); return; }
+    }
+    const f = this._regFilters;
+    const classOpts = this._regFilterData.classes.map(c =>
+      `<option value="${c.name}" ${f.class_name===c.name?'selected':''}>${c.name}</option>`
+    ).join('');
+    const eventOpts = this._regFilterData.events.map(e =>
+      `<option value="${e.id}" ${f.event_id==e.id?'selected':''}>${e.name}</option>`
+    ).join('');
+    const genderOpts = `<option value="" ${!f.gender?'selected':''}>全部</option>
+      <option value="male" ${f.gender==='male'?'selected':''}>男</option>
+      <option value="female" ${f.gender==='female'?'selected':''}>女</option>`;
+    const statusOpts = `<option value="" ${!f.status?'selected':''}>全部状态</option>
+      <option value="pending" ${f.status==='pending'?'selected':''}>待审核</option>
+      <option value="approved" ${f.status==='approved'?'selected':''}>已通过</option>
+      <option value="rejected" ${f.status==='rejected'?'selected':''}>已驳回</option>`;
+
+    const html = `
+      <div class="modal-header"><h3>报名筛选</h3><button class="modal-close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>
+      <div class="modal-body">
+        <div class="form-group"><label>班级</label><select id="reg-filter-class" class="form__select"><option value="">全部班级</option>${classOpts}</select></div>
+        <div class="form-group"><label>性别</label><select id="reg-filter-gender" class="form__select">${genderOpts}</select></div>
+        <div class="form-group"><label>项目</label><select id="reg-filter-event" class="form__select"><option value="">全部项目</option>${eventOpts}</select></div>
+        <div class="form-group"><label>状态</label><select id="reg-filter-status" class="form__select">${statusOpts}</select></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn--outline btn--sm" id="btn-reg-filter-cancel">取消</button>
+        <button class="btn btn--primary btn--sm" id="btn-reg-filter-apply">确定筛选</button>
+      </div>`;
+    App.showModal(html);
+
+    document.getElementById('btn-reg-filter-cancel').onclick = () => App.hideModal();
+    document.getElementById('btn-reg-filter-apply').onclick = () => {
+      const className = document.getElementById('reg-filter-class')?.value || '';
+      const gender = document.getElementById('reg-filter-gender')?.value || '';
+      const eventId = document.getElementById('reg-filter-event')?.value || '';
+      const status = document.getElementById('reg-filter-status')?.value || '';
+      this._regFilters.class_name = className;
+      this._regFilters.gender = gender;
+      this._regFilters.event_id = eventId;
+      this._regFilters.status = status;
+      this._regPage = 1;
+      App.hideModal();
+      this._renderRegFilter(container);
+      this._loadRegistrations(container);
+    };
   },
 
   async _loadRegFilters(container) {
     try {
       const gradesRes = await API.public.getGrades();
-      const grades = gradesRes.data && gradesRes.data.grades ? gradesRes.data.grades : [];
       const classes = gradesRes.data && gradesRes.data.classes ? gradesRes.data.classes : [];
-      const gradeSel = container.querySelector('#reg-grade');
-      grades.forEach(g => { const o = document.createElement('option'); o.value = g.name; o.textContent = g.name; gradeSel.appendChild(o); });
       const classSel = container.querySelector('#reg-class');
       classes.forEach(c => { const o = document.createElement('option'); o.value = c.name; o.textContent = c.name; classSel.appendChild(o); });
 
@@ -800,7 +886,6 @@ const Admin = {
   },
 
   _bindRegEvents(container) {
-    container.querySelector('#btn-reg-search').addEventListener('click', () => { this._regPage = 1; this._loadRegistrations(container); });
     container.querySelector('#btn-batch-approve').addEventListener('click', () => this._batchApprove(container));
     container.querySelector('#btn-export-reg').addEventListener('click', () => this._exportRegistrations());
   },
@@ -808,20 +893,18 @@ const Admin = {
   async _loadRegistrations(container) {
     try {
       App.showLoading();
+      const f = this._regFilters;
       const params = { page: this._regPage, limit: this._regLimit };
-      const grade = container.querySelector('#reg-grade').value;
-      const className = container.querySelector('#reg-class').value;
-      const eventId = container.querySelector('#reg-event').value;
-      const status = container.querySelector('#reg-status').value;
-      if (grade) params.grade = grade;
-      if (className) params.class_name = className;
-      if (eventId) params.event_id = eventId;
-      if (status) params.status = status;
+      if (f.class_name) params.class_name = f.class_name;
+      if (f.gender) params.gender = f.gender;
+      if (f.event_id) params.event_id = f.event_id;
+      if (f.status) params.status = f.status;
 
       const res = await API.admin.getRegistrations(params);
       const d = res.data || res;
       const list = d.list || [];
       const total = d.total || 0;
+      this._regListData = list;
       App.hideLoading();
 
       let html = '';
@@ -837,6 +920,7 @@ const Admin = {
           html += '<td>' + (r.event_name || '-') + '</td>';
           html += '<td>' + (statusMap[r.status] || r.status) + '</td>';
           html += '<td><div class="table__actions">';
+          html += '<button class="btn btn--outline btn--xs btn-detail-reg" data-id="' + r.id + '"><i class="fas fa-eye"></i> 详情</button>';
           if (r.status === 'pending') {
             html += '<button class="btn btn--success btn--xs btn-approve-reg" data-id="' + r.id + '"><i class="fas fa-check"></i> 通过</button>';
             html += '<button class="btn btn--warning btn--xs btn-reject-reg" data-id="' + r.id + '"><i class="fas fa-times"></i> 驳回</button>';
@@ -872,6 +956,9 @@ const Admin = {
       container.querySelectorAll('.btn-reject-reg').forEach(btn => {
         btn.addEventListener('click', () => this._showRejectReason(btn.dataset.id, container));
       });
+      container.querySelectorAll('.btn-detail-reg').forEach(btn => {
+        btn.addEventListener('click', () => this._showRegDetail(btn.dataset.id, container));
+      });
     } catch (e) {
       App.hideLoading();
       App.showToast(e.message, 'error');
@@ -899,6 +986,48 @@ const Admin = {
     });
   },
 
+  async _showRegDetail(id, container) {
+    try {
+      App.showLoading();
+      const res = await API.admin.getRegistrationDetail(id);
+      App.hideLoading();
+      const r = res.data;
+      if (!r) return App.showToast('报名记录不存在', 'error');
+      const statusMap = { pending: '待审核', approved: '已通过', rejected: '已驳回' };
+      const categoryMap = { track: '径赛', field: '田赛', relay: '接力', team: '集体' };
+      const typeMap = { individual: '个人', team: '团体' };
+      const genderMap = { male: '男子', female: '女子', mixed: '混合' };
+      let html = '<div class="modal-header"><h3>报名详情</h3><button class="modal-close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>';
+      html += '<div class="modal-body">';
+      html += '<div class="detail-grid">';
+      html += '<div><strong>学号</strong><br>' + (r.student_id || '-') + '</div>';
+      html += '<div><strong>姓名</strong><br>' + (r.user_name || '-') + '</div>';
+      html += '<div><strong>班级</strong><br>' + (r.class_name || '-') + '</div>';
+      html += '<div><strong>年级</strong><br>' + (r.grade || '-') + '</div>';
+      html += '<div><strong>性别</strong><br>' + (genderMap[r.gender] || r.gender || '-') + '</div>';
+      html += '<div><strong>邮箱</strong><br>' + (r.email || '-') + '</div>';
+      html += '</div>';
+      html += '<hr style="margin:12px 0">';
+      html += '<div class="detail-grid">';
+      html += '<div><strong>报名项目</strong><br>' + (r.event_name || '-') + '</div>';
+      html += '<div><strong>项目分类</strong><br>' + (categoryMap[r.category] || r.category || '-') + '</div>';
+      html += '<div><strong>项目类型</strong><br>' + (typeMap[r.event_type] || r.event_type || '-') + '</div>';
+      html += '<div><strong>性别组别</strong><br>' + (genderMap[r.gender_group] || r.gender_group || '-') + '</div>';
+      html += '<div><strong>比赛场地</strong><br>' + (r.venue || '-') + '</div>';
+      html += '<div><strong>审核状态</strong><br><span style="color:' + (r.status === 'approved' ? 'var(--green)' : r.status === 'rejected' ? 'var(--red)' : '#e07a5f') + ';font-weight:600">' + (statusMap[r.status] || r.status) + '</span></div>';
+      html += '</div>';
+      html += '<hr style="margin:12px 0">';
+      html += '<div class="detail-grid">';
+      html += '<div><strong>报名时间</strong><br>' + App.formatDate(r.created_at) + '</div>';
+      html += '<div><strong>审核时间</strong><br>' + (r.reviewed_at ? App.formatDate(r.reviewed_at) : '-') + '</div>';
+      html += '<div><strong>审核人</strong><br>' + (r.reviewer_name || '-') + '</div>';
+      html += '<div><strong>驳回原因</strong><br>' + (r.reject_reason || '-') + '</div>';
+      html += '</div>';
+      html += '</div><div class="modal-footer"><button class="btn btn-secondary" onclick="App.hideModal()">关闭</button></div>';
+      App.showModal(html);
+    } catch(e) { App.hideLoading(); App.showToast(e.message, 'error'); }
+  },
+
   async _batchApprove(container) {
     const ids = [];
     container.querySelectorAll('.reg-checkbox:checked').forEach(cb => { if (cb.dataset.status === 'pending') ids.push(parseInt(cb.dataset.id)); });
@@ -915,43 +1044,135 @@ const Admin = {
     }
   },
 
+  async _renderRegPieChart(container) {
+    const canvas = container.querySelector('#chart-reg-heat');
+    if (!canvas) return;
+    this._chartInstances = this._chartInstances.filter(c => {
+      if (c.canvas === canvas) { try { c.destroy(); } catch (_) {} return false; }
+      return true;
+    });
+    if (typeof Chart === 'undefined') return;
+    try {
+      // 加载全部报名数据用于图表（不受筛选影响）
+      const res = await API.admin.getRegistrations({ limit: 99999 });
+      const list = (res.data?.list || res.data || []);
+      if (list.length === 0) {
+        canvas.parentElement.innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无报名数据</p>';
+        return;
+      }
+      const eventMap = {};
+      list.forEach(r => {
+        const key = r.event_name || '未知项目';
+        eventMap[key] = (eventMap[key] || 0) + 1;
+      });
+      const labels = Object.keys(eventMap);
+      const data = Object.values(eventMap);
+      const colors = ['#a51d2d','#2d6a4f','#1e6091','#e07a5f','#b8860b','#7c3aed','#0284c7','#f59e0b','#10b981','#ef4444','#8b5cf6','#06b6d4','#f97316','#84cc16'];
+      const clickHandler = (evt, elements) => {
+        if (elements.length > 0) {
+          const idx = elements[0].index;
+          const eventName = labels[idx];
+          this._regFilters = { ...this._regFilters, event_id: '' };
+          if (this._regFilterData) {
+            const evtObj = this._regFilterData.events.find(e => e.name === eventName);
+            if (evtObj) this._regFilters.event_id = String(evtObj.id);
+          }
+          this._regPage = 1;
+          this._renderRegFilter(container);
+          this._loadRegistrations(container);
+        }
+      };
+      const chart = new Chart(canvas, {
+        type: 'doughnut',
+        data: {
+          labels,
+          datasets: [{
+            data,
+            backgroundColor: colors.slice(0, labels.length),
+            borderColor: '#fff',
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          onClick: clickHandler,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { padding: 12, usePointStyle: true, pointStyleWidth: 10 }
+            },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => ` ${ctx.label}: ${ctx.raw} 人 (${((ctx.raw / data.reduce((a,b)=>a+b,0)) * 100).toFixed(1)}%)`
+              }
+            }
+          }
+        }
+      });
+      this._chartInstances.push(chart);
+    } catch (e) {}
+  },
+
   async _loadRegStats(container) {
     try {
-      const heatRes = await API.get('/admin/registrations/heatmap');
-      const heatData = heatRes.data || [];
-      if (heatData.length > 0 && container.querySelector('#chart-reg-heat')) {
-        const chart = new Chart(container.querySelector('#chart-reg-heat'), {
-          type: 'pie',
-          data: { labels: heatData.map(h => h.name), datasets: [{ data: heatData.map(h => h.approved_count || h.total_count || 0), backgroundColor: ['#1a73e8','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#84cc16','#ec4899','#6366f1'] }] },
-          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
-        });
-        this._chartInstances.push(chart);
-      }
+      // 加载全部报名数据（不受筛选影响）
+      const res = await API.admin.getRegistrations({ limit: 99999 });
+      const list = (res.data?.list || res.data || []);
+      this._regAllData = list;
 
-      const statsRes = await API.get('/admin/registrations/stats');
-      const sData = statsRes.data || {};
-      const eventStats = sData.eventStats || [];
-      const unregistered = sData.unregistered || [];
+      const categoryMap = { track: '径赛', field: '田赛', relay: '接力', team: '集体' };
+      const genderMap = { male: '男子', female: '女子', mixed: '混合' };
 
-      let tableHtml = '<table class="table table--striped"><thead><tr><th>项目</th><th>分类</th><th>性别组别</th><th>报名人数</th></tr></thead><tbody>';
+      const total = list.length;
+      const pending = list.filter(r => r.status === 'pending').length;
+      const approved = list.filter(r => r.status === 'approved').length;
+      const rejected = list.filter(r => r.status === 'rejected').length;
+
+      let statsHtml = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">';
+      statsHtml += `<div class="stat-card"><div class="stat-num">${total}</div><div class="stat-label">报名总数</div></div>`;
+      statsHtml += `<div class="stat-card"><div class="stat-num" style="color:#e07a5f">${pending}</div><div class="stat-label">待审核</div></div>`;
+      statsHtml += `<div class="stat-card"><div class="stat-num" style="color:#52b788">${approved}</div><div class="stat-label">已通过</div></div>`;
+      statsHtml += `<div class="stat-card"><div class="stat-num" style="color:#dc2626">${rejected}</div><div class="stat-label">已驳回</div></div>`;
+      statsHtml += '</div>';
+
+      const eventMap = {};
+      list.forEach(r => {
+        const key = r.event_name || '未知';
+        if (!eventMap[key]) eventMap[key] = { name: key, category: r.category || '', gender_group: r.gender_group || '', count: 0, pending: 0, approved: 0, rejected: 0 };
+        eventMap[key].count++;
+        if (r.status === 'pending') eventMap[key].pending++;
+        else if (r.status === 'approved') eventMap[key].approved++;
+        else eventMap[key].rejected++;
+      });
+      const eventStats = Object.values(eventMap).sort((a, b) => b.count - a.count);
+
+      statsHtml += '<table class="table table--striped"><thead><tr><th>项目</th><th>分类</th><th>组别</th><th>报名数</th><th>待审</th><th>通过</th><th>驳回</th></tr></thead><tbody>';
       if (eventStats.length > 0) {
-        eventStats.forEach(e => { tableHtml += '<tr><td>' + e.name + '</td><td>' + e.category + '</td><td>' + e.gender_group + '</td><td>' + e.count + '</td></tr>'; });
+        eventStats.forEach(e => {
+          statsHtml += `<tr><td>${e.name}</td><td>${categoryMap[e.category] || e.category}</td><td>${genderMap[e.gender_group] || e.gender_group}</td><td><strong>${e.count}</strong></td><td style="color:#e07a5f">${e.pending || '-'}</td><td style="color:#52b788">${e.approved || '-'}</td><td style="color:#dc2626">${e.rejected || '-'}</td></tr>`;
+        });
       } else {
-        tableHtml += '<tr><td colspan="4">' + this._emptyState('fas fa-chart-bar', '暂无统计数据') + '</td></tr>';
+        statsHtml += '<tr><td colspan="7"><p class="text-muted text-center">暂无报名数据</p></td></tr>';
       }
-      tableHtml += '</tbody></table>';
-      container.querySelector('#reg-stats-table').innerHTML = tableHtml;
+      statsHtml += '</tbody></table>';
+      container.querySelector('#reg-stats-table').innerHTML = statsHtml;
 
-      let unregHtml = '';
-      if (unregistered.length > 0) {
-        unregHtml = '<div style="max-height:300px;overflow-y:auto;"><table class="table table--striped"><thead><tr><th>学号</th><th>姓名</th><th>班级</th><th>年级</th></tr></thead><tbody>';
-        unregistered.forEach(u => { unregHtml += '<tr><td>' + u.student_id + '</td><td>' + u.name + '</td><td>' + u.class_name + '</td><td>' + u.grade + '</td></tr>'; });
-        unregHtml += '</tbody></table></div>';
-        unregHtml += '<div style="padding:8px;color:#6b7280;font-size:0.875rem;">共 ' + unregistered.length + ' 名学生未报名</div>';
-      } else {
-        unregHtml = this._emptyState('fas fa-check-circle', '全部学生已报名');
-      }
-      container.querySelector('#reg-unregistered').innerHTML = unregHtml;
+      try {
+        const statsRes = await API.get('/admin/registrations/stats');
+        const sData = statsRes.data || {};
+        const unregistered = sData.unregistered || [];
+        let unregHtml = '';
+        if (unregistered.length > 0) {
+          unregHtml = '<div style="max-height:300px;overflow-y:auto;"><table class="table table--striped"><thead><tr><th>学号</th><th>姓名</th><th>班级</th><th>年级</th></tr></thead><tbody>';
+          unregistered.forEach(u => { unregHtml += '<tr><td>' + u.student_id + '</td><td>' + u.name + '</td><td>' + u.class_name + '</td><td>' + u.grade + '</td></tr>'; });
+          unregHtml += '</tbody></table></div>';
+          unregHtml += '<div style="padding:8px;color:#6b7280;font-size:0.875rem;">共 ' + unregistered.length + ' 名学生未报名</div>';
+        } else {
+          unregHtml = this._emptyState('fas fa-check-circle', '全部学生已报名');
+        }
+        container.querySelector('#reg-unregistered').innerHTML = unregHtml;
+      } catch (_) {}
     } catch (e) {}
   },
 
@@ -1192,6 +1413,8 @@ const Admin = {
   // ==================== 成绩管理 ====================
   _resultsPage: 1,
   _resultsLimit: 20,
+  _resultsFilters: { grade: '', class_name: '', event_id: '', award: '', is_published: '' },
+  _resultsFilterData: null,
   _resultDraftStorageKey: 'sportsMeet.admin.resultDrafts',
   _studentDirectoryCache: null,
 
@@ -1218,46 +1441,97 @@ const Admin = {
       </div>
     `;
     this._renderResultsFilter(container);
-    this._loadResultFilters(container);
     this._loadResults(container);
     this._bindResultsEvents(container);
   },
 
   _renderResultsFilter(container) {
     const bar = container.querySelector('#results-filter-bar');
+    const f = this._resultsFilters;
+    const labels = [];
+    if (f.grade) labels.push('年级：' + f.grade);
+    if (f.class_name) labels.push('班级：' + f.class_name);
+    if (f.event_id && this._resultsFilterData) {
+      const evt = this._resultsFilterData.events.find(e => e.id == f.event_id);
+      if (evt) labels.push('项目：' + evt.name);
+    }
+    if (f.award) labels.push('奖项：' + f.award);
+    if (f.is_published !== '') labels.push('公示：' + (f.is_published === '1' ? '已公示' : '未公示'));
     bar.innerHTML = `
-      <select id="results-grade" class="form__select"><option value="">全部年级</option></select>
-      <select id="results-class" class="form__select"><option value="">全部班级</option></select>
-      <select id="results-award" class="form__select"><option value="">全部奖项</option><option value="一等">一等</option><option value="二等">二等</option><option value="三等">三等</option></select>
-      <select id="results-published" class="form__select"><option value="">公示状态</option><option value="1">已公示</option><option value="0">未公示</option></select>
       <button class="btn btn--primary btn--sm" id="btn-results-search"><i class="fas fa-search"></i> 筛选</button>
+      ${labels.length > 0 ? '<span class="text-sm" style="color:var(--red);margin-left:8px">当前筛选：' + labels.join(' / ') + ' <a href="javascript:void(0)" id="btn-results-clear" style="color:var(--text3)">[清除]</a></span>' : ''}
     `;
+    bar.querySelector('#btn-results-clear')?.addEventListener('click', () => {
+      this._resultsFilters = { grade: '', class_name: '', event_id: '', award: '', is_published: '' };
+      this._resultsPage = 1;
+      this._renderResultsFilter(container);
+      this._loadResults(container);
+    });
+    bar.querySelector('#btn-results-search')?.addEventListener('click', () => this._showResultsFilterModal(container));
   },
 
-  async _loadResultFilters(container) {
-    try {
-      const gradesRes = await API.public.getGrades();
-      const grades = gradesRes.data && gradesRes.data.grades ? gradesRes.data.grades : [];
-      const classes = gradesRes.data && gradesRes.data.classes ? gradesRes.data.classes : [];
-      const gradeSel = container.querySelector('#results-grade');
-      const classSel = container.querySelector('#results-class');
-      grades.forEach((g) => {
-        const option = document.createElement('option');
-        option.value = g.name;
-        option.textContent = g.name;
-        gradeSel.appendChild(option);
-      });
-      classes.forEach((c) => {
-        const option = document.createElement('option');
-        option.value = c.name;
-        option.textContent = c.name;
-        classSel.appendChild(option);
-      });
-    } catch (e) {}
+  async _showResultsFilterModal(container) {
+    if (!this._resultsFilterData) {
+      try {
+        const gradesRes = await API.public.getGrades();
+        const eventsRes = await API.get('/admin/events');
+        this._resultsFilterData = {
+          classes: (gradesRes.data && gradesRes.data.classes) ? gradesRes.data.classes : [],
+          events: eventsRes.data || []
+        };
+      } catch (e) { App.showToast('加载筛选数据失败','error'); return; }
+    }
+    const f = this._resultsFilters;
+    const classOpts = this._resultsFilterData.classes.map(c =>
+      `<option value="${c.name}" ${f.class_name===c.name?'selected':''}>${c.name}</option>`
+    ).join('');
+    const eventOpts = this._resultsFilterData.events.map(e =>
+      `<option value="${e.id}" ${f.event_id==e.id?'selected':''}>${e.name}</option>`
+    ).join('');
+    const awardOpts = `<option value="" ${!f.award?'selected':''}>全部奖项</option>
+      <option value="一等" ${f.award==='一等'?'selected':''}>一等奖</option>
+      <option value="二等" ${f.award==='二等'?'selected':''}>二等奖</option>
+      <option value="三等" ${f.award==='三等'?'selected':''}>三等奖</option>
+      <option value="优秀" ${f.award==='优秀'?'selected':''}>优秀奖</option>`;
+    const publishOpts = `<option value="" ${f.is_published===''?'selected':''}>全部</option>
+      <option value="1" ${f.is_published==='1'?'selected':''}>已公示</option>
+      <option value="0" ${f.is_published==='0'?'selected':''}>未公示</option>`;
+
+    const html = `
+      <div class="modal-header"><h3>成绩筛选</h3><button class="modal-close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>
+      <div class="modal-body">
+        <div class="form-group"><label>年级</label><input type="text" id="results-filter-grade" class="form__input" placeholder="如：高一" value="${f.grade}"></div>
+        <div class="form-group"><label>班级</label><select id="results-filter-class" class="form__select"><option value="">全部班级</option>${classOpts}</select></div>
+        <div class="form-group"><label>项目</label><select id="results-filter-event" class="form__select"><option value="">全部项目</option>${eventOpts}</select></div>
+        <div class="form-group"><label>奖项</label><select id="results-filter-award" class="form__select">${awardOpts}</select></div>
+        <div class="form-group"><label>公示状态</label><select id="results-filter-published" class="form__select">${publishOpts}</select></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn--outline btn--sm" id="btn-results-filter-cancel">取消</button>
+        <button class="btn btn--primary btn--sm" id="btn-results-filter-apply">确定筛选</button>
+      </div>`;
+    App.showModal(html);
+
+    document.getElementById('btn-results-filter-cancel').onclick = () => App.hideModal();
+    document.getElementById('btn-results-filter-apply').onclick = () => {
+      const grade = document.getElementById('results-filter-grade')?.value?.trim() || '';
+      const className = document.getElementById('results-filter-class')?.value || '';
+      const eventId = document.getElementById('results-filter-event')?.value || '';
+      const award = document.getElementById('results-filter-award')?.value || '';
+      const published = document.getElementById('results-filter-published')?.value;
+      this._resultsFilters.grade = grade;
+      this._resultsFilters.class_name = className;
+      this._resultsFilters.event_id = eventId;
+      this._resultsFilters.award = award;
+      this._resultsFilters.is_published = published;
+      this._resultsPage = 1;
+      App.hideModal();
+      this._renderResultsFilter(container);
+      this._loadResults(container);
+    };
   },
 
   _bindResultsEvents(container) {
-    container.querySelector('#btn-results-search').addEventListener('click', () => { this._resultsPage = 1; this._loadResults(container); });
     container.querySelector('#btn-add-result').addEventListener('click', () => this._showResultModal(null, container));
     container.querySelector('#btn-import-results').addEventListener('click', () => this._showResultsImport(container));
     container.querySelector('#btn-auto-rank').addEventListener('click', () => this._autoRank());
@@ -1269,15 +1543,13 @@ const Admin = {
   async _loadResults(container) {
     try {
       App.showLoading();
+      const f = this._resultsFilters;
       const params = { page: this._resultsPage, limit: this._resultsLimit };
-      const grade = container.querySelector('#results-grade').value;
-      const className = container.querySelector('#results-class').value;
-      const award = container.querySelector('#results-award').value;
-      const published = container.querySelector('#results-published').value;
-      if (grade) params.grade = grade;
-      if (className) params.class_name = className;
-      if (award) params.award = award;
-      if (published !== '') params.is_published = published;
+      if (f.grade) params.grade = f.grade;
+      if (f.class_name) params.class_name = f.class_name;
+      if (f.event_id) params.event_id = f.event_id;
+      if (f.award) params.award = f.award;
+      if (f.is_published !== '') params.is_published = f.is_published;
 
       const res = await API.get('/admin/results' + API._qs(params));
       const d = res.data || res;
@@ -2555,45 +2827,83 @@ const Admin = {
   async _loadGradesClasses() {
     try {
       const res = await API.get('/admin/grades');
-      const data = res.data || [];
+      const grades = res.data?.grades || [];
+      const classes = res.data?.classes || [];
       let gh = '<table class="table"><thead><tr><th>名称</th><th>排序</th><th>操作</th></tr></thead><tbody>';
       let ch = '';
-      data.forEach(g => {
+      grades.forEach(g => {
         gh += `<tr><td>${g.name}</td><td>${g.sort_order||0}</td><td><button class="btn btn-danger btn-xs" onclick="Admin._deleteGrade(${g.id})">删除</button></td></tr>`;
-        if (g.classes) {
-          g.classes.forEach(c => {
-            ch += `<tr><td>${c.name} (${g.name})</td><td>${c.sort_order||0}</td><td><button class="btn btn-danger btn-xs" onclick="Admin._deleteClass(${c.id})">删除</button></td></tr>`;
-          });
-        }
       });
+      gh += grades.length === 0 ? '<tr><td colspan="3" class="text-muted">暂无年级</td></tr>' : '';
       gh += '</tbody></table>';
+      classes.forEach(c => {
+        ch += `<tr><td>${c.name} (${c.grade_name||''})</td><td>${c.sort_order||0}</td><td><button class="btn btn-danger btn-xs" onclick="Admin._deleteClass(${c.id})">删除</button></td></tr>`;
+      });
       ch = ch ? '<table class="table"><thead><tr><th>名称</th><th>排序</th><th>操作</th></tr></thead><tbody>' + ch + '</tbody></table>' : '<p class="text-muted">暂无班级</p>';
       document.getElementById('grade-list').innerHTML = gh;
       document.getElementById('class-list').innerHTML = ch;
     } catch(e) { App.showToast(e.message,'error'); }
   },
   async _addGrade() {
-    const name = prompt('请输入年级名称（如：初一、高一）:');
-    if (!name) return;
-    try { App.showLoading(); await API.post('/admin/grades',{name});this._loadGradesClasses();App.showToast('添加成功','success'); } catch(e) { App.showToast(e.message,'error'); } finally { App.hideLoading(); }
+    App.showModal(`
+      <div class="modal__header"><h3 class="modal__title">添加年级</h3><button class="modal__close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>
+      <div class="modal__body"><div class="form"><div class="form__group"><label class="form__label">年级名称</label><input class="form__input" id="new-grade-name" placeholder="如：高一"></div></div></div>
+      <div class="modal__footer"><button class="btn btn--outline" onclick="App.hideModal()">取消</button><button class="btn btn--primary" id="btn-confirm-add-grade">添加</button></div>
+    `);
+    document.getElementById('btn-confirm-add-grade').addEventListener('click', async () => {
+      const name = document.getElementById('new-grade-name').value.trim();
+      if (!name) { App.showToast('请输入年级名称','warning'); return; }
+      try { App.showLoading(); await API.admin.createGrade({name}); App.hideModal(); Admin._loadGradesClasses(); App.showToast('添加成功','success'); } catch(e) { App.hideLoading(); App.showToast(e.message,'error'); }
+    });
   },
   async _deleteGrade(id) {
-    if (!await App.confirmDialog('确认删除？')) return;
-    try { App.showLoading(); await API.delete('/admin/grades/'+id);this._loadGradesClasses();App.showToast('已删除','success'); } catch(e) { App.showToast(e.message,'error'); } finally { App.hideLoading(); }
+    App.showModal(`
+      <div class="confirm-dialog"><p>确认删除该年级？将同时删除该年级下所有班级。</p>
+        <div class="confirm-actions"><button class="btn btn-secondary" id="confirm-grade-cancel">取消</button><button class="btn btn-danger" id="confirm-grade-ok">确认删除</button></div>
+      </div>
+    `);
+    document.getElementById('confirm-grade-cancel').onclick = () => App.hideModal();
+    document.getElementById('confirm-grade-ok').onclick = async () => {
+      App.hideModal();
+      try { App.showLoading(); await API.admin.deleteGrade(id); Admin._loadGradesClasses(); App.showToast('已删除','success'); } catch(e) { App.hideLoading(); App.showToast(e.message,'error'); }
+    };
   },
   async _addClass() {
-    try { App.showLoading(); const gRes = await API.get('/admin/grades'); App.hideLoading();
-      const grades = gRes.data||[]; if(!grades.length) return App.showToast('请先添加年级','warning');
-      const gid = prompt('请选择年级:\n'+grades.map((g,i)=>`${i+1}. ${g.name}`).join('\n')+'\n输入序号:');
-      const grade = grades[parseInt(gid)-1]; if(!grade) return;
-      const cname = prompt('请输入班级名称（如：1班）:');
-      if(!cname) return;
-      App.showLoading(); await API.post('/admin/classes',{grade_id:grade.id,name:cname});this._loadGradesClasses();App.showToast('添加成功','success');
-    } catch(e) { App.showToast(e.message,'error'); } finally { App.hideLoading(); }
+    try {
+      App.showLoading();
+      const gRes = await API.get('/admin/grades');
+      App.hideLoading();
+      const grades = gRes.data?.grades || [];
+      if (!grades.length) { App.showToast('请先添加年级','warning'); return; }
+      let gradeOpts = '';
+      grades.forEach(g => { gradeOpts += `<option value="${g.id}">${g.name}</option>`; });
+      App.showModal(`
+        <div class="modal__header"><h3 class="modal__title">添加班级</h3><button class="modal__close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>
+        <div class="modal__body"><div class="form">
+          <div class="form__group"><label class="form__label">年级</label><select class="form__select" id="new-class-grade">${gradeOpts}</select></div>
+          <div class="form__group"><label class="form__label">班级名称</label><input class="form__input" id="new-class-name" placeholder="如：1班"></div>
+        </div></div>
+        <div class="modal__footer"><button class="btn btn--outline" onclick="App.hideModal()">取消</button><button class="btn btn--primary" id="btn-confirm-add-class">添加</button></div>
+      `);
+      document.getElementById('btn-confirm-add-class').addEventListener('click', async () => {
+        const gradeId = document.getElementById('new-class-grade').value;
+        const name = document.getElementById('new-class-name').value.trim();
+        if (!name) { App.showToast('请输入班级名称','warning'); return; }
+        try { App.showLoading(); await API.admin.createClass({grade_id:parseInt(gradeId),name}); App.hideModal(); Admin._loadGradesClasses(); App.showToast('添加成功','success'); } catch(e) { App.hideLoading(); App.showToast(e.message,'error'); }
+      });
+    } catch(e) { App.hideLoading(); App.showToast(e.message,'error'); }
   },
   async _deleteClass(id) {
-    if (!await App.confirmDialog('确认删除？')) return;
-    try { App.showLoading(); await API.delete('/admin/classes/'+id);this._loadGradesClasses();App.showToast('已删除','success'); } catch(e) { App.showToast(e.message,'error'); } finally { App.hideLoading(); }
+    App.showModal(`
+      <div class="confirm-dialog"><p>确认删除该班级？</p>
+        <div class="confirm-actions"><button class="btn btn-secondary" id="confirm-class-cancel">取消</button><button class="btn btn-danger" id="confirm-class-ok">确认删除</button></div>
+      </div>
+    `);
+    document.getElementById('confirm-class-cancel').onclick = () => App.hideModal();
+    document.getElementById('confirm-class-ok').onclick = async () => {
+      App.hideModal();
+      try { App.showLoading(); await API.admin.deleteClass(id); Admin._loadGradesClasses(); App.showToast('已删除','success'); } catch(e) { App.hideLoading(); App.showToast(e.message,'error'); }
+    };
   },
 
   // ==================== 模板下载 ====================
@@ -2612,142 +2922,6 @@ const Admin = {
     XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
     XLSX.writeFile(wb, filename);
     App.showToast('模板已下载', 'success');
-  },
-
-  // ==== 论坛审核 ====
-  async _showForumModeration() {
-    try {
-      App.showLoading();
-      const res = await API.get('/forum/pending-replies');
-      App.hideLoading();
-      const replies = res.data || [];
-      let html = '<div class="modal-header"><h3>论坛评论审核</h3><button class="modal-close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div><div class="modal-body">';
-      if (replies.length === 0) {
-        html += '<p class="text-muted text-center">暂无待审核评论</p>';
-      } else {
-        replies.forEach(r => {
-          html += '<div style="border:1px solid var(--border);padding:10px;margin-bottom:8px;border-radius:var(--radius)"><div style="display:flex;justify-content:space-between;margin-bottom:6px"><strong>'+r.author_name+'</strong><span class="text-sm text-muted">'+r.post_title+'</span></div><p style="margin-bottom:8px">'+r.content+'</p><div style="display:flex;gap:6px"><button class="btn btn-success btn-xs" onclick="Admin._approveReply('+r.id+')">通过</button><button class="btn btn-danger btn-xs" onclick="Admin._rejectReply('+r.id+')">驳回</button></div></div>';
-        });
-      }
-      html += '</div><div class="modal-footer"><button class="btn btn-secondary" onclick="App.hideModal()">关闭</button></div>';
-      App.showModal(html);
-    } catch(e) { App.hideLoading(); App.showToast(e.message,'error'); }
-  },
-  async _approveReply(id) {
-    try { await API.put('/forum/replies/'+id+'/approve'); App.showToast('已通过','success'); this.currentTab='dashboard'; Admin.render(); }
-    catch(e) { App.showToast(e.message,'error'); }
-  },
-  async _rejectReply(id) {
-    try { await API.put('/forum/replies/'+id+'/reject'); App.showToast('已驳回','success'); this.currentTab='dashboard'; Admin.render(); }
-    catch(e) { App.showToast(e.message,'error'); }
-  },
-
-  // ==== AI 生成赛程 ====
-  async _generateSchedule() {
-    App.showLoading();
-    try {
-      const res = await API.get('/ai/generate-schedule');
-      App.hideLoading();
-      if (!res.success) return App.showToast(res.error,'error');
-      const schedule = res.data;
-      let html = '<div class="modal__header"><h3 class="modal__title">AI生成赛程表</h3><button class="modal__close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div><div class="modal__body">';
-      const days = [{key:'day1_am',label:'第一天 上午'},{key:'day1_pm',label:'第一天 下午'},{key:'day2_am',label:'第二天 上午'},{key:'day2_pm',label:'第二天 下午'}];
-      days.forEach(day => {
-        const items = schedule[day.key]||[];
-        if(items.length){
-          html += `<h4 style="margin:12px 0 8px;color:var(--red)">${day.label}</h4><div class="table-container"><table class="table"><thead><tr><th>时间</th><th>项目</th><th>轮次</th><th>场地</th><th>参赛者</th></tr></thead><tbody>`;
-          items.forEach(item => { html += `<tr><td>${item.time||'-'}</td><td>${item.event||'-'}</td><td>${item.round||'-'}</td><td>${item.venue||'-'}</td><td>${Array.isArray(item.students)?item.students.join('、'):item.students||'-'}</td></tr>`; });
-          html += '</tbody></table></div>';
-        }
-      });
-      html += '<div style="margin-top:16px"><button class="btn btn-success btn-sm" onclick="Admin._exportScheduleExcel()">导出为Excel</button></div></div><div class="modal__footer"><button class="btn btn-secondary" onclick="App.hideModal()">关闭</button></div>';
-      this._currentSchedule = schedule;
-      App.showModal(html);
-    } catch(e) { App.hideLoading(); App.showToast(e.message,'error'); }
-  },
-  _exportScheduleExcel() {
-    if (!this._currentSchedule) return App.showToast('没有赛程数据');
-    const days = ['day1_am','day1_pm','day2_am','day2_pm'];
-    const labels = ['第一天 上午','第一天 下午','第二天 上午','第二天 下午'];
-    const rows = [['赛段','时间','项目','轮次','场地','参赛者']];
-    days.forEach((d,i) => { (this._currentSchedule[d]||[]).forEach(item => { rows.push([labels[i],item.time||'',item.event||'',item.round||'',item.venue||'',Array.isArray(item.students)?item.students.join('、'):'']); }); });
-    if (typeof XLSX !== 'undefined') { const ws=XLSX.utils.aoa_to_sheet(rows);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'赛程表');XLSX.writeFile(wb,'运动会赛程表.xlsx');App.showToast('导出成功','success'); }
-    else App.showToast('XLSX库未加载','error');
-  },
-
-  // ==== AI 生成获奖证书 ====
-  async _generateAward() {
-    App.showLoading();
-    try {
-      const res = await API.get('/ai/generate-schedule');
-      App.hideLoading();
-      if (!res.success) return App.showToast(res.error,'error');
-      const schedule = res.data;
-
-      let html = '<div class="modal__header"><h3 class="modal__title">AI生成获奖证书</h3><button class="modal__close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>';
-      html += '<div class="modal__body">';
-      html += '<p class="text-sm text-muted mb-2">输入获奖信息，AI 将自动生成证书内容</p>';
-      html += '<div class="form-group"><label>获奖项目</label><input type="text" id="award-event" class="form__input" placeholder="如：100米男子组"></div>';
-      html += '<div class="form-group"><label>获奖者</label><input type="text" id="award-name" class="form__input" placeholder="如：张三"></div>';
-      html += '<div class="form-row"><div class="form-group"><label>奖项</label><select id="award-level" class="form__select"><option>一等奖</option><option>二等奖</option><option>三等奖</option><option>优秀奖</option></select></div><div class="form-group"><label>班级</label><input type="text" id="award-class" class="form__input" placeholder="如：高一(1)班"></div></div>';
-      html += '<button class="btn btn-primary btn-sm" onclick="Admin._doGenerateAward()">生成证书</button>';
-      html += '<div id="award-result" style="margin-top:16px"></div>';
-      html += '</div><div class="modal__footer"><button class="btn btn-secondary" onclick="App.hideModal()">关闭</button></div>';
-      App.showModal(html);
-    } catch(e) { App.hideLoading(); App.showToast(e.message,'error'); }
-  },
-
-  async _doGenerateAward() {
-    const event = document.getElementById('award-event')?.value?.trim();
-    const name = document.getElementById('award-name')?.value?.trim();
-    const level = document.getElementById('award-level')?.value;
-    const cls = document.getElementById('award-class')?.value?.trim();
-    if (!event || !name) return App.showToast('请填写项目名称和获奖者','warning');
-
-    const result = document.getElementById('award-result');
-    result.innerHTML = '<div class="text-center"><div class="spinner"></div><p class="text-sm text-muted mt-1">AI生成中...</p></div>';
-
-    try {
-      const prompt = `请為澳门濠江中学第三十屆田徑运动会生成一份获奖证书内容。使用以下格式（繁体中文，正式莊重）：
-
-─────────────────────────────
-          澳门濠江中学
-      第三十屆田徑运动会
-         获 奖 证 书
-─────────────────────────────
-
-    茲证明 ${cls||''} 班 ${name} 同学
-    在 ${event} 项目中表现优异
-    榮获 ${level}
-
-    特頒此证，以资鼓勵
-
-    澳门濠江中学
-    第三十屆田徑运动会组委会
-    2026年6月
-─────────────────────────────`;
-
-      const res = await API.post('/ai/ai-chat', { message: prompt, history: [] });
-      if (res.success) {
-        result.innerHTML = `<div style="text-align:center;padding:20px;background:#FFFBF0;border:3px double var(--red);white-space:pre-wrap;font-family:serif;font-size:16px;line-height:2">${res.data.reply}</div><button class="btn btn-success btn-sm mt-2" onclick="Admin._printAward()">打印证书</button>`;
-        this._currentAwardHtml = result.innerHTML;
-      } else {
-        // 直接用模板生成
-        const cert = `\n─────────────────────────────\n          澳门濠江中学\n      第三十屆田徑运动会\n         获 奖 证 书\n─────────────────────────────\n\n    茲证明 ${cls||''} 班 ${name} 同学\n    在 ${event} 项目中表现优异\n    榮获 ${level}\n\n    特頒此证，以资鼓勵\n\n    澳门濠江中学\n    第三十屆田徑运动会组委会\n    2026年6月\n─────────────────────────────`;
-        result.innerHTML = `<div style="text-align:center;padding:20px;background:#FFFBF0;border:3px double var(--red);white-space:pre-wrap;font-family:serif;font-size:16px;line-height:2">${cert}</div><button class="btn btn-success btn-sm mt-2" onclick="Admin._printAward()">打印证书</button>`;
-      }
-    } catch(e) {
-      result.innerHTML = `<p class="text-danger">生成失败：${e.message}</p>`;
-    }
-  },
-
-  _printAward() {
-    const result = document.getElementById('award-result');
-    if (!result) return;
-    const win = window.open('','_blank','width=800,height=600');
-    win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>获奖证书</title><style>body{display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#fff}@media print{body{margin:0}}</style></head><body>${result.querySelector('div').outerHTML}</body></html>`);
-    win.document.close();
-    setTimeout(() => win.print(), 500);
   },
 };
 

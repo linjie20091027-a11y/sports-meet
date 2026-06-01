@@ -145,7 +145,7 @@ function resolveStudentUser(db, payload, options = {}) {
 
 function paginate(query, params, page, limit) {
   const p = Math.max(1, parseInt(page) || 1);
-  const l = Math.min(100, Math.max(1, parseInt(limit) || 20));
+  const l = Math.min(99999, Math.max(1, parseInt(limit) || 20));
   const offset = (p - 1) * l;
   const db = getDb();
   const countRow = db.prepare(`SELECT COUNT(*) as total FROM (${query})`).get(...params);
@@ -535,12 +535,13 @@ router.put('/rules', (req, res) => {
 router.get('/registrations', (req, res) => {
   try {
     const db = getDb();
-    const { event_id, grade, class_name, status, page, limit } = req.query;
+    const { event_id, grade, class_name, gender, status, page, limit } = req.query;
     let conditions = [];
     let params = [];
     if (event_id) { conditions.push('r.event_id = ?'); params.push(event_id); }
     if (grade) { conditions.push('u.grade = ?'); params.push(grade); }
     if (class_name) { conditions.push('u.class_name = ?'); params.push(class_name); }
+    if (gender) { conditions.push('u.gender = ?'); params.push(gender); }
     if (status) { conditions.push('r.status = ?'); params.push(status); }
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
     const query = `SELECT r.*, u.name as user_name, u.student_id, u.class_name, u.grade, e.name as event_name, e.category as event_category
@@ -550,6 +551,27 @@ router.get('/registrations', (req, res) => {
       ${where} ORDER BY r.created_at DESC`;
     const result = paginate(query, params, page, limit);
     res.json({ success: true, data: result });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// GET /registrations/:id - 报名详情
+router.get('/registrations/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const reg = db.prepare(`
+      SELECT r.*, u.name as user_name, u.student_id, u.class_name, u.grade, u.gender, u.email,
+        e.name as event_name, e.category, e.event_type, e.gender_group, e.venue,
+        reviewer.name as reviewer_name
+      FROM registrations r
+      LEFT JOIN users u ON r.user_id = u.id
+      LEFT JOIN events e ON r.event_id = e.id
+      LEFT JOIN users reviewer ON r.reviewed_by = reviewer.id
+      WHERE r.id = ?
+    `).get(req.params.id);
+    if (!reg) return res.status(404).json({ success: false, error: '报名记录不存在' });
+    res.json({ success: true, data: reg });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }

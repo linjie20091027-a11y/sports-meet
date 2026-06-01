@@ -153,6 +153,7 @@ const API = {
 
     // 报名管理
     getRegistrations(params) { return API.get('/admin/registrations' + API._qs(params)); },
+    getRegistrationDetail(id) { return API.get('/admin/registrations/' + id); },
     approveRegistration(id) { return API.put('/admin/registrations/' + id + '/approve'); },
     rejectRegistration(id) { return API.put('/admin/registrations/' + id + '/reject'); },
 
@@ -183,6 +184,7 @@ const API = {
     cancelRegistration(id) { return API.delete('/student/registrations/' + id); },
     getMyResults() { return API.get('/student/results'); },
     getMySchedules() { return API.get('/student/schedules'); },
+    getUpcomingReminders() { return API.get('/student/upcoming-reminders'); },
     markAnnouncementRead(id) { return API.put('/student/announcements/' + id + '/read'); },
   },
 

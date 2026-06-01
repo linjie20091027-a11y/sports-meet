@@ -502,4 +502,30 @@ router.put('/profile/avatar', (req, res) => {
   }
 });
 
+// GET /upcoming-reminders - 获取即将到来的检录提醒（比赛前15分钟）
+router.get('/upcoming-reminders', (req, res) => {
+  try {
+    const db = getDb();
+    const reminders = db.prepare(`
+      SELECT s.id as schedule_id, s.start_time, s.end_time,
+             COALESCE(NULLIF(s.venue,''), e.venue) as venue,
+             s.round_name, s.note,
+             e.name as event_name, e.category, e.event_type,
+             e.gender_group, e.id as event_id
+      FROM schedules s
+      JOIN events e ON s.event_id = e.id
+      JOIN registrations r ON r.event_id = e.id AND r.user_id = ?
+      WHERE r.status = 'approved'
+        AND s.status = 'published'
+        AND s.start_time > datetime('now','localtime')
+        AND s.start_time <= datetime('now','localtime','+15 minutes')
+      ORDER BY s.start_time ASC
+    `).all(req.user.id);
+
+    res.json({ success: true, data: reminders });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;

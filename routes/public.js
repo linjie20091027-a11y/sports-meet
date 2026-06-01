@@ -691,7 +691,7 @@ router.get('/results/rankings', (req, res) => {
 router.get('/announcements', (req, res) => {
   try {
     const db = getDb();
-    let sql = `SELECT a.id, a.title, a.category, a.is_pinned, a.publish_time, a.expire_time, a.view_count, a.created_at, u.name AS publisher_name FROM announcements a LEFT JOIN users u ON a.published_by = u.id WHERE a.status = 'published' AND (a.expire_time IS NULL OR a.expire_time >= datetime('now','localtime'))`;
+    let sql = `SELECT a.id, a.title, a.content, a.category, a.is_pinned, a.publish_time, a.expire_time, a.view_count, a.created_at, u.name AS publisher_name FROM announcements a LEFT JOIN users u ON a.published_by = u.id WHERE a.status = 'published' AND (a.expire_time IS NULL OR a.expire_time >= datetime('now','localtime'))`;
     const params = [];
 
     if (req.query.category) {
