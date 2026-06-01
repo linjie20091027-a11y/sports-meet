@@ -2826,7 +2826,7 @@ const Admin = {
     document.getElementById('btn-confirm-add-grade').addEventListener('click', async () => {
       const name = document.getElementById('new-grade-name').value.trim();
       if (!name) { App.showToast('请输入年级名称','warning'); return; }
-      try { App.showLoading(); await API.admin.createGrade({name}); App.hideModal(); this._loadGradesClasses(); App.showToast('添加成功','success'); } catch(e) { App.hideLoading(); App.showToast(e.message,'error'); }
+      try { App.showLoading(); await API.admin.createGrade({name}); App.hideModal(); Admin._loadGradesClasses(); App.showToast('添加成功','success'); } catch(e) { App.hideLoading(); App.showToast(e.message,'error'); }
     });
   },
   async _deleteGrade(id) {
@@ -2838,7 +2838,7 @@ const Admin = {
     document.getElementById('confirm-grade-cancel').onclick = () => App.hideModal();
     document.getElementById('confirm-grade-ok').onclick = async () => {
       App.hideModal();
-      try { App.showLoading(); await API.admin.deleteGrade(id); this._loadGradesClasses(); App.showToast('已删除','success'); } catch(e) { App.hideLoading(); App.showToast(e.message,'error'); }
+      try { App.showLoading(); await API.admin.deleteGrade(id); Admin._loadGradesClasses(); App.showToast('已删除','success'); } catch(e) { App.hideLoading(); App.showToast(e.message,'error'); }
     };
   },
   async _addClass() {
@@ -2862,7 +2862,7 @@ const Admin = {
         const gradeId = document.getElementById('new-class-grade').value;
         const name = document.getElementById('new-class-name').value.trim();
         if (!name) { App.showToast('请输入班级名称','warning'); return; }
-        try { App.showLoading(); await API.admin.createClass({grade_id:parseInt(gradeId),name}); App.hideModal(); this._loadGradesClasses(); App.showToast('添加成功','success'); } catch(e) { App.hideLoading(); App.showToast(e.message,'error'); }
+        try { App.showLoading(); await API.admin.createClass({grade_id:parseInt(gradeId),name}); App.hideModal(); Admin._loadGradesClasses(); App.showToast('添加成功','success'); } catch(e) { App.hideLoading(); App.showToast(e.message,'error'); }
       });
     } catch(e) { App.hideLoading(); App.showToast(e.message,'error'); }
   },
@@ -2875,7 +2875,7 @@ const Admin = {
     document.getElementById('confirm-class-cancel').onclick = () => App.hideModal();
     document.getElementById('confirm-class-ok').onclick = async () => {
       App.hideModal();
-      try { App.showLoading(); await API.admin.deleteClass(id); this._loadGradesClasses(); App.showToast('已删除','success'); } catch(e) { App.hideLoading(); App.showToast(e.message,'error'); }
+      try { App.showLoading(); await API.admin.deleteClass(id); Admin._loadGradesClasses(); App.showToast('已删除','success'); } catch(e) { App.hideLoading(); App.showToast(e.message,'error'); }
     };
   },
 
