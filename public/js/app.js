@@ -684,7 +684,7 @@ const App = {
       if (reqId !== this.searchLastRequestId) return;
       if (!res.success) throw new Error(res.error || '搜索失败');
 
-      const data = res.data || {};
+      const data = this._normalizeSearchResponse(res.data || {});
       this.searchState = {
         ...this.searchState,
         query: data.query || this.searchState.query,
@@ -703,6 +703,112 @@ const App = {
     } finally {
       this.hideLoading();
     }
+  },
+
+  _normalizeSearchResponse(data) {
+    const payload = data || {};
+    const legacyKeys = ['events', 'students', 'announcements', 'schedules', 'results', 'posts'];
+    const isLegacy = !Array.isArray(payload.items) && legacyKeys.some(key => Array.isArray(payload[key]));
+    if (!isLegacy) return payload;
+
+    const toLegacyUsers = (payload.students || []).map(item => ({
+      id: item.id,
+      type: 'users',
+      title: item.name || item.username || item.student_id || '未命名用户',
+      description: item.class_name ? `班级：${item.class_name}` : '用户搜索结果',
+      subtitle: `账号 ${item.student_id || item.username || '-'} · 学生${item.grade ? ' · ' + item.grade : ''}`,
+      avatar: item.avatar || '',
+      account: item.username || item.student_id || '',
+      student_id: item.student_id || '',
+      role: 'student',
+      role_label: '学生',
+      department: [item.grade, item.class_name].filter(Boolean).join(' '),
+      events: [],
+      href: '',
+      sort_time: item.created_at || ''
+    }));
+
+    const toLegacyEvents = (payload.events || []).map(item => ({
+      id: item.id,
+      type: 'events',
+      title: item.name || '未命名项目',
+      description: `${item.category || '项目'} · ${item.venue || '场地待定'}`,
+      subtitle: [item.event_type, item.gender_group].filter(Boolean).join(' · '),
+      href: `#/events/${item.id}`,
+      sort_time: item.created_at || ''
+    }));
+
+    const toLegacySchedules = (payload.schedules || []).map(item => ({
+      id: `schedule-${item.id}`,
+      type: 'events',
+      title: `${item.event_name || '赛程'}${item.round_name ? ' · ' + item.round_name : ''}`,
+      description: item.venue || '场地待定',
+      subtitle: item.start_time ? this.formatDate(item.start_time) : '时间待定',
+      href: '#/events',
+      sort_time: item.start_time || ''
+    }));
+
+    const toLegacyAnnouncements = (payload.announcements || []).map(item => ({
+      id: item.id,
+      type: 'announcements',
+      title: item.title || '未命名公告',
+      description: item.content || (item.category ? `分类：${item.category}` : '公告通知'),
+      subtitle: item.publish_time ? this.formatDate(item.publish_time) : '发布时间待定',
+      href: `#/announcements/${item.id}`,
+      sort_time: item.publish_time || ''
+    }));
+
+    const toLegacyResults = (payload.results || []).map(item => ({
+      id: item.id,
+      type: 'results',
+      title: `${item.user_name || '未知选手'} · ${item.event_name || '未知项目'}`,
+      description: `成绩 ${item.performance || '-'} · 第 ${item.rank || '-'} 名`,
+      subtitle: item.award || '未获奖',
+      href: '#/results',
+      sort_time: item.created_at || ''
+    }));
+
+    const toLegacyPosts = (payload.posts || []).map(item => ({
+      id: item.id,
+      type: 'news',
+      title: item.title || '未命名帖子',
+      description: String(item.content || '').replace(/\s+/g, ' ').slice(0, 90),
+      subtitle: `${item.author_name || '匿名'} · ${item.reply_count || 0} 回复`,
+      href: '#/forum',
+      sort_time: item.created_at || ''
+    }));
+
+    const sections = {
+      users: toLegacyUsers,
+      events: [...toLegacyEvents, ...toLegacySchedules],
+      news: toLegacyPosts,
+      announcements: toLegacyAnnouncements,
+      results: toLegacyResults,
+      highlights: []
+    };
+    const counts = Object.fromEntries(Object.entries(sections).map(([key, rows]) => [key, rows.length]));
+    const allItems = [
+      ...sections.users,
+      ...sections.events,
+      ...sections.announcements,
+      ...sections.results,
+      ...sections.news
+    ];
+    const sourceRows = this.searchState.type === 'all'
+      ? allItems
+      : (sections[this.searchState.type] || []);
+
+    return {
+      query: this.searchState.query,
+      type: this.searchState.type,
+      page: 1,
+      limit: this.searchState.limit,
+      total: sourceRows.length,
+      total_pages: sourceRows.length ? 1 : 0,
+      counts,
+      items: sourceRows.slice(0, this.searchState.limit),
+      sections: Object.fromEntries(Object.entries(sections).map(([key, rows]) => [key, rows.slice(0, 3)]))
+    };
   },
 
   _showSearchResults(state, meta = {}) {
@@ -778,7 +884,7 @@ const App = {
       </div>
       <div class="search-body">
         ${summarySections}
-        ${state.items?.length ? `<div class="search-result-grid">${resultCards}</div>` : '<div class="search-none"><i class="fas fa-search"></i>未找到相关结果，请尝试调整关键词或筛选条件</div>'}
+        ${state.items?.length ? `<div class="search-result-grid">${resultCards}</div>` : '<div class="search-none"><i class="fas fa-search"></i>未查询到相关结果，请调整搜索关键词后重试</div>'}
       </div>
       <div class="search-footer">
         ${this._renderSearchPagination(state)}
@@ -1015,8 +1121,8 @@ const App = {
     overlay.classList.remove('hidden');
     document.body.style.overflow = 'hidden'; // 防止背景滚动
   },
-  hideModal() {
-    if (typeof this._modalBeforeClose === 'function') {
+  hideModal(forceClose = false) {
+    if (!forceClose && typeof this._modalBeforeClose === 'function') {
       const allowClose = this._modalBeforeClose();
       if (allowClose === false) return;
     }
@@ -1033,13 +1139,13 @@ const App = {
         <div class="confirm-dialog">
           <p>${message}</p>
           <div class="confirm-actions">
-            <button class="btn btn-secondary" id="confirm-cancel">取消</button>
-            <button class="btn btn-primary" id="confirm-ok">确认</button>
+            <button type="button" class="btn btn-secondary" id="confirm-cancel">取消</button>
+            <button type="button" class="btn btn-primary" id="confirm-ok">确认</button>
           </div>
         </div>
       `);
-      document.getElementById('confirm-cancel').onclick = () => { this.hideModal(); resolve(false); };
-      document.getElementById('confirm-ok').onclick = () => { this.hideModal(); resolve(true); };
+      document.getElementById('confirm-cancel').onclick = () => { this.hideModal(true); resolve(false); };
+      document.getElementById('confirm-ok').onclick = () => { this.hideModal(true); resolve(true); };
     });
   },
 
@@ -1667,6 +1773,30 @@ document.getElementById('modal-overlay')?.addEventListener('click', (e) => {
 });
 document.getElementById('search-overlay')?.addEventListener('click', (e) => {
   if (e.target === document.getElementById('search-overlay')) App.hideSearch();
+});
+document.addEventListener('click', (e) => {
+  const target = e.target instanceof Element ? e.target : null;
+  if (!target) return;
+
+  const closeTrigger = target.closest('.modal__close, .modal-close, .search-close, [data-close-modal], [data-close-search]');
+  if (closeTrigger) {
+    e.preventDefault();
+    if (closeTrigger.matches('.search-close, [data-close-search]') || closeTrigger.closest('#search-overlay')) {
+      App.hideSearch();
+    } else {
+      App.hideModal(true);
+    }
+    return;
+  }
+
+  const actionButton = target.closest('#modal-overlay button, #search-overlay button');
+  if (!actionButton) return;
+  const text = String(actionButton.textContent || '').replace(/\s+/g, '').trim();
+  if (text === '取消' || text === '关闭') {
+    e.preventDefault();
+    if (actionButton.closest('#search-overlay')) App.hideSearch();
+    else App.hideModal(true);
+  }
 });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { App.hideModal(); App.hideSearch(); }
