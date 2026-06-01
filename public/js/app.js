@@ -152,11 +152,16 @@ const App = {
         Forum._initAIChat();
       }
     } else if (hash.startsWith('/announcements/')) {
-      document.getElementById('page-announcements').classList.remove('hidden');
-      document.querySelector('[href="#/announcements"]')?.classList.add('active');
-      this.renderAnnouncements();
       var annId = hash.split('/')[2];
-      if (annId && /^\d+$/.test(annId)) this.showAnnouncementDetail(annId);
+      if (annId && /^\d+$/.test(annId)) {
+        document.getElementById('page-announcement-detail').classList.remove('hidden');
+        document.querySelector('[href="#/announcements"]')?.classList.add('active');
+        this.showAnnouncementDetail(annId);
+      } else {
+        document.getElementById('page-announcements').classList.remove('hidden');
+        document.querySelector('[href="#/announcements"]')?.classList.add('active');
+        this.renderAnnouncements();
+      }
     } else if (hash === '/admin') {
       if (!this.user || this.user.role !== 'admin') { window.location.hash = '#/login'; return; }
       document.getElementById('page-admin').classList.remove('hidden');
@@ -726,11 +731,10 @@ const App = {
       }
 
       // ── 最新公告 ──
-      const catL = { event: '赛事通知', registration: '报名截止', result: '成绩公示', urgent: '紧急通知', general: '一般' };
       const annData = ann.value?.data || [];
       let annH = '';
       if (annData.length) {
-        annData.forEach(a => annH += `<div class="announcement-item"><span class="badge badge-${a.category || 'general'}">${catL[a.category] || a.category}</span>${a.is_pinned ? '<span class="badge badge-pin">置顶</span>' : ''}<a href="#/announcements/${a.id}" class="announcement-title">${a.title}</a><span class="announcement-time">${this.formatDate(a.publish_time)}</span></div>`);
+        annData.forEach(a => annH += `<div class="announcement-item"><a href="#/announcements/${a.id}" class="announcement-title">${a.title}</a><span class="announcement-time">${this.formatDate(a.publish_time)}</span></div>`);
         document.getElementById('home-announcements').innerHTML = annH;
       } else {
         document.getElementById('home-announcements').innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无更多信息</p>';
@@ -1033,6 +1037,8 @@ const App = {
   async renderAnnouncements() {
     const filter = document.getElementById('announcements-filter');
     const list = document.getElementById('announcements-list');
+    const detailRoot = document.getElementById('announcement-detail-root');
+    if (detailRoot) detailRoot.innerHTML = '';
     filter.innerHTML = `<select id="ann-cat" class="form-select"><option value="">全部分类</option><option value="event">赛事通知</option><option value="registration">报名截止</option><option value="result">成绩公示</option><option value="urgent">紧急通知</option><option value="general">一般公告</option></select>`;
     const load = async () => {
       const cat = document.getElementById('ann-cat')?.value || '';
@@ -1047,7 +1053,7 @@ const App = {
           <div class="announcement-card card ${a.is_pinned?'pinned':''}">
             <div class="card-header"><h3>${a.is_pinned?'📌 ':''}${a.title}</h3><span class="badge badge-${a.category||'general'}">${catL[a.category]||a.category}</span></div>
             <div class="card-body"><p class="announcement-preview">${(a.content||'').substring(0,120)}...</p></div>
-            <div class="card-footer"><span class="text-sm text-muted">${this.formatDate(a.publish_time)} · ${a.view_count||0}阅读</span><button class="btn btn-outline btn-sm" onclick="App.showAnnouncementDetail(${a.id})">查看详情</button></div>
+            <div class="card-footer"><span class="text-sm text-muted">${this.formatDate(a.publish_time)} · ${a.view_count||0}阅读</span><a href="#/announcements/${a.id}" class="btn btn-outline btn-sm">查看详情</a></div>
           </div>`).join('') : '<p class="text-muted p-8 text-center">暂无公告</p>';
       } catch (e) { }
       finally { this.hideLoading(); }
@@ -1057,23 +1063,35 @@ const App = {
   },
 
   async showAnnouncementDetail(id) {
+    const root = document.getElementById('announcement-detail-root');
+    if (!root) return;
     try {
       this.showLoading();
       var res = await API.get('/public/announcements/' + id);
       var a = res.data;
       this.hideLoading();
-      if (!a) return this.showToast('公告不存在', 'error');
+      if (!a) { root.innerHTML = '<p class="text-muted text-center" style="padding:3rem">公告不存在</p>'; return; }
       var catL = {event:'赛事通知',registration:'报名截止',result:'成绩公示',urgent:'紧急通知',general:'一般'};
-      this.showModal(
-        '<div class="modal-header"><h3>'+a.title+'</h3><button class="modal-close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>' +
-        '<div class="modal-body">' +
-          '<div class="detail-meta"><span class="badge badge-'+(a.category||'general')+'">'+(catL[a.category]||a.category)+'</span><span class="text-sm text-muted">'+this.formatDate(a.publish_time)+' · '+(a.view_count||0)+'阅读</span></div>' +
-          '<div class="detail-content">'+(a.content||'').replace(/\n/g,'<br>')+'</div>' +
-        '</div>' +
-        '<div class="modal-footer"><button class="btn btn-secondary btn-sm" onclick="App.hideModal()">关闭</button></div>'
-      );
+      root.innerHTML =
+        '<a href="#/announcements" class="btn-text" style="margin-bottom:1rem;display:inline-block"><i class="fas fa-arrow-left"></i> 返回公告列表</a>' +
+        '<div class="card">' +
+          '<div class="card-header">' +
+            '<h2>' + (a.is_pinned ? '📌 ' : '') + (a.title || '') + '</h2>' +
+            '<div style="margin-top:.5rem;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">' +
+              '<span class="badge badge-' + (a.category || 'general') + '">' + (catL[a.category] || a.category || '一般') + '</span>' +
+              '<span class="text-sm text-muted"><i class="far fa-clock"></i> ' + this.formatDate(a.publish_time) + '</span>' +
+              '<span class="text-sm text-muted"><i class="far fa-eye"></i> ' + (a.view_count || 0) + ' 阅读</span>' +
+              (a.publisher_name ? '<span class="text-sm text-muted"><i class="far fa-user"></i> ' + a.publisher_name + '</span>' : '') +
+            '</div>' +
+          '</div>' +
+          '<div class="card-body">' +
+            '<div class="detail-content">' + (a.content || '暂无内容').replace(/\n/g, '<br>') + '</div>' +
+          '</div>' +
+        '</div>';
+      window.scrollTo(0, 0);
     } catch (e) {
       this.hideLoading();
+      root.innerHTML = '<p class="text-muted text-center" style="padding:3rem">加载失败</p>';
     }
   },
 
