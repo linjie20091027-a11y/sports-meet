@@ -177,6 +177,7 @@ const API = {
     cancelRegistration(id) { return API.delete('/student/registrations/' + id); },
     getMyResults() { return API.get('/student/results'); },
     getMySchedules() { return API.get('/student/schedules'); },
+    getUpcomingReminders() { return API.get('/student/upcoming-reminders'); },
     markAnnouncementRead(id) { return API.put('/student/announcements/' + id + '/read'); },
   },
 

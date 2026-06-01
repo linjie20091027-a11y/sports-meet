@@ -6,6 +6,8 @@ const App = {
   notificationItems: [],
   notificationUnread: 0,
   notificationReady: false,
+  _shownReminders: new Set(),
+  _reminderPollTimer: null,
 
   async init() {
     this.bindNavigation();
@@ -222,6 +224,7 @@ const App = {
       if (notifyBell) notifyBell.classList.remove('hidden');
       if (notifyWrapper) notifyWrapper.classList.remove('hidden');
       this._ensureNotificationPolling();
+      this._startReminderPolling();
       this._loadNotifications({ silent: true });
     } else {
       authBtns.classList.remove('hidden');
@@ -230,6 +233,7 @@ const App = {
       if (notifyWrapper) notifyWrapper.classList.add('hidden');
       this._toggleNotificationPanel(false);
       this._stopNotificationPolling();
+      this._stopReminderPolling();
       this.notificationItems = [];
       this.notificationUnread = 0;
       this.notificationReady = false;
@@ -298,6 +302,56 @@ const App = {
       clearInterval(this.notificationPollTimer);
       this.notificationPollTimer = null;
     }
+  },
+
+  _startReminderPolling() {
+    if (this._reminderPollTimer || !this.user || this.user.role !== 'student') return;
+    this._checkUpcomingReminders();
+    this._reminderPollTimer = setInterval(() => {
+      if (!this.user || this.user.role !== 'student') return;
+      this._checkUpcomingReminders();
+    }, 30000);
+  },
+
+  _stopReminderPolling() {
+    if (this._reminderPollTimer) {
+      clearInterval(this._reminderPollTimer);
+      this._reminderPollTimer = null;
+    }
+  },
+
+  async _checkUpcomingReminders() {
+    try {
+      const res = await API.student.getUpcomingReminders();
+      if (!res.success || !res.data?.length) return;
+      res.data.forEach(r => {
+        const key = r.schedule_id;
+        if (this._shownReminders.has(key)) return;
+        this._shownReminders.add(key);
+        this._showReminderToast(r);
+      });
+    } catch (e) {}
+  },
+
+  _showReminderToast(reminder) {
+    const time = reminder.start_time ? reminder.start_time.replace('T',' ').substring(0,16) : '-';
+    const genderL = { male: '男子', female: '女子', mixed: '混合' };
+    const eventLabel = `${reminder.event_name}（${genderL[reminder.gender_group] || ''}${reminder.round_name ? '·' + reminder.round_name : ''}）`;
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = 'toast toast-reminder';
+    toast.innerHTML = `<div class="toast-reminder-header"><i class="fas fa-bell"></i> 检录提醒</div>
+      <div class="toast-reminder-body">
+        <p><strong>${eventLabel}</strong></p>
+        <p>\u{1f552} 比赛时间：${time}</p>
+        <p>\u{1f4cd} 检录地点：${reminder.venue || '请留意公告'}</p>
+        ${reminder.note ? '<p class="text-sm text-muted">' + this._escHtml(reminder.note) + '</p>' : ''}
+      </div>`;
+    container.appendChild(toast);
+    setTimeout(() => {
+      toast.style.animation = 'toast-out .3s ease forwards';
+      setTimeout(() => toast.remove(), 300);
+    }, 8000);
   },
 
   _toggleNotificationPanel(force) {
