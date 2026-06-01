@@ -706,10 +706,7 @@ body::before {
 }
 /* 应用到关键卡片 */
 .stat-card, .event-mini-card, .parallax-section {
-  perspective: 1200px;
-}
-.stat-card:hover, .event-mini-card:hover {
-  z-index: 10;
+  transform-style: preserve-3d;
 }
 
 /* ═══ 背景音乐控制 ═══ */
