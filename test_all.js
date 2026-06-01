@@ -211,6 +211,30 @@ async function runAllTests() {
     return true;
   });
 
+  await test('公开', 'GET /api/public/search 学生账号检索', async () => {
+    const res = await request('GET', '/api/public/search?q=20250001');
+    if (res.status !== 200) return `状态码 ${res.status}`;
+    const hasUser = Array.isArray(res.body?.data?.items) && res.body.data.items.some(item => item.type === 'users' && item.account === '20250001');
+    if (!hasUser) return '未返回匹配的学生账号结果';
+    return true;
+  });
+
+  await test('公开', 'GET /api/public/search 管理员账号检索', async () => {
+    const res = await request('GET', '/api/public/search?q=admin');
+    if (res.status !== 200) return `状态码 ${res.status}`;
+    const hasUser = Array.isArray(res.body?.data?.items) && res.body.data.items.some(item => item.type === 'users' && item.account === 'admin');
+    if (!hasUser) return '未返回匹配的管理员账号结果';
+    return true;
+  });
+
+  await test('公开', 'GET /api/public/search 管理员邮箱检索', async () => {
+    const res = await request('GET', '/api/public/search?q=admin%40hkms.hktedu.com');
+    if (res.status !== 200) return `状态码 ${res.status}`;
+    const hasUser = Array.isArray(res.body?.data?.items) && res.body.data.items.some(item => item.type === 'users' && item.account === 'admin');
+    if (!hasUser) return '未返回匹配的管理员邮箱结果';
+    return true;
+  });
+
   await test('公开', 'GET /api/public/search 多关键字组合', async () => {
     const res = await request('GET', '/api/public/search?q=100%E7%B1%B3%20%E7%94%B7%E5%AD%90&type=events');
     if (res.status !== 200) return `状态码 ${res.status}`;

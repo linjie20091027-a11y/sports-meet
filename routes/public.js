@@ -48,6 +48,10 @@ function getCategoryLabel(category) {
   return labelMap[category] || category || '未分类';
 }
 
+function getUserRoleLabel(role) {
+  return role === 'admin' ? '管理员' : '学生';
+}
+
 function splitSearchTerms(value) {
   return String(value || '')
     .trim()
@@ -114,6 +118,7 @@ function queryUsers(db, terms, filters) {
       u.name,
       u.username,
       u.email,
+      u.role,
       u.student_id,
       u.class_name,
       u.grade,
@@ -126,7 +131,7 @@ function queryUsers(db, terms, filters) {
         WHERE r.user_id = u.id AND r.status != 'rejected'
       ), '') AS event_names
     FROM users u
-    WHERE u.role = 'student' AND u.status = 'active'
+    WHERE u.status = 'active'
     ORDER BY u.updated_at DESC, u.id DESC
   `).all();
 
@@ -136,6 +141,8 @@ function queryUsers(db, terms, filters) {
         row.name,
         row.username,
         row.email,
+        row.role,
+        getUserRoleLabel(row.role),
         row.student_id,
         row.class_name,
         row.grade,
@@ -153,16 +160,25 @@ function queryUsers(db, terms, filters) {
     })
     .map(row => {
       const eventNames = row.event_names ? row.event_names.split(',').filter(Boolean) : [];
+      const department = [row.grade, row.class_name].filter(Boolean).join(' ');
+      const account = row.username || row.email || row.student_id || '';
+      const roleLabel = getUserRoleLabel(row.role);
+      const subtitleParts = [`账号 ${account || '-'}`, roleLabel];
+      if (department) subtitleParts.push(department);
       return {
         id: row.id,
         type: 'users',
         title: row.name,
-        description: eventNames.length ? eventNames.join(' / ') : '暂未报名项目',
-        subtitle: `${row.student_id || '无学号'} · ${[row.grade, row.class_name].filter(Boolean).join(' ') || '未分班级'}`,
+        description: eventNames.length
+          ? `参赛项目：${eventNames.join(' / ')}`
+          : (row.role === 'admin' ? '系统管理账号' : '暂未报名项目'),
+        subtitle: subtitleParts.join(' · '),
         avatar: row.avatar || '',
-        account: row.username || row.email || '',
+        account,
         student_id: row.student_id || '',
-        department: [row.grade, row.class_name].filter(Boolean).join(' '),
+        role: row.role,
+        role_label: roleLabel,
+        department,
         events: eventNames,
         href: '',
         sort_time: row.created_at || ''
