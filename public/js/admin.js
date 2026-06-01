@@ -2818,27 +2818,65 @@ const Admin = {
     } catch(e) { App.showToast(e.message,'error'); }
   },
   async _addGrade() {
-    const name = prompt('请输入年级名称（如：初一、高一）:');
-    if (!name) return;
-    try { App.showLoading(); await API.post('/admin/grades',{name});this._loadGradesClasses();App.showToast('添加成功','success'); } catch(e) { App.showToast(e.message,'error'); } finally { App.hideLoading(); }
+    App.showModal(`
+      <div class="modal__header"><h3 class="modal__title">添加年级</h3><button class="modal__close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>
+      <div class="modal__body"><div class="form"><div class="form__group"><label class="form__label">年级名称</label><input class="form__input" id="new-grade-name" placeholder="如：高一"></div></div></div>
+      <div class="modal__footer"><button class="btn btn--outline" onclick="App.hideModal()">取消</button><button class="btn btn--primary" id="btn-confirm-add-grade">添加</button></div>
+    `);
+    document.getElementById('btn-confirm-add-grade').addEventListener('click', async () => {
+      const name = document.getElementById('new-grade-name').value.trim();
+      if (!name) { App.showToast('请输入年级名称','warning'); return; }
+      try { App.showLoading(); await API.admin.createGrade({name}); App.hideModal(); this._loadGradesClasses(); App.showToast('添加成功','success'); } catch(e) { App.hideLoading(); App.showToast(e.message,'error'); }
+    });
   },
   async _deleteGrade(id) {
-    if (!await App.confirmDialog('确认删除？')) return;
-    try { App.showLoading(); await API.delete('/admin/grades/'+id);this._loadGradesClasses();App.showToast('已删除','success'); } catch(e) { App.showToast(e.message,'error'); } finally { App.hideLoading(); }
+    App.showModal(`
+      <div class="confirm-dialog"><p>确认删除该年级？将同时删除该年级下所有班级。</p>
+        <div class="confirm-actions"><button class="btn btn-secondary" id="confirm-grade-cancel">取消</button><button class="btn btn-danger" id="confirm-grade-ok">确认删除</button></div>
+      </div>
+    `);
+    document.getElementById('confirm-grade-cancel').onclick = () => App.hideModal();
+    document.getElementById('confirm-grade-ok').onclick = async () => {
+      App.hideModal();
+      try { App.showLoading(); await API.admin.deleteGrade(id); this._loadGradesClasses(); App.showToast('已删除','success'); } catch(e) { App.hideLoading(); App.showToast(e.message,'error'); }
+    };
   },
   async _addClass() {
-    try { App.showLoading(); const gRes = await API.get('/admin/grades'); App.hideLoading();
-      const grades = gRes.data?.grades || []; if(!grades.length) return App.showToast('请先添加年级','warning');
-      const gid = prompt('请选择年级:\n'+grades.map((g,i)=>`${i+1}. ${g.name}`).join('\n')+'\n输入序号:');
-      const grade = grades[parseInt(gid)-1]; if(!grade) return;
-      const cname = prompt('请输入班级名称（如：1班）:');
-      if(!cname) return;
-      App.showLoading(); await API.post('/admin/classes',{grade_id:grade.id,name:cname});this._loadGradesClasses();App.showToast('添加成功','success');
-    } catch(e) { App.showToast(e.message,'error'); } finally { App.hideLoading(); }
+    try {
+      App.showLoading();
+      const gRes = await API.get('/admin/grades');
+      App.hideLoading();
+      const grades = gRes.data?.grades || [];
+      if (!grades.length) { App.showToast('请先添加年级','warning'); return; }
+      let gradeOpts = '';
+      grades.forEach(g => { gradeOpts += `<option value="${g.id}">${g.name}</option>`; });
+      App.showModal(`
+        <div class="modal__header"><h3 class="modal__title">添加班级</h3><button class="modal__close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>
+        <div class="modal__body"><div class="form">
+          <div class="form__group"><label class="form__label">年级</label><select class="form__select" id="new-class-grade">${gradeOpts}</select></div>
+          <div class="form__group"><label class="form__label">班级名称</label><input class="form__input" id="new-class-name" placeholder="如：1班"></div>
+        </div></div>
+        <div class="modal__footer"><button class="btn btn--outline" onclick="App.hideModal()">取消</button><button class="btn btn--primary" id="btn-confirm-add-class">添加</button></div>
+      `);
+      document.getElementById('btn-confirm-add-class').addEventListener('click', async () => {
+        const gradeId = document.getElementById('new-class-grade').value;
+        const name = document.getElementById('new-class-name').value.trim();
+        if (!name) { App.showToast('请输入班级名称','warning'); return; }
+        try { App.showLoading(); await API.admin.createClass({grade_id:parseInt(gradeId),name}); App.hideModal(); this._loadGradesClasses(); App.showToast('添加成功','success'); } catch(e) { App.hideLoading(); App.showToast(e.message,'error'); }
+      });
+    } catch(e) { App.hideLoading(); App.showToast(e.message,'error'); }
   },
   async _deleteClass(id) {
-    if (!await App.confirmDialog('确认删除？')) return;
-    try { App.showLoading(); await API.delete('/admin/classes/'+id);this._loadGradesClasses();App.showToast('已删除','success'); } catch(e) { App.showToast(e.message,'error'); } finally { App.hideLoading(); }
+    App.showModal(`
+      <div class="confirm-dialog"><p>确认删除该班级？</p>
+        <div class="confirm-actions"><button class="btn btn-secondary" id="confirm-class-cancel">取消</button><button class="btn btn-danger" id="confirm-class-ok">确认删除</button></div>
+      </div>
+    `);
+    document.getElementById('confirm-class-cancel').onclick = () => App.hideModal();
+    document.getElementById('confirm-class-ok').onclick = async () => {
+      App.hideModal();
+      try { App.showLoading(); await API.admin.deleteClass(id); this._loadGradesClasses(); App.showToast('已删除','success'); } catch(e) { App.hideLoading(); App.showToast(e.message,'error'); }
+    };
   },
 
   // ==================== 模板下载 ====================
