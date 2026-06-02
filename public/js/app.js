@@ -1456,18 +1456,24 @@ const App = {
       const res = await API.public.getHighlights();
       const items = res.data || [];
       if (!items.length) {
-        grid.innerHTML = `<div class="photo-upload-prompt" id="photo-upload-prompt" onclick="App.highlightUpload()"><i class="fas fa-camera"></i><p>上传第一张精彩瞬间</p></div>`;
+        grid.innerHTML = `<div class="photo-upload-prompt" id="photo-upload-prompt"><i class="fas fa-camera"></i><p>上传第一张精彩瞬间</p></div>`;
+        document.getElementById('photo-upload-prompt')?.addEventListener('click', () => App.highlightUpload());
         return;
       }
       let h = items.map(item => `
-        <div class="photo-item" onclick="App.openLightbox('${item.url}')">
+        <div class="photo-item" data-lightbox="${item.url}">
           <img src="${item.url}" alt="${item.title || ''}" loading="lazy">
         </div>
       `).join('');
-      h += `<div class="photo-item photo-upload-btn" onclick="App.highlightUpload()"><i class="fas fa-plus"></i><span>上传</span></div>`;
+      h += `<div class="photo-item photo-upload-btn" id="photo-upload-btn"><i class="fas fa-plus"></i><span>上传</span></div>`;
       grid.innerHTML = h;
+      grid.querySelectorAll('.photo-item[data-lightbox]').forEach(el => {
+        el.addEventListener('click', () => App.openLightbox(el.dataset.lightbox));
+      });
+      document.getElementById('photo-upload-btn')?.addEventListener('click', () => App.highlightUpload());
     } catch(e) {
-      grid.innerHTML = '<div class="photo-upload-prompt" onclick="App.highlightUpload()"><i class="fas fa-camera"></i><p>上传精彩瞬间</p></div>';
+      grid.innerHTML = '<div class="photo-upload-prompt" id="photo-upload-prompt"><i class="fas fa-camera"></i><p>上传精彩瞬间</p></div>';
+      document.getElementById('photo-upload-prompt')?.addEventListener('click', () => App.highlightUpload());
     }
   },
 
@@ -1475,21 +1481,29 @@ const App = {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
+    input.style.display = 'none';
+    document.body.appendChild(input);
     input.onchange = async () => {
       const file = input.files[0];
+      document.body.removeChild(input);
       if (!file) return;
-      if (file.size > 10 * 1024 * 1024) { this.showToast('图片不超过10MB', 'warning'); return; }
+      if (file.size > 10 * 1024 * 1024) { App.showToast('图片不超过10MB', 'warning'); return; }
       const fd = new FormData();
       fd.append('image', file);
-      this.showToast('上传中...', 'info');
-      const r = await API.public.uploadHighlight(fd);
-      if (r.success) {
-        this.showToast('上传成功', 'success');
-        this.renderHighlights();
-      } else {
-        this.showToast(r.error || '上传失败', 'error');
+      App.showToast('上传中...', 'info');
+      try {
+        const r = await API.public.uploadHighlight(fd);
+        if (r.success) {
+          App.showToast('上传成功', 'success');
+          App.renderHighlights();
+        } else {
+          App.showToast(r.error || '上传失败', 'error');
+        }
+      } catch(e) {
+        App.showToast('上传失败: ' + (e.message || '未知错误'), 'error');
       }
     };
+    input.addEventListener('cancel', () => document.body.removeChild(input));
     input.click();
   },
 
@@ -1502,7 +1516,7 @@ const App = {
       this._lightbox = el;
       el.querySelector('.app-lightbox__bg').addEventListener('click', () => this._lightbox.classList.remove('show'));
       el.querySelector('.app-lightbox__close').addEventListener('click', () => this._lightbox.classList.remove('show'));
-      document.addEventListener('keydown', e => { if (e.key === 'Escape') this._lightbox?.classList.remove('show'); });
+      document.addEventListener('keydown', e => { if (e.key === 'Escape') App._lightbox?.classList.remove('show'); });
     }
     this._lightbox.querySelector('.app-lightbox__img').src = url;
     this._lightbox.classList.add('show');
