@@ -1411,7 +1411,7 @@ const App = {
         document.getElementById('home-announcements').innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无更多信息</p>';
       }
 
-      // ── 最新成绩：A~E组第一名 ──
+      // ── 最新成绩：A~E组冠军竖条轮播 ──
       const resData = results.value?.data || [];
       let resH = '';
       if (resData.length) {
@@ -1419,25 +1419,37 @@ const App = {
         const groupChamps = {};
         resData.forEach(r => {
           const g = r.user_sport_group || 'A';
-          if (r.rank === 1 && !groupChamps[g]) groupChamps[g] = r;
+          if (r.rank === 1) {
+            if (!groupChamps[g]) groupChamps[g] = [];
+            groupChamps[g].push(r);
+          }
         });
-        const champs = groups.map(g => groupChamps[g] || null).filter(Boolean);
-        if (champs.length) {
-          resH = '<div class="home-result-champs">';
-          champs.forEach(r => {
-            resH += `<a href="#/results" class="home-result-card">
-              <div class="home-result-group">${r.user_sport_group || 'A'}组</div>
-              <div class="home-result-medal">🥇</div>
-              <div class="home-result-name">${r.name || '-'}</div>
-              <div class="home-result-event">${r.event_name || '-'}</div>
-              <div class="home-result-perf">${r.performance || '-'}</div>
-            </a>`;
+        const hasData = Object.keys(groupChamps).length > 0;
+        if (hasData) {
+          this._champData = groupChamps;
+          resH = '<div class="home-champ-strip" id="home-champ-strip">';
+          groups.forEach(g => {
+            const champs = groupChamps[g] || [];
+            if (!champs.length) return;
+            resH += `<div class="champ-strip-row">
+              <div class="champ-strip-group">${g}组</div>
+              <div class="champ-strip-items" data-group="${g}">`;
+            champs.forEach((r, i) => {
+              resH += `<div class="champ-strip-item ${i === 0 ? 'active' : ''}" data-idx="${i}">
+                <span class="champ-strip-medal">🥇</span>
+                <span class="champ-strip-name">${r.name || '-'}</span>
+                <span class="champ-strip-event">${r.event_name || '-'}</span>
+                <span class="champ-strip-perf">${r.performance || '-'}</span>
+              </div>`;
+            });
+            resH += '</div></div>';
           });
           resH += '</div>';
         } else {
           resH = '<p class="text-muted text-center" style="padding:2rem">暂无更多信息</p>';
         }
         document.getElementById('home-results').innerHTML = resH;
+        if (hasData) this._startChampRotation();
       } else {
         document.getElementById('home-results').innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无更多信息</p>';
       }
@@ -2073,6 +2085,26 @@ const App = {
     if (!d) return '-';
     try { const t=new Date(d);return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')} ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`; }
     catch(e) { return d; }
+  },
+  _champTimer: null,
+  _champData: null,
+  _startChampRotation() {
+    if (this._champTimer) clearInterval(this._champTimer);
+    this._champTimer = setInterval(() => {
+      if (!this._champData) return;
+      const groups = ['A','B','C','D','E'];
+      groups.forEach(g => {
+        const items = document.querySelector(`.champ-strip-items[data-group="${g}"]`);
+        if (!items) return;
+        const all = items.querySelectorAll('.champ-strip-item');
+        if (all.length <= 1) return;
+        const active = items.querySelector('.champ-strip-item.active');
+        const curIdx = parseInt(active?.dataset?.idx || 0);
+        const nextIdx = (curIdx + 1) % all.length;
+        active.classList.remove('active');
+        all[nextIdx].classList.add('active');
+      });
+    }, 3000);
   },
   getAwardLabel(a) {
     const m={'一等':'一等奖','二等':'二等奖','三等':'三等奖','优秀':'优秀奖','团体':'团体奖'};
