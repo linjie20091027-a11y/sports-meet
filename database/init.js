@@ -237,6 +237,7 @@ function migrateSchema() {
     "ALTER TABLE users ADD COLUMN age INTEGER DEFAULT 16",
     "ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT ''",
     "ALTER TABLE users ADD COLUMN staff_type TEXT DEFAULT ''",
+    "ALTER TABLE users ADD COLUMN permission_role TEXT DEFAULT 'student'",
     "ALTER TABLE users ADD COLUMN managed_grade TEXT DEFAULT ''",
     "ALTER TABLE users ADD COLUMN managed_class_name TEXT DEFAULT ''",
     "ALTER TABLE users ADD COLUMN assigned_event_ids TEXT DEFAULT '[]'",
@@ -273,6 +274,20 @@ function migrateSchema() {
   alters.forEach((sql) => {
     try { _db.run(sql); } catch (_) { /* 栏位已存在 */ }
   });
+  try {
+    _db.run(`
+      UPDATE users
+      SET permission_role = CASE
+        WHEN role = 'student' THEN 'student'
+        WHEN role = 'admin' AND COALESCE(staff_type, '') != '' THEN 'teacher'
+        WHEN role = 'admin' THEN 'global_admin'
+        WHEN COALESCE(permission_role, '') IN ('student', 'teacher', 'global_admin') THEN permission_role
+        ELSE 'student'
+      END
+    `);
+  } catch (_) {
+    /* legacy users table may not exist yet */
+  }
   try {
     _db.run(`
       UPDATE forum_posts
@@ -461,6 +476,7 @@ function initTables() {
       password TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'student' CHECK(role IN ('admin','student')),
       staff_type TEXT DEFAULT '' CHECK(staff_type IN ('','homeroom_teacher','event_teacher')),
+      permission_role TEXT DEFAULT 'student' CHECK(permission_role IN ('student','teacher','global_admin')),
       student_id TEXT UNIQUE,
       name TEXT NOT NULL,
       class_name TEXT DEFAULT '',
@@ -771,23 +787,23 @@ function initTables() {
 
 function seedDefaultData() {
   // 管理员账号
-  const adminStmt = _db.prepare("SELECT COUNT(*) as cnt FROM users WHERE role='admin'");
+  const adminHash = bcrypt.hashSync('admin123', 10);
+  const adminStmt = _db.prepare("SELECT COUNT(*) as cnt FROM users WHERE permission_role='global_admin' OR (permission_role = '' AND role='admin' AND COALESCE(staff_type, '') = '')");
   adminStmt.step();
   const adminRow = adminStmt.getAsObject();
   adminStmt.free();
 
   if (adminRow.cnt === 0) {
-    const hash = bcrypt.hashSync('admin123', 10);
-    _db.run("INSERT INTO users (username, email, password, role, student_id, name) VALUES (?, ?, ?, ?, ?, ?)",
-      ['admin', 'admin@hkms.hktedu.com', hash, 'admin', 'ADMIN001', '系统管理员']);
-    _db.run("INSERT INTO users (username, email, password, role, student_id, name) VALUES (?, ?, ?, ?, ?, ?)",
-      ['2100', '2100@hkms.hktedu.com', hash, 'admin', '2100', '曾剑辉']);
-    _db.run("INSERT INTO users (username, email, password, role, student_id, name) VALUES (?, ?, ?, ?, ?, ?)",
-      ['0037', '0037@hkms.hktedu.com', hash, 'admin', '0037', '王诗震']);
-    _db.run("INSERT INTO users (username, email, password, role, student_id, name) VALUES (?, ?, ?, ?, ?, ?)",
-      ['20250041', '20250041@hkms.hktedu.com', hash, 'admin', '20250041', '李靖汐']);
-    _db.run("INSERT INTO users (username, email, password, role, student_id, name) VALUES (?, ?, ?, ?, ?, ?)",
-      ['20250037', '20250037@hkms.hktedu.com', hash, 'admin', '20250037', '徐振华']);
+    _db.run("INSERT INTO users (username, email, password, role, permission_role, student_id, name) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      ['admin', 'admin@hkms.hktedu.com', adminHash, 'admin', 'global_admin', 'ADMIN001', '系统管理员']);
+    _db.run("INSERT INTO users (username, email, password, role, permission_role, student_id, name) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      ['2100', '2100@hkms.hktedu.com', adminHash, 'admin', 'global_admin', '2100', '曾剑辉']);
+    _db.run("INSERT INTO users (username, email, password, role, permission_role, student_id, name) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      ['0037', '0037@hkms.hktedu.com', adminHash, 'admin', 'global_admin', '0037', '王诗震']);
+    _db.run("INSERT INTO users (username, email, password, role, permission_role, student_id, name) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      ['20250041', '20250041@hkms.hktedu.com', adminHash, 'admin', 'global_admin', '20250041', '李靖汐']);
+    _db.run("INSERT INTO users (username, email, password, role, permission_role, student_id, name) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      ['20250037', '20250037@hkms.hktedu.com', adminHash, 'admin', 'global_admin', '20250037', '徐振华']);
   }
 
   // 冯梓雯（始终确保存在）
@@ -796,10 +812,10 @@ function seedDefaultData() {
   var fzwCnt = fzwRow.getAsObject().cnt;
   fzwRow.free();
   if (fzwCnt === 0) {
-    _db.run("INSERT INTO users (username, email, password, role, student_id, name) VALUES (?, ?, ?, ?, ?, ?)",
-      ['20250030', '20250030@hkms.hktedu.com', hash, 'admin', '20250030', '冯梓雯']);
+    _db.run("INSERT INTO users (username, email, password, role, permission_role, student_id, name) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      ['20250030', '20250030@hkms.hktedu.com', adminHash, 'admin', 'global_admin', '20250030', '冯梓雯']);
   } else {
-    _db.run("UPDATE users SET role = 'admin' WHERE email = '20250030@hkms.hktedu.com' AND role != 'admin'");
+    _db.run("UPDATE users SET role = 'admin', permission_role = 'global_admin' WHERE email = '20250030@hkms.hktedu.com'");
   }
 
   // 超级管理员（始终确保存在）
@@ -809,11 +825,10 @@ function seedDefaultData() {
   superAdminRow.free();
   if (superCnt === 0) {
     var superHash = bcrypt.hashSync('lin20091027', 10);
-    _db.run("INSERT INTO users (username, email, password, role, student_id, name) VALUES (?, ?, ?, ?, ?, ?)",
-      ['LINKIT', '20091027@hkms.hktedu.com', superHash, 'admin', 'SUPER001', '超级管理员-LINKIT']);
+    _db.run("INSERT INTO users (username, email, password, role, permission_role, student_id, name) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      ['LINKIT', '20091027@hkms.hktedu.com', superHash, 'admin', 'global_admin', 'SUPER001', '超级管理员-LINKIT']);
   } else {
-    // 确保角色为 admin
-    _db.run("UPDATE users SET role = 'admin' WHERE email = '20091027@hkms.hktedu.com' AND role != 'admin'");
+    _db.run("UPDATE users SET role = 'admin', permission_role = 'global_admin' WHERE email = '20091027@hkms.hktedu.com'");
   }
 
   // 运动会基本信息
@@ -839,8 +854,8 @@ function seedDefaultData() {
     let sid = 20250001;
     original.forEach(n => {
       const s = String(sid++);
-      _db.run("INSERT INTO users (username, email, password, role, student_id, name, class_name, grade, gender, age) VALUES (?,?,?,?,?,?,?,?,?,?)",
-        [s, s+'@hkms.hktedu.com', stuHash, 'student', s, n, '高一(11)班', '高一', Math.random()>0.5?'male':'female', 15+Math.floor(Math.random()*3)]);
+      _db.run("INSERT INTO users (username, email, password, role, permission_role, student_id, name, class_name, grade, gender, age) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        [s, s+'@hkms.hktedu.com', stuHash, 'student', 'student', s, n, '高一(11)班', '高一', Math.random()>0.5?'male':'female', 15+Math.floor(Math.random()*3)]);
     });
   }
 
@@ -851,7 +866,7 @@ function seedDefaultData() {
   annStmt.free();
 
   if (annRow.cnt === 0) {
-    const adminId = _db.prepare("SELECT id FROM users WHERE role='admin' LIMIT 1").get()?.id || 1;
+    const adminId = _db.prepare("SELECT id FROM users WHERE permission_role = 'global_admin' OR (role='admin' AND COALESCE(staff_type, '') = '') LIMIT 1").get()?.id || 1;
     const announcements = [
       ['欢迎参加第三十届田径运动会！', '各位同学，第三十届田径运动会即将开幕！请抓紧时间报名参赛，报名截止日期为5月28日。每人最多可报3个项目，请大家根据自身特长合理选择。', 'event', 1],
       ['报名须知', '1. 每人最多报名3个项目；2. 集体项目以班级为单位；3. 报名后需管理员审核通过方可参赛；4. 比赛前30分钟请到检录处检录。', 'registration', 0],
@@ -1034,6 +1049,7 @@ function ensureTeacherAccounts() {
       _db.run(`
         UPDATE users
         SET role = 'admin',
+            permission_role = 'teacher',
             staff_type = ?,
             managed_grade = ?,
             managed_class_name = ?,
@@ -1052,9 +1068,9 @@ function ensureTeacherAccounts() {
 
     _db.run(`
       INSERT INTO users (
-        username, email, password, role, staff_type, student_id, name,
+        username, email, password, role, permission_role, staff_type, student_id, name,
         class_name, grade, managed_grade, managed_class_name, assigned_event_ids
-      ) VALUES (?, ?, ?, 'admin', ?, ?, ?, '', '', ?, ?, ?)
+      ) VALUES (?, ?, ?, 'admin', 'teacher', ?, ?, ?, '', '', ?, ?, ?)
     `, [
       teacher.username,
       teacher.email,

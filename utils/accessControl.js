@@ -22,10 +22,11 @@ function normalizeText(value) {
 
 function resolveAccessProfile(user = {}) {
   const legacyRole = normalizeText(user.role);
+  const permissionRole = normalizeText(user.permission_role);
   const staffType = normalizeText(user.staff_type);
-  const isTeacher = legacyRole === PRIMARY_ROLES.TEACHER || (legacyRole === 'admin' && Boolean(staffType));
-  const isGlobalAdmin = legacyRole === PRIMARY_ROLES.GLOBAL_ADMIN || (legacyRole === 'admin' && !staffType);
-  const isStudent = legacyRole === PRIMARY_ROLES.STUDENT || (!isTeacher && !isGlobalAdmin);
+  const isTeacher = permissionRole === PRIMARY_ROLES.TEACHER || legacyRole === PRIMARY_ROLES.TEACHER || (legacyRole === 'admin' && Boolean(staffType));
+  const isGlobalAdmin = permissionRole === PRIMARY_ROLES.GLOBAL_ADMIN || legacyRole === PRIMARY_ROLES.GLOBAL_ADMIN || (legacyRole === 'admin' && !staffType);
+  const isStudent = permissionRole === PRIMARY_ROLES.STUDENT || legacyRole === PRIMARY_ROLES.STUDENT || (!isTeacher && !isGlobalAdmin);
   const isHomeroomTeacher = isTeacher && staffType === TEACHER_TYPES.HOMEROOM;
   const isEventTeacher = isTeacher && staffType === TEACHER_TYPES.EVENT;
 
@@ -44,6 +45,7 @@ function resolveAccessProfile(user = {}) {
 
   return {
     legacyRole,
+    permissionRole: permissionRole || primaryRole,
     primaryRole,
     roleCode,
     staffType,

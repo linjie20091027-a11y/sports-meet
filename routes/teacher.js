@@ -31,6 +31,7 @@ function parseAssignedEventIds(value) {
 function getTeacherProfile(db, userId) {
   return db.prepare(`
     SELECT id, username, email, role, name,
+      COALESCE(permission_role, CASE WHEN role = 'admin' AND COALESCE(staff_type, '') != '' THEN 'teacher' WHEN role = 'admin' THEN 'global_admin' ELSE 'student' END) AS permission_role,
       COALESCE(staff_type, '') AS staff_type,
       COALESCE(managed_grade, '') AS managed_grade,
       COALESCE(managed_class_name, '') AS managed_class_name,

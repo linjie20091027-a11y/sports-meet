@@ -347,6 +347,18 @@ async function runAllTests() {
     return true;
   });
 
+  await test('公开', '权限角色解析优先使用持久化 permission_role', async () => {
+    const persistedTeacher = resolveAccessProfile({ role: 'admin', permission_role: 'teacher', staff_type: 'event_teacher' });
+    const persistedAdmin = resolveAccessProfile({ role: 'admin', permission_role: 'global_admin', staff_type: '' });
+    if (persistedTeacher.permissionRole !== 'teacher' || persistedTeacher.roleCode !== ROLE_CODES.EVENT_TEACHER) {
+      return `教师持久化角色异常: ${JSON.stringify(persistedTeacher)}`;
+    }
+    if (persistedAdmin.permissionRole !== 'global_admin' || !persistedAdmin.isGlobalAdmin) {
+      return `全局管理员持久化角色异常: ${JSON.stringify(persistedAdmin)}`;
+    }
+    return true;
+  });
+
   // =====================================================
   // 2. 认证功能
   // =====================================================

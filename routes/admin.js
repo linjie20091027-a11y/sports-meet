@@ -7,6 +7,7 @@ const XLSX = require('xlsx');
 const { getDb } = require('../database/init');
 const { createNotification } = require('../utils/notify');
 const { authMiddleware, adminOnly, logOperation } = require('../middleware/auth');
+const { PRIMARY_ROLES } = require('../utils/accessControl');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -38,6 +39,21 @@ const STAFF_TYPES = new Set(['', 'homeroom_teacher', 'event_teacher']);
 function normalizeStaffType(value) {
   const normalized = String(value || '').trim();
   return STAFF_TYPES.has(normalized) ? normalized : '';
+}
+
+function normalizePermissionRoleInput(role, staffType, explicitPermissionRole) {
+  const normalizedPermissionRole = String(explicitPermissionRole || '').trim();
+  if ([PRIMARY_ROLES.STUDENT, PRIMARY_ROLES.TEACHER, PRIMARY_ROLES.GLOBAL_ADMIN].includes(normalizedPermissionRole)) {
+    return normalizedPermissionRole;
+  }
+  const normalizedRole = String(role || '').trim();
+  if (normalizedRole === PRIMARY_ROLES.STUDENT) return PRIMARY_ROLES.STUDENT;
+  if (normalizedRole === PRIMARY_ROLES.TEACHER) return PRIMARY_ROLES.TEACHER;
+  if (normalizedRole === PRIMARY_ROLES.GLOBAL_ADMIN) return PRIMARY_ROLES.GLOBAL_ADMIN;
+  if (normalizedRole === 'admin') {
+    return normalizeStaffType(staffType) ? PRIMARY_ROLES.TEACHER : PRIMARY_ROLES.GLOBAL_ADMIN;
+  }
+  return PRIMARY_ROLES.STUDENT;
 }
 
 function normalizeAssignedEventIds(input) {
@@ -337,6 +353,7 @@ router.get('/users', (req, res) => {
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
     const query = `SELECT
       u.id, u.username, u.email, u.role, u.student_id, u.name, u.class_name, u.grade, u.status, u.created_at,
+      COALESCE(u.permission_role, CASE WHEN u.role = 'admin' AND COALESCE(u.staff_type, '') != '' THEN 'teacher' WHEN u.role = 'admin' THEN 'global_admin' ELSE 'student' END) AS permission_role,
       COALESCE(u.staff_type, '') AS staff_type,
       COALESCE(u.managed_grade, '') AS managed_grade,
       COALESCE(u.managed_class_name, '') AS managed_class_name,
@@ -356,6 +373,7 @@ router.get('/users/:id', (req, res) => {
     const user = db.prepare(`
       SELECT
         id, username, email, role, student_id, name, class_name, grade, status, created_at,
+        COALESCE(permission_role, CASE WHEN role = 'admin' AND COALESCE(staff_type, '') != '' THEN 'teacher' WHEN role = 'admin' THEN 'global_admin' ELSE 'student' END) AS permission_role,
         COALESCE(staff_type, '') AS staff_type,
         COALESCE(managed_grade, '') AS managed_grade,
         COALESCE(managed_class_name, '') AS managed_class_name,
@@ -383,18 +401,23 @@ router.post('/users', (req, res) => {
       class_name,
       grade,
       role,
+      permission_role,
       staff_type,
       managed_grade,
       managed_class_name,
       assigned_event_ids
     } = req.body;
-    const normalizedRole = String(role || 'student').trim() === 'admin' ? 'admin' : 'student';
-    const normalizedStaffType = normalizedRole === 'admin' ? normalizeStaffType(staff_type) : '';
+    const normalizedPermissionRole = normalizePermissionRoleInput(role, staff_type, permission_role);
+    const normalizedRole = normalizedPermissionRole === PRIMARY_ROLES.STUDENT ? 'student' : 'admin';
+    const normalizedStaffType = normalizedPermissionRole === PRIMARY_ROLES.TEACHER ? normalizeStaffType(staff_type) : '';
     if (!username || !email || !password || !name) {
       return res.status(400).json({ success: false, error: '用户名、邮箱、密码、姓名为必填项' });
     }
     if (normalizedRole === 'student' && (!student_id || !class_name || !grade)) {
       return res.status(400).json({ success: false, error: '学生账号必须填写学号、班级和年级' });
+    }
+    if (normalizedPermissionRole === PRIMARY_ROLES.TEACHER && !normalizedStaffType) {
+      return res.status(400).json({ success: false, error: '教师账号必须指定教师身份类型' });
     }
     if (normalizedStaffType === 'homeroom_teacher' && (!String(managed_grade || grade || '').trim() || !String(managed_class_name || class_name || '').trim())) {
       return res.status(400).json({ success: false, error: '班主任必须配置负责的年级和班级' });
@@ -404,12 +427,13 @@ router.post('/users', (req, res) => {
     }
     const hash = bcrypt.hashSync(password, 10);
     db.prepare(`INSERT INTO users (
-      username, email, password, role, staff_type, student_id, name, class_name, grade, managed_grade, managed_class_name, assigned_event_ids
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      username, email, password, role, permission_role, staff_type, student_id, name, class_name, grade, managed_grade, managed_class_name, assigned_event_ids
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
       username,
       email,
       hash,
       normalizedRole,
+      normalizedPermissionRole,
       normalizedStaffType,
       student_id || '',
       name,
@@ -419,7 +443,7 @@ router.post('/users', (req, res) => {
       normalizedStaffType === 'homeroom_teacher' ? String(managed_class_name || class_name || '').trim() : '',
       JSON.stringify(normalizedStaffType === 'event_teacher' ? normalizeAssignedEventIds(assigned_event_ids) : [])
     );
-    logOperation(req.user.id, req.user.username, '添加用户', `添加用户: ${name}(${normalizedRole}${normalizedStaffType ? ':' + normalizedStaffType : ''})`, getIp(req));
+    logOperation(req.user.id, req.user.username, '添加用户', `添加用户: ${name}(${normalizedPermissionRole}${normalizedStaffType ? ':' + normalizedStaffType : ''})`, getIp(req));
     res.json({ success: true, message: '添加成功' });
   } catch (e) {
     if (e.message.includes('UNIQUE')) return res.status(400).json({ success: false, error: '用户名/邮箱/学号已存在' });
@@ -476,6 +500,7 @@ router.put('/users/:id', (req, res) => {
       email,
       username,
       role,
+      permission_role,
       staff_type,
       managed_grade,
       managed_class_name,
@@ -491,12 +516,18 @@ router.put('/users/:id', (req, res) => {
     if (grade !== undefined) fields.grade = grade;
     if (email !== undefined) fields.email = email;
     if (username !== undefined) fields.username = username;
-    const normalizedRole = role !== undefined ? (String(role).trim() === 'admin' ? 'admin' : 'student') : user.role;
-    const normalizedStaffType = normalizedRole === 'admin'
+    const normalizedPermissionRole = role !== undefined || permission_role !== undefined || staff_type !== undefined
+      ? normalizePermissionRoleInput(role !== undefined ? role : user.role, staff_type !== undefined ? staff_type : user.staff_type, permission_role !== undefined ? permission_role : user.permission_role)
+      : normalizePermissionRoleInput(user.role, user.staff_type, user.permission_role);
+    const normalizedRole = normalizedPermissionRole === PRIMARY_ROLES.STUDENT ? 'student' : 'admin';
+    const normalizedStaffType = normalizedPermissionRole === PRIMARY_ROLES.TEACHER
       ? normalizeStaffType(staff_type !== undefined ? staff_type : user.staff_type)
       : '';
-    if (role !== undefined && ['admin', 'student'].includes(normalizedRole) && user.id !== 1) {
+    if ((role !== undefined || permission_role !== undefined || staff_type !== undefined) && ['admin', 'student'].includes(normalizedRole) && user.id !== 1) {
       fields.role = normalizedRole;
+    }
+    if (role !== undefined || permission_role !== undefined || staff_type !== undefined) {
+      fields.permission_role = normalizedPermissionRole;
     }
     if (staff_type !== undefined || role !== undefined) {
       fields.staff_type = normalizedStaffType;
@@ -520,6 +551,9 @@ router.put('/users/:id', (req, res) => {
     }
     const effectiveManagedGrade = fields.managed_grade !== undefined ? fields.managed_grade : (user.managed_grade || '');
     const effectiveManagedClassName = fields.managed_class_name !== undefined ? fields.managed_class_name : (user.managed_class_name || '');
+    if (normalizedPermissionRole === PRIMARY_ROLES.TEACHER && !normalizedStaffType) {
+      return res.status(400).json({ success: false, error: '教师账号必须指定教师身份类型' });
+    }
     if (normalizedStaffType === 'homeroom_teacher' && (!String(effectiveManagedGrade).trim() || !String(effectiveManagedClassName).trim())) {
       return res.status(400).json({ success: false, error: '班主任必须配置负责的年级和班级' });
     }
