@@ -502,9 +502,19 @@ const Student = {
   },
 
   async _cancelReg(id) {
-    App.showToast('正在处理取消请求...', 'info');
-    const ok = await App.confirmDialog('确认取消该报名？');
-    if (!ok) return;
+    const confirmed = await new Promise(resolve => {
+      App.showModal(`
+        <div class="modal__header"><h3 class="modal__title">取消报名</h3><button class="modal__close" onclick="App.hideModal(true)"><i class="fas fa-times"></i></button></div>
+        <div class="modal__body"><p style="text-align:center;font-size:.95rem">确认取消该报名？${id > 0 ? '<br><small class="text-muted">已通过的报名需管理员审核</small>' : ''}</p></div>
+        <div class="modal__footer" style="justify-content:center;gap:.5rem">
+          <button class="btn btn--outline" id="cancel-reg-btn-no">取消</button>
+          <button class="btn btn--danger" id="cancel-reg-btn-yes">确认取消</button>
+        </div>
+      `);
+      document.getElementById('cancel-reg-btn-yes').onclick = () => { App.hideModal(true); resolve(true); };
+      document.getElementById('cancel-reg-btn-no').onclick = () => { App.hideModal(true); resolve(false); };
+    });
+    if (!confirmed) return;
     try {
       App.showLoading();
       const res = await API.student.cancelRegistration(id);
