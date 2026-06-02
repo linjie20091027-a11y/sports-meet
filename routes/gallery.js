@@ -35,7 +35,8 @@ const authMiddleware = (req, res, next) => {
     const db = getDb();
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'houkong-sports-meet-2026');
     const user = db.prepare('SELECT id, role, status FROM users WHERE id = ?').get(decoded.id);
-    if (!user || user.status !== 'active') return res.status(401).json({ error: '账号不可用' });
+    if (!user) return res.status(401).json({ error: '账号不存在，请重新登录' });
+    if (user.status !== 'active') return res.status(401).json({ error: '账号已禁用，请联系管理员' });
     req.user = user;
     next();
   } catch (e) { return res.status(401).json({ error: '登录已过期' }); }

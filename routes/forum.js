@@ -108,9 +108,10 @@ function containsSensitiveContent(text) {
 
 function ensureActiveUser(db, userId) {
   const user = db.prepare('SELECT id, name, username, role, class_name, muted_until, status FROM users WHERE id = ?').get(userId);
-  if (!user || user.status !== 'active') throw new Error('当前账号不可用');
+  if (!user) throw new Error('账号不存在 (ID:' + userId + ')，请重新登录');
+  if (user.status !== 'active') throw new Error('当前账号不可用（状态：' + user.status + '），请联系管理员');
   if (user.muted_until && new Date(user.muted_until).getTime() > Date.now()) {
-    throw new Error('当前账号已被禁言，请稍后再试');
+    throw new Error('当前账号已被禁言至 ' + user.muted_until);
   }
   return user;
 }
