@@ -1465,10 +1465,11 @@ const App = {
           <img src="${item.url}" alt="${item.title || ''}" loading="lazy">
         </div>
       `).join('');
+      this._lightboxItems = items.map(item => item.url);
       h += `<div class="photo-item photo-upload-btn" id="photo-upload-btn"><i class="fas fa-plus"></i><span>上传</span></div>`;
       grid.innerHTML = h;
-      grid.querySelectorAll('.photo-item[data-lightbox]').forEach(el => {
-        el.addEventListener('click', () => App.openLightbox(el.dataset.lightbox));
+      grid.querySelectorAll('.photo-item[data-lightbox]').forEach((el, idx) => {
+        el.addEventListener('click', () => App.openLightbox(idx));
       });
       document.getElementById('photo-upload-btn')?.addEventListener('click', () => App.highlightUpload());
     } catch(e) {
@@ -1507,19 +1508,55 @@ const App = {
     input.click();
   },
 
-  openLightbox(url) {
+  openLightbox(index) {
+    this._lightboxIndex = index;
     if (!this._lightbox) {
       const el = document.createElement('div');
       el.className = 'app-lightbox';
-      el.innerHTML = '<div class="app-lightbox__bg"></div><img class="app-lightbox__img"><button class="app-lightbox__close">&times;</button>';
+      el.innerHTML = `<div class="app-lightbox__bg"></div>
+        <img class="app-lightbox__img">
+        <button class="app-lightbox__close">&times;</button>
+        <button class="app-lightbox__prev"><i class="fas fa-chevron-left"></i></button>
+        <button class="app-lightbox__next"><i class="fas fa-chevron-right"></i></button>`;
       document.body.appendChild(el);
       this._lightbox = el;
       el.querySelector('.app-lightbox__bg').addEventListener('click', () => this._lightbox.classList.remove('show'));
       el.querySelector('.app-lightbox__close').addEventListener('click', () => this._lightbox.classList.remove('show'));
-      document.addEventListener('keydown', e => { if (e.key === 'Escape') App._lightbox?.classList.remove('show'); });
+      el.querySelector('.app-lightbox__prev').addEventListener('click', (e) => { e.stopPropagation(); this._lightboxPrev(); });
+      el.querySelector('.app-lightbox__next').addEventListener('click', (e) => { e.stopPropagation(); this._lightboxNext(); });
+      document.addEventListener('keydown', e => {
+        if (!App._lightbox?.classList.contains('show')) return;
+        if (e.key === 'Escape') App._lightbox.classList.remove('show');
+        if (e.key === 'ArrowLeft') App._lightboxPrev();
+        if (e.key === 'ArrowRight') App._lightboxNext();
+      });
     }
-    this._lightbox.querySelector('.app-lightbox__img').src = url;
+    this._updateLightboxImage();
     this._lightbox.classList.add('show');
+  },
+
+  _updateLightboxImage() {
+    const items = this._lightboxItems || [];
+    if (!items.length) return;
+    const url = items[this._lightboxIndex] || items[0];
+    this._lightbox.querySelector('.app-lightbox__img').src = url;
+    const prev = this._lightbox.querySelector('.app-lightbox__prev');
+    const next = this._lightbox.querySelector('.app-lightbox__next');
+    if (prev) prev.style.display = this._lightboxIndex <= 0 ? 'none' : '';
+    if (next) next.style.display = this._lightboxIndex >= items.length - 1 ? 'none' : '';
+  },
+
+  _lightboxPrev() {
+    if (this._lightboxIndex <= 0) return;
+    this._lightboxIndex--;
+    this._updateLightboxImage();
+  },
+
+  _lightboxNext() {
+    const items = this._lightboxItems || [];
+    if (this._lightboxIndex >= items.length - 1) return;
+    this._lightboxIndex++;
+    this._updateLightboxImage();
   },
 
   _updateSchoolLogo(src) {
@@ -1527,7 +1564,7 @@ const App = {
     const image = document.getElementById('nav-logo-image');
     const fallback = document.getElementById('nav-logo-fallback');
     if (!media || !image || !fallback) return;
-    const finalSrc = String(src || '/images/school-emblem-default.svg').trim() || '/images/school-emblem-default.svg';
+    const finalSrc = String(src || '/images/school-logo.png').trim() || '/images/school-logo.png';
     media.classList.add('is-loading');
     fallback.classList.add('hidden');
     image.classList.add('hidden');
