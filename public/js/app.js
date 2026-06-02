@@ -1411,7 +1411,7 @@ const App = {
         document.getElementById('home-announcements').innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无更多信息</p>';
       }
 
-      // ── 最新成绩：A~E组第一名 ──
+      // ── 最新成绩：A~E组冠军竖条轮播 ──
       const resData = results.value?.data || [];
       let resH = '';
       if (resData.length) {
@@ -1419,25 +1419,37 @@ const App = {
         const groupChamps = {};
         resData.forEach(r => {
           const g = r.user_sport_group || 'A';
-          if (r.rank === 1 && !groupChamps[g]) groupChamps[g] = r;
+          if (r.rank === 1) {
+            if (!groupChamps[g]) groupChamps[g] = [];
+            groupChamps[g].push(r);
+          }
         });
-        const champs = groups.map(g => groupChamps[g] || null).filter(Boolean);
-        if (champs.length) {
-          resH = '<div class="home-result-champs">';
-          champs.forEach(r => {
-            resH += `<a href="#/results" class="home-result-card">
-              <div class="home-result-group">${r.user_sport_group || 'A'}组</div>
-              <div class="home-result-medal">🥇</div>
-              <div class="home-result-name">${r.name || '-'}</div>
-              <div class="home-result-event">${r.event_name || '-'}</div>
-              <div class="home-result-perf">${r.performance || '-'}</div>
-            </a>`;
+        const hasData = Object.keys(groupChamps).length > 0;
+        if (hasData) {
+          this._champData = groupChamps;
+          resH = '<div class="home-champ-strip" id="home-champ-strip">';
+          groups.forEach(g => {
+            const champs = groupChamps[g] || [];
+            if (!champs.length) return;
+            resH += `<div class="champ-strip-row">
+              <div class="champ-strip-group">${g}组</div>
+              <div class="champ-strip-items" data-group="${g}">`;
+            champs.forEach((r, i) => {
+              resH += `<div class="champ-strip-item ${i === 0 ? 'active' : ''}" data-idx="${i}">
+                <span class="champ-strip-medal">🥇</span>
+                <span class="champ-strip-name">${r.name || '-'}</span>
+                <span class="champ-strip-event">${r.event_name || '-'}</span>
+                <span class="champ-strip-perf">${r.performance || '-'}</span>
+              </div>`;
+            });
+            resH += '</div></div>';
           });
           resH += '</div>';
         } else {
           resH = '<p class="text-muted text-center" style="padding:2rem">暂无更多信息</p>';
         }
         document.getElementById('home-results').innerHTML = resH;
+        if (hasData) this._startChampRotation();
       } else {
         document.getElementById('home-results').innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无更多信息</p>';
       }
@@ -2006,6 +2018,72 @@ const App = {
     finally { this.hideLoading(); }
   },
 
+  async renderHighlights() {
+    const grid = document.getElementById('photo-grid');
+    if (!grid) return;
+    const uploadBtn = document.getElementById('btn-upload-photo');
+    if (uploadBtn) {
+      uploadBtn.style.display = this.user ? 'inline-flex' : 'none';
+      uploadBtn.onclick = () => this._showPhotoUpload();
+    }
+    try {
+      const res = await API.gallery.getApproved({ limit: 100 });
+      const photos = res.data || [];
+      if (!photos.length) {
+        grid.innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无精彩瞬间<br><small>点击上方「上传照片」分享运动会精彩时刻</small></p>';
+        return;
+      }
+      const perPage = 5;
+      this._photoTotalPages = Math.ceil(photos.length / perPage);
+      this._photoPage = 0;
+      this._photoCache = photos;
+      this._renderPhotoPage();
+    } catch (e) {
+      grid.innerHTML = '<p class="text-muted text-center" style="padding:2rem">精彩瞬间加载中...</p>';
+    }
+  },
+  _photoPage: 0,
+  _photoTotalPages: 0,
+  _photoCache: null,
+  _renderPhotoPage() {
+    const grid = document.getElementById('photo-grid');
+    if (!grid || !this._photoCache) return;
+    const perPage = 5;
+    const start = this._photoPage * perPage;
+    const pagePhotos = this._photoCache.slice(start, start + perPage);
+    let html = '<div class="gallery-controls">';
+    html += `<button class="gallery-btn" onclick="App._photoPrev()" ${this._photoPage === 0 ? 'disabled' : ''}><i class="fas fa-chevron-left"></i></button>`;
+    html += `<span class="gallery-page-info">${this._photoPage + 1} / ${this._photoTotalPages}</span>`;
+    html += `<button class="gallery-btn" onclick="App._photoNext()" ${this._photoPage >= this._photoTotalPages - 1 ? 'disabled' : ''}><i class="fas fa-chevron-right"></i></button>`;
+    html += '</div><div class="gallery-flip-row">';
+    pagePhotos.forEach((p, i) => {
+      html += `<div class="gallery-flip-card" style="animation-delay:${i * 0.08}s"><div class="gallery-flip-inner"><img src="/images/gallery/${p.filename}" alt="${p.original_name||''}" loading="lazy"></div>${p.description?`<div class="gallery-flip-caption">${p.description}</div>`:''}</div>`;
+    });
+    for (let i = pagePhotos.length; i < perPage; i++) html += '<div class="gallery-flip-card gallery-flip-empty"></div>';
+    html += '</div>';
+    grid.innerHTML = html;
+  },
+  _photoPrev() { if (this._photoPage <= 0) return; this._photoPage--; this._renderPhotoPage(); },
+  _photoNext() { if (this._photoPage >= this._photoTotalPages - 1) return; this._photoPage++; this._renderPhotoPage(); },
+  _showPhotoUpload() {
+    if (!this.user) { this.showToast('请先登录', 'warning'); return; }
+    const html = `<div class="modal__header"><h3 class="modal__title">上传精彩瞬间</h3><button class="modal__close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>
+      <div class="modal__body"><div class="form">
+      <div class="form__group"><label class="form__label">选择图片 (JPG/PNG/GIF)</label><input type="file" id="photo-file" class="form__input" accept="image/*"></div>
+      <div class="form__group"><label class="form__label">描述（可选）</label><input type="text" id="photo-desc" class="form__input" placeholder="如：开幕式入场"></div>
+      <div class="form__hint">上传后需管理员审核通过才会在首页展示</div></div></div>
+      <div class="modal__footer"><button class="btn btn--outline" onclick="App.hideModal()">取消</button><button class="btn btn--primary" id="btn-do-upload-photo">上传</button></div>`;
+    this.showModal(html);
+    document.getElementById('btn-do-upload-photo').addEventListener('click', async () => {
+      const fileInput = document.getElementById('photo-file');
+      const file = fileInput?.files?.[0];
+      if (!file) { this.showToast('请选择图片', 'warning'); return; }
+      const fd = new FormData(); fd.append('file', file); fd.append('description', document.getElementById('photo-desc')?.value || '');
+      try { this.showLoading(); await API.gallery.upload(fd); this.hideLoading(); this.hideModal(); this.showToast('图片已上传，等待管理员审核', 'success'); }
+      catch(e) { this.hideLoading(); this.showToast(e.message, 'error'); }
+    });
+  },
+
   // ====== 公告 ======
   async renderAnnouncements() {
     const filter = document.getElementById('announcements-filter');
@@ -2073,6 +2151,26 @@ const App = {
     if (!d) return '-';
     try { const t=new Date(d);return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')} ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`; }
     catch(e) { return d; }
+  },
+  _champTimer: null,
+  _champData: null,
+  _startChampRotation() {
+    if (this._champTimer) clearInterval(this._champTimer);
+    this._champTimer = setInterval(() => {
+      if (!this._champData) return;
+      const groups = ['A','B','C','D','E'];
+      groups.forEach(g => {
+        const items = document.querySelector(`.champ-strip-items[data-group="${g}"]`);
+        if (!items) return;
+        const all = items.querySelectorAll('.champ-strip-item');
+        if (all.length <= 1) return;
+        const active = items.querySelector('.champ-strip-item.active');
+        const curIdx = parseInt(active?.dataset?.idx || 0);
+        const nextIdx = (curIdx + 1) % all.length;
+        active.classList.remove('active');
+        all[nextIdx].classList.add('active');
+      });
+    }, 3000);
   },
   getAwardLabel(a) {
     const m={'一等':'一等奖','二等':'二等奖','三等':'三等奖','优秀':'优秀奖','团体':'团体奖'};
