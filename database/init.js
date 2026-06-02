@@ -323,7 +323,7 @@ function migrateSchema() {
       FOREIGN KEY (uploaded_by) REFERENCES users(id)
     )
   `);
-  try { _db.run("ALTER TABLE highlights ADD COLUMN status TEXT DEFAULT 'approved'"); } catch(e) {}
+  // status 列已在 CREATE TABLE 中定义 (DEFAULT 'pending')，无需 ALTER
   _db.run(`
     CREATE TABLE IF NOT EXISTS forum_moderation_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -684,7 +684,7 @@ function initTables() {
       FOREIGN KEY (uploaded_by) REFERENCES users(id)
     )
   `);
-  try { _db.run("ALTER TABLE highlights ADD COLUMN status TEXT DEFAULT 'approved'"); } catch(e) {}
+  // status 列已在 CREATE TABLE 中定义 (DEFAULT 'pending')，无需 ALTER
 
   _db.run(`
     CREATE TABLE IF NOT EXISTS gallery_photos (

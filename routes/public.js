@@ -839,11 +839,10 @@ router.get('/stats/overview', (req, res) => {
   }
 });
 
-// GET /highlights — 精彩瞬间列表（DB + 文件系统合并）
+// GET /highlights — 精彩瞬间列表（仅展示已审核照片）
 router.get('/highlights', (req, res) => {
   try {
     const db = getDb();
-    // 检查是否是管理员
     const token = req.headers.authorization?.replace('Bearer ', '') || '';
     let isAdmin = false;
     if (token) {
@@ -859,41 +858,39 @@ router.get('/highlights', (req, res) => {
       dbItems = db.prepare(`SELECT id, filename, original_name, status, created_at FROM highlights ${statusFilter} ORDER BY created_at DESC`).all();
     } catch(e) {}
     const items = dbItems.map(r => ({
-      id: 'db-' + r.id,
+      id: r.id,
       title: r.original_name || r.filename,
       file_name: r.filename,
       url: '/images/' + r.filename,
       status: r.status,
       created_at: r.created_at || ''
     }));
-    // 合并文件系统中的老图片
-    const fsItems = [];
-    try {
-      const names = fs.readdirSync(HIGHLIGHT_DIR)
-        .filter(n => /\.(png|jpe?g|gif|webp)$/i.test(n));
-      names.forEach(name => {
-        if (!dbItems.some(r => r.filename === name)) {
-          fsItems.push({ id: 'fs-' + name, title: name, file_name: name, url: '/images/' + name, status: 'approved', created_at: '' });
-        }
-      });
-    } catch(_) {}
-    res.json({ success: true, data: items.concat(fsItems) });
+    res.json({ success: true, data: items });
   } catch(e) {
     res.status(500).json({ success: false, error: e.message });
   }
 });
 
-// POST /highlights — 上传精彩瞬间（任何人可上传）
+// POST /highlights — 上传精彩瞬间（记录上传者，默认待审核）
 router.post('/highlights', hlUpload.single('image'), (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, error: '请选择图片' });
     const db = getDb();
-    db.prepare('INSERT INTO highlights (filename, original_name, uploaded_by) VALUES (?, ?, ?)').run(
+    let uploadedBy = null;
+    const token = req.headers.authorization?.replace('Bearer ', '') || '';
+    if (token) {
+      try {
+        const jwt = require('jsonwebtoken');
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'sports-meet-2026');
+        uploadedBy = decoded?.id || null;
+      } catch(e) {}
+    }
+    db.prepare("INSERT INTO highlights (filename, original_name, status, uploaded_by) VALUES (?, ?, 'pending', ?)").run(
       req.file.filename,
       req.file.originalname || '',
-      null
+      uploadedBy
     );
-    res.json({ success: true, message: '上传成功', data: { url: '/images/' + req.file.filename } });
+    res.json({ success: true, message: '上传成功，等待审核', data: { url: '/images/' + req.file.filename } });
   } catch(e) {
     res.status(500).json({ success: false, error: e.message });
   }
