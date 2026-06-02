@@ -1668,11 +1668,16 @@ const App = {
   async _renderPhotoGallery() {
     const grid = document.getElementById('photo-grid');
     if (!grid) return;
+    const uploadBtn = document.getElementById('btn-upload-photo');
+    if (uploadBtn) {
+      uploadBtn.style.display = this.user ? 'inline-flex' : 'none';
+      uploadBtn.onclick = () => this._showPhotoUpload();
+    }
     try {
       const res = await API.gallery.getApproved({ limit: 100 });
       const photos = res.data || [];
       if (!photos.length) {
-        grid.innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无精彩瞬间</p>';
+        grid.innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无精彩瞬间<br><small>点击上方「上传照片」分享运动会精彩时刻</small></p>';
         return;
       }
       const perPage = 5;
@@ -1723,6 +1728,35 @@ const App = {
     if (this._photoPage >= this._photoTotalPages - 1) return;
     this._photoPage++;
     this._renderPhotoPage();
+  },
+
+  _showPhotoUpload() {
+    if (!this.user) { this.showToast('请先登录', 'warning'); return; }
+    const html = `<div class="modal__header"><h3 class="modal__title">上传精彩瞬间</h3><button class="modal__close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>
+      <div class="modal__body">
+        <div class="form">
+          <div class="form__group"><label class="form__label">选择图片 (JPG/PNG/GIF)</label><input type="file" id="photo-file" class="form__input" accept="image/*"></div>
+          <div class="form__group"><label class="form__label">描述（可选）</label><input type="text" id="photo-desc" class="form__input" placeholder="如：开幕式入场"></div>
+          <div class="form__hint">上传后需管理员审核通过才会在首页展示</div>
+        </div>
+      </div>
+      <div class="modal__footer"><button class="btn btn--outline" onclick="App.hideModal()">取消</button><button class="btn btn--primary" id="btn-do-upload-photo">上传</button></div>`;
+    this.showModal(html);
+    document.getElementById('btn-do-upload-photo').addEventListener('click', async () => {
+      const fileInput = document.getElementById('photo-file');
+      const file = fileInput?.files?.[0];
+      if (!file) { this.showToast('请选择图片', 'warning'); return; }
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('description', document.getElementById('photo-desc')?.value || '');
+      try {
+        this.showLoading();
+        await API.gallery.upload(formData);
+        this.hideLoading();
+        this.hideModal();
+        this.showToast('图片已上传，等待管理员审核', 'success');
+      } catch (e) { this.hideLoading(); this.showToast(e.message, 'error'); }
+    });
   },
 
   _escAttr(s) {
