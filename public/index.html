@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>运动会管理系统｜澳门濠江中学</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="/css/style.css?v=11">
+  <link rel="stylesheet" href="/css/style.css?v=12">
 </head>
 <body>
   <nav class="navbar">
@@ -54,6 +54,7 @@
           </div>
           <span class="user-name" id="user-name-display"></span>
           <a href="#/admin" id="menu-admin-link" class="btn btn-sm hidden" style="background:var(--gold);color:var(--red);border:none;font-weight:700">管理后台</a>
+          <a href="#/teacher" id="menu-teacher-link" class="btn btn-sm hidden" style="background:var(--gold-light);color:var(--red);border:1px solid var(--gold)">教师端</a>
           <a href="#/student" id="menu-student-link" class="btn btn-sm hidden" style="border:1px solid var(--gold);color:var(--gold)">个人中心</a>
           <a href="#" id="menu-logout" class="btn btn-sm" style="border:1px solid var(--gold);color:var(--gold)">退出</a>
         </div>
@@ -86,7 +87,7 @@
         <div class="card mb-3"><div class="card-header"><h3>赛事项目总览</h3><a href="#/events" class="btn-text">全部项目 &raquo;</a></div><div class="card-body" id="home-events"></div></div>
         <div class="home-grid"><div class="card"><div class="card-header"><h3>最新公告</h3><a href="#/announcements" class="btn-text">更多 &raquo;</a></div><div class="card-body" id="home-announcements"></div></div><div class="card"><div class="card-header"><h3>最新成绩</h3><a href="#/results" class="btn-text">更多 &raquo;</a></div><div class="card-body" id="home-results"></div></div></div>
       </div><div class="content-sidebar">
-        <div class="sidebar-card"><h4>报名须知</h4><ul><li>每人最多报名3个项目</li><li>报名后需管理员审核</li><li>集体项目需组队参加</li><li>比赛前30分钟检录</li></ul></div>
+        <div class="sidebar-card"><h4>报名须知</h4><ul><li>每人最多报名3个项目</li><li>报名后需班主任审核</li><li>集体项目需组队参加</li><li>比赛前30分钟检录</li></ul></div>
       </div></div></section>
     </div>
     <div id="page-login" class="page hidden"></div>
@@ -99,6 +100,7 @@
     <div id="page-event-detail" class="page hidden"><div class="container" style="margin-top:88px" id="event-detail-root"></div></div>
     <div id="page-forum" class="page hidden" style="padding-top:88px"><div class="container" id="forum-root"></div></div>
     <div id="page-admin" class="page hidden"></div>
+    <div id="page-teacher" class="page hidden"></div>
     <div id="page-student" class="page hidden"></div>
   </main>
 
@@ -116,12 +118,13 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
   <script src="/js/api.js?v=7" defer></script>
-  <script src="/js/auth.js?v=5" defer></script>
+  <script src="/js/auth.js?v=6" defer></script>
   <script src="/js/student.js?v=6" defer></script>
-  <script src="/js/admin.js?v=7" defer></script>
+  <script src="/js/admin.js?v=8" defer></script>
   <script src="/js/forum.js?v=7" defer></script>
-  <script src="/utils/sportGroupOrder.js?v=1" defer></script>
-  <script src="/js/app.js?v=11" defer></script>
+  <script src="/js/sport-group-order.js?v=2" defer></script>
+  <script src="/js/teacher.js?v=2" defer></script>
+  <script src="/js/app.js?v=12" defer></script>
   <script src="/js/3d-cards.js?v=2" defer></script>
   <script src="/js/interactions.js?v=7" defer></script>
 

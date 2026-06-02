@@ -515,15 +515,34 @@ const Admin = {
 
       let html = '';
       if (list.length > 0) {
-        html = '<table class="table table--striped"><thead><tr><th>学号</th><th>姓名</th><th>邮箱</th><th>班级</th><th>年级</th><th>状态</th><th style="width:200px;">操作</th></tr></thead><tbody>';
+        html = '<table class="table table--striped"><thead><tr><th>学号</th><th>姓名</th><th>身份</th><th>邮箱</th><th>负责范围</th><th>状态</th><th style="width:200px;">操作</th></tr></thead><tbody>';
         list.forEach(u => {
           const statusBadge = u.status === 'active' ? '<span class="badge badge--active">正常</span>' : '<span class="badge badge--inactive">已禁用</span>';
+          const roleLabel = u.staff_type === 'homeroom_teacher'
+            ? '班主任'
+            : u.staff_type === 'event_teacher'
+              ? '任课教师'
+              : u.role === 'admin'
+                ? '平台管理员'
+                : '学生';
+          const scopeLabel = u.staff_type === 'homeroom_teacher'
+            ? ((u.managed_grade || '-') + ' / ' + (u.managed_class_name || '-'))
+            : u.staff_type === 'event_teacher'
+              ? ('已分配 ' + (((() => {
+                  try {
+                    const parsed = typeof u.assigned_event_ids === 'string' ? JSON.parse(u.assigned_event_ids) : u.assigned_event_ids;
+                    return Array.isArray(parsed) ? parsed.filter(Boolean).length : 0;
+                  } catch (_) {
+                    return String(u.assigned_event_ids || '').split(',').map((item) => item.trim()).filter(Boolean).length;
+                  }
+                })()) || 0) + ' 项')
+              : ((u.grade || '-') + ' / ' + (u.class_name || '-'));
           html += '<tr>';
           html += '<td>' + (u.student_id || '-') + '</td>';
           html += '<td>' + (u.name || '-') + '</td>';
+          html += '<td>' + roleLabel + '</td>';
           html += '<td>' + (u.email || '-') + '</td>';
-          html += '<td>' + (u.class_name || '-') + '</td>';
-          html += '<td>' + (u.grade || '-') + '</td>';
+          html += '<td>' + scopeLabel + '</td>';
           html += '<td>' + statusBadge + '</td>';
           html += '<td><div class="table__actions">';
           html += '<button class="btn btn--ghost btn--xs btn-edit-user" data-id="' + u.id + '"><i class="fas fa-edit"></i></button>';
@@ -570,9 +589,49 @@ const Admin = {
     }
   },
 
-  _showUserModal(user, container) {
+  _parseAssignedEventIds(value) {
+    try {
+      const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+      return Array.isArray(parsed) ? parsed.map((item) => Number(item)).filter(Boolean) : [];
+    } catch (_) {
+      return String(value || '')
+        .split(',')
+        .map((item) => Number(item.trim()))
+        .filter(Boolean);
+    }
+  },
+
+  _toggleTeacherConfigFields() {
+    const role = document.getElementById('user-role')?.value || 'student';
+    const staffType = document.getElementById('user-staff-type')?.value || '';
+    const staffWrap = document.getElementById('user-staff-type-wrap');
+    const homeroomWrap = document.getElementById('user-homeroom-config');
+    const eventWrap = document.getElementById('user-event-config');
+    const studentHint = document.getElementById('user-student-fields-hint');
+    const classLabel = document.querySelector('label[for="user-class"]');
+    const gradeLabel = document.querySelector('label[for="user-grade"]');
+
+    if (staffWrap) staffWrap.classList.toggle('hidden', role !== 'admin');
+    if (homeroomWrap) homeroomWrap.classList.toggle('hidden', !(role === 'admin' && staffType === 'homeroom_teacher'));
+    if (eventWrap) eventWrap.classList.toggle('hidden', !(role === 'admin' && staffType === 'event_teacher'));
+    if (studentHint) studentHint.classList.toggle('hidden', role === 'student');
+    if (classLabel) classLabel.textContent = role === 'student' ? '班级' : '班级（学生档案，可选）';
+    if (gradeLabel) gradeLabel.textContent = role === 'student' ? '年级' : '年级（学生档案，可选）';
+  },
+
+  async _showUserModal(user, container) {
     const isEdit = !!user;
     const title = isEdit ? '编辑用户' : '添加用户';
+    let eventList = [];
+    try {
+      const eventRes = await API.public.getEvents();
+      eventList = Array.isArray(eventRes.data) ? eventRes.data : [];
+    } catch (_) {
+      eventList = [];
+    }
+    const currentRole = isEdit ? (user.role || 'student') : 'student';
+    const currentStaffType = isEdit ? (user.staff_type || '') : '';
+    const currentAssignedEventIds = isEdit ? this._parseAssignedEventIds(user.assigned_event_ids) : [];
     let html = '<div class="modal__header"><h3 class="modal__title">' + title + '</h3><button class="modal__close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>';
     html += '<div class="modal__body"><div class="form">';
     html += '<div class="form__group"><label class="form__label form__label--required">学号</label><input class="form__input" id="user-student-id" value="' + (isEdit ? (user.student_id || '') : '') + '"></div>';
@@ -581,8 +640,22 @@ const Admin = {
     if (!isEdit) {
       html += '<div class="form__group"><label class="form__label form__label--required">密码</label><input class="form__input" id="user-password" type="password" value="123456"></div>';
     }
-    html += '<div class="form__group"><label class="form__label form__label--required">班级</label><input class="form__input" id="user-class" value="' + (isEdit ? (user.class_name || '') : '') + '"></div>';
-    html += '<div class="form__group"><label class="form__label form__label--required">年级</label><input class="form__input" id="user-grade" value="' + (isEdit ? (user.grade || '') : '') + '"></div>';
+    html += '<div class="form__group"><label class="form__label form__label--required">角色</label><select class="form__select" id="user-role"><option value="student"' + (currentRole === 'student' ? ' selected' : '') + '>学生</option><option value="admin"' + (currentRole === 'admin' ? ' selected' : '') + '>教职工 / 管理员</option></select></div>';
+    html += '<div class="form__group" id="user-staff-type-wrap"><label class="form__label">教师身份</label><select class="form__select" id="user-staff-type"><option value=""' + (!currentStaffType ? ' selected' : '') + '>平台管理员</option><option value="homeroom_teacher"' + (currentStaffType === 'homeroom_teacher' ? ' selected' : '') + '>班主任</option><option value="event_teacher"' + (currentStaffType === 'event_teacher' ? ' selected' : '') + '>任课教师（成绩录入）</option></select></div>';
+    html += '<div class="form__group"><label class="form__label" for="user-class">班级</label><input class="form__input" id="user-class" value="' + (isEdit ? (user.class_name || '') : '') + '"></div>';
+    html += '<div class="form__group"><label class="form__label" for="user-grade">年级</label><input class="form__input" id="user-grade" value="' + (isEdit ? (user.grade || '') : '') + '"></div>';
+    html += '<div class="form__hint hidden" id="user-student-fields-hint">教师账号可不填写学生档案中的年级、班级；班主任请在下方单独配置负责班级。</div>';
+    html += '<div id="user-homeroom-config" class="teacher-config-panel hidden">';
+    html += '<div class="form__group"><label class="form__label form__label--required">负责年级</label><input class="form__input" id="user-managed-grade" value="' + (isEdit ? (user.managed_grade || '') : '') + '" placeholder="如：高一"></div>';
+    html += '<div class="form__group"><label class="form__label form__label--required">负责班级</label><input class="form__input" id="user-managed-class" value="' + (isEdit ? (user.managed_class_name || '') : '') + '" placeholder="如：高一(11)班"></div>';
+    html += '</div>';
+    html += '<div id="user-event-config" class="teacher-config-panel hidden">';
+    html += '<div class="form__group"><label class="form__label form__label--required">分配录入项目</label><select class="form__select teacher-event-select" id="user-assigned-events" multiple size="6">';
+    html += eventList.length
+      ? eventList.map((event) => '<option value="' + event.id + '"' + (currentAssignedEventIds.includes(Number(event.id)) ? ' selected' : '') + '>' + App._escHtml(event.name || '-') + ' · ' + App._escHtml(event.gender_group || '-') + '</option>').join('')
+      : '<option value="">暂无可选项目</option>';
+    html += '</select><div class="form__hint">按住 Ctrl 或 Shift 可多选，系统将直接把这些项目分配给当前任课教师。</div></div>';
+    html += '</div>';
     html += '<div class="form__group"><label class="form__label">用户名</label><input class="form__input" id="user-username" value="' + (isEdit ? (user.username || '') : '') + '"></div>';
     html += '</div></div>';
     html += '<div class="modal__footer">';
@@ -590,6 +663,9 @@ const Admin = {
     html += '<button class="btn btn--primary" id="btn-save-user" data-id="' + (isEdit ? user.id : '') + '">保存</button>';
     html += '</div>';
     App.showModal(html);
+    this._toggleTeacherConfigFields();
+    document.getElementById('user-role')?.addEventListener('change', () => this._toggleTeacherConfigFields());
+    document.getElementById('user-staff-type')?.addEventListener('change', () => this._toggleTeacherConfigFields());
 
     document.getElementById('btn-save-user').addEventListener('click', async () => {
       const id = document.getElementById('btn-save-user').dataset.id;
@@ -600,8 +676,15 @@ const Admin = {
       const className = document.getElementById('user-class').value.trim();
       const grade = document.getElementById('user-grade').value.trim();
       const username = document.getElementById('user-username').value.trim();
+      const role = document.getElementById('user-role').value;
+      const staffType = role === 'admin' ? document.getElementById('user-staff-type').value : '';
+      const managedGrade = document.getElementById('user-managed-grade')?.value.trim() || '';
+      const managedClassName = document.getElementById('user-managed-class')?.value.trim() || '';
+      const assignedEventIds = Array.from(document.getElementById('user-assigned-events')?.selectedOptions || [])
+        .map((option) => Number(option.value))
+        .filter(Boolean);
 
-      if (!studentId || !name || !email || !className || !grade) {
+      if (!studentId || !name || !email) {
         App.showToast('请填写所有必填字段', 'warning');
         return;
       }
@@ -609,13 +692,38 @@ const Admin = {
         App.showToast('请输入密码', 'warning');
         return;
       }
+      if (role === 'student' && (!className || !grade)) {
+        App.showToast('学生账号必须填写年级和班级', 'warning');
+        return;
+      }
+      if (role === 'admin' && staffType === 'homeroom_teacher' && (!managedGrade || !managedClassName)) {
+        App.showToast('班主任必须配置负责的年级和班级', 'warning');
+        return;
+      }
+      if (role === 'admin' && staffType === 'event_teacher' && !assignedEventIds.length) {
+        App.showToast('任课教师至少需要分配一个录入项目', 'warning');
+        return;
+      }
+      const payload = {
+        student_id: studentId,
+        name,
+        email,
+        username: username || studentId,
+        class_name: className,
+        grade,
+        role,
+        staff_type: staffType,
+        managed_grade: managedGrade,
+        managed_class_name: managedClassName,
+        assigned_event_ids: assignedEventIds
+      };
       try {
         App.showLoading();
         if (isEdit) {
-          await API.admin.updateUser(id, { student_id: studentId, name, email, username, class_name: className, grade });
+          await API.admin.updateUser(id, payload);
           App.showToast('用户信息已更新', 'success');
         } else {
-          await API.post('/admin/users', { student_id: studentId, name, email, password, class_name: className, grade, username: username || studentId });
+          await API.post('/admin/users', { ...payload, password });
           App.showToast('用户添加成功', 'success');
         }
         App.hideModal();

@@ -104,6 +104,21 @@ const App = {
     }
   },
 
+  _isTeacherUser(user = this.user) {
+    return !!(user && user.role === 'admin' && user.staff_type);
+  },
+
+  _isPlatformAdmin(user = this.user) {
+    return !!(user && user.role === 'admin' && !user.staff_type);
+  },
+
+  _getDefaultRouteForUser(user = this.user) {
+    if (!user) return '#/';
+    if (this._isTeacherUser(user)) return '#/teacher';
+    if (this._isPlatformAdmin(user)) return '#/admin';
+    return '#/student';
+  },
+
   async refreshUser() {
     this.syncSessionFromStorage();
     const token = localStorage.getItem('token');
@@ -266,7 +281,7 @@ const App = {
       this.renderHome();
     } else if (hash === '/login') {
       if (this.user) {
-        window.location.hash = this.user.role === 'admin' ? '#/admin' : '#/student';
+        window.location.hash = this._getDefaultRouteForUser(this.user);
         return;
       }
       Auth.renderLogin();
@@ -325,15 +340,31 @@ const App = {
       document.getElementById('page-notification-detail')?.classList.remove('hidden');
       this.showNotificationDetail(notificationId);
     } else if (hash === '/admin') {
-      if (!this.user || this.user.role !== 'admin') { window.location.hash = '#/login'; return; }
+      if (!this.user) { window.location.hash = '#/login'; return; }
+      if (this._isTeacherUser(this.user)) {
+        this.showToast('教师账号请使用教师端入口', 'warning');
+        window.location.hash = '#/teacher';
+        return;
+      }
+      if (!this._isPlatformAdmin(this.user)) { window.location.hash = '#/login'; return; }
       document.getElementById('page-admin').classList.remove('hidden');
       document.querySelector('[href="#/admin"]')?.classList.add('active');
       Admin.render();
+    } else if (hash === '/teacher' || hash.startsWith('/teacher/')) {
+      if (!this.user) { window.location.hash = '#/login'; return; }
+      if (!this._isTeacherUser(this.user)) {
+        this.showToast('当前账号没有教师端权限', 'warning');
+        window.location.hash = this._getDefaultRouteForUser(this.user);
+        return;
+      }
+      document.getElementById('page-teacher').classList.remove('hidden');
+      document.querySelector('#menu-teacher-link')?.classList.add('active');
+      Teacher.render();
     } else if (hash === '/student' || hash.startsWith('/student/')) {
       if (!this.user) { window.location.hash = '#/login'; return; }
-      if (this.user.role === 'admin') {
-        this.showToast('管理员账号无法报名，请使用学生账号登录', 'warning');
-        window.location.hash = '#/';
+      if (this.user.role !== 'student') {
+        this.showToast('当前账号请使用对应的工作台入口', 'warning');
+        window.location.hash = this._getDefaultRouteForUser(this.user);
         return;
       }
       const tab = hash.split('/')[2];
@@ -387,8 +418,10 @@ const App = {
       if (nameEl) nameEl.textContent = this.user.name || this.user.username || '';
       // 根据角色显示管理后台/个人中心
       const adminLink = document.getElementById('menu-admin-link');
+      const teacherLink = document.getElementById('menu-teacher-link');
       const studentLink = document.getElementById('menu-student-link');
-      if (adminLink) adminLink.classList.toggle('hidden', this.user.role !== 'admin');
+      if (adminLink) adminLink.classList.toggle('hidden', !this._isPlatformAdmin(this.user));
+      if (teacherLink) teacherLink.classList.toggle('hidden', !this._isTeacherUser(this.user));
       if (studentLink) studentLink.classList.toggle('hidden', this.user.role !== 'student');
       if (notifyBell) notifyBell.classList.remove('hidden');
       if (notifyWrapper) notifyWrapper.classList.remove('hidden');
@@ -398,6 +431,9 @@ const App = {
     } else {
       authBtns.classList.remove('hidden');
       userMenu.classList.add('hidden');
+      document.getElementById('menu-admin-link')?.classList.add('hidden');
+      document.getElementById('menu-teacher-link')?.classList.add('hidden');
+      document.getElementById('menu-student-link')?.classList.add('hidden');
       if (notifyBell) notifyBell.classList.add('hidden');
       if (notifyWrapper) notifyWrapper.classList.add('hidden');
       this._toggleNotificationPanel(false);
