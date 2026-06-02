@@ -1,4 +1,27 @@
 const Forum = {
+  _lightboxEl: null,
+
+  openImage(url) {
+    if (!this._lightboxEl) {
+      const el = document.createElement('div');
+      el.className = 'forum-lightbox';
+      el.innerHTML = '<div class="forum-lightbox__backdrop"></div><img class="forum-lightbox__img" src="" alt=""><button type="button" class="forum-lightbox__close">&times;</button>';
+      document.body.appendChild(el);
+      this._lightboxEl = el;
+      el.querySelector('.forum-lightbox__backdrop').addEventListener('click', () => this.closeImage());
+      el.querySelector('.forum-lightbox__close').addEventListener('click', () => this.closeImage());
+      el.addEventListener('click', (e) => { if (e.target === el) this.closeImage(); });
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') this.closeImage(); });
+    }
+    this._lightboxEl.querySelector('.forum-lightbox__img').src = url;
+    this._lightboxEl.classList.add('forum-lightbox--visible');
+  },
+
+  closeImage() {
+    if (this._lightboxEl) {
+      this._lightboxEl.classList.remove('forum-lightbox--visible');
+    }
+  },
   _meta: null,
   _filters: { keyword: '', category: '', tag: '', mine: false },
   _page: 1,
@@ -217,7 +240,7 @@ const Forum = {
             </p>
             <div class="forum-card__tags">${tags.map((tag) => `<span>${App._escHtml(tag)}</span>`).join('')}</div>
             <div class="detail-prose">${post.content || ''}</div>
-            ${images.length ? `<div class="forum-images"><div class="forum-images__grid">${images.map((img, i) => `<div class="forum-image-wrap"><img src="${App._escAttr(img)}" alt="帖子图片" loading="lazy" onclick="this.classList.toggle('forum-image-zoomed')">${isAdmin ? `<button type="button" class="btn btn-danger btn-xs forum-del-img-btn" data-file="${App._escAttr(img.split('/').pop())}"><i class="fas fa-trash"></i></button>` : ''}</div>`).join('')}</div>${isAdmin ? (post.image_status === 'pending' ? `<div class="forum-image-admin mt-2"><button type="button" class="btn btn-success btn-xs" id="forum-approve-images">通过图片审核</button> <button type="button" class="btn btn-danger btn-xs" id="forum-reject-images">驳回图片</button></div>` : post.image_status === 'rejected' ? `<span class="badge badge-danger mt-2">图片已驳回</span>` : '') : (post.image_status === 'pending' ? `<span class="badge badge-warning mt-2">图片待审核</span>` : '')}</div>` : ''}
+            ${images.length ? `<div class="forum-images"><div class="forum-images__grid">${images.map((img, i) => `<div class="forum-image-wrap"><img src="${App._escAttr(img)}" alt="帖子图片" loading="lazy" data-lightbox="${App._escAttr(img)}">${isAdmin ? `<button type="button" class="btn btn-danger btn-xs forum-del-img-btn" data-file="${App._escAttr(img.split('/').pop())}"><i class="fas fa-trash"></i></button>` : ''}</div>`).join('')}</div>${isAdmin ? (post.image_status === 'pending' ? `<div class="forum-image-admin mt-2"><button type="button" class="btn btn-success btn-xs" id="forum-approve-images">通过图片审核</button> <button type="button" class="btn btn-danger btn-xs" id="forum-reject-images">驳回图片</button></div>` : post.image_status === 'rejected' ? `<span class="badge badge-danger mt-2">图片已驳回</span>` : '') : (post.image_status === 'pending' ? `<span class="badge badge-warning mt-2">图片待审核</span>` : '')}</div>` : ''}
             ${attachments.length ? `<div class="forum-attachments">${attachments.map((item) => `<a href="${App._escAttr(item.url)}" target="_blank" rel="noopener" class="forum-attachment"><i class="fas fa-paperclip"></i> ${App._escHtml(item.name || '附件')}</a>`).join('')}</div>` : ''}
             ${App.user ? `<div class="forum-interactions">
               <button type="button" class="btn btn-outline btn-sm" id="forum-like-btn"><i class="fas fa-heart"></i> ${post.liked ? '已点赞' : '点赞'} (${post.like_count || 0})</button>
@@ -290,6 +313,10 @@ const Forum = {
           if (r.success) { App.showToast('图片已删除', 'success'); this.renderPost(id); }
           else App.showToast(r.error || '删除失败', 'error');
         });
+      });
+      // 图片点击全屏灯箱（事件委托）
+      root.querySelectorAll('img[data-lightbox]').forEach(img => {
+        img.addEventListener('click', () => Forum.openImage(img.dataset.lightbox));
       });
       document.getElementById('forum-approve-images')?.addEventListener('click', async () => {
         const r = await API.forum.approveImages(id);
