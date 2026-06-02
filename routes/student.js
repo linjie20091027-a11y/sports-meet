@@ -564,20 +564,35 @@ router.delete('/registrations/:id', (req, res) => {
     const db = getDb();
 
     const registration = db.prepare(
-      'SELECT * FROM registrations WHERE id = ? AND user_id = ?'
+      'SELECT r.*, e.name AS event_name FROM registrations r LEFT JOIN events e ON r.event_id = e.id WHERE r.id = ? AND r.user_id = ?'
     ).get(req.params.id, req.user.id);
 
     if (!registration) {
       return res.status(404).json({ success: false, error: '报名记录不存在' });
     }
 
-    if (registration.status !== 'pending') {
-      return res.status(400).json({ success: false, error: '仅待审核状态的报名可以取消' });
+    if (registration.status === 'pending') {
+      db.prepare('DELETE FROM registrations WHERE id = ?').run(req.params.id);
+      res.json({ success: true, message: '已取消报名' });
+      return;
     }
 
-    db.prepare('DELETE FROM registrations WHERE id = ?').run(req.params.id);
+    if (registration.status === 'approved') {
+      db.prepare("UPDATE registrations SET status = 'cancelling' WHERE id = ?").run(req.params.id);
+      const admins = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").all();
+      admins.forEach(a => {
+        createNotification(db, a.id, {
+          type: 'warning',
+          title: '取消报名申请',
+          content: `学生申请取消「${registration.event_name || ''}」的报名，请审核。`,
+          target_url: '#/admin'
+        });
+      });
+      res.json({ success: true, message: '取消申请已提交，等待管理员审核' });
+      return;
+    }
 
-    res.json({ success: true, message: '已取消报名' });
+    res.status(400).json({ success: false, error: '当前状态不可取消' });
   } catch (e) {
     console.error('取消报名失败:', e.message);
     res.status(500).json({ success: false, error: '服务器内部错误' });

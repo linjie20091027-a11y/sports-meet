@@ -350,9 +350,10 @@ const App = {
     document.getElementById('nav-toggle')?.addEventListener('click', () => {
       document.getElementById('nav-links')?.classList.toggle('show');
     });
-    document.getElementById('menu-logout')?.addEventListener('click', (e) => {
+    document.getElementById('menu-logout')?.addEventListener('click', async (e) => {
       e.preventDefault();
-      this.logout();
+      const confirmed = await this.confirmDialog('确定要退出登录吗？');
+      if (confirmed) this.logout();
     });
     // 移动端点击切换用户下拉菜单
     document.getElementById('user-name-display')?.addEventListener('click', (e) => {
@@ -1343,7 +1344,7 @@ const App = {
       ]);
 
       const m = meet.value?.data || {};
-      this._updateSchoolLogo(m.logo_url || '/images/school-emblem-default.svg');
+      this._updateSchoolLogo(m.logo_url || '/images/school-logo.png');
       document.getElementById('hero-title').textContent = m.name || '学校运动会';
       var sub = document.getElementById('hero-subtitle');
       if (sub) sub.textContent = m.theme || '';
@@ -1362,9 +1363,13 @@ const App = {
       const genderL = g => g === 'male' ? '男子' : g === 'female' ? '女子' : '混合';
       const typeL = t => t === 'team' ? '集体' : '个人';
       const eventList = (events.value?.data || []);
-      if (eventList.length) {
+      const userGender = this.user?.gender;
+      const visibleEvents = userGender && userGender !== 'mixed'
+        ? eventList.filter(e => e.gender_group === userGender || e.gender_group === 'mixed')
+        : eventList;
+      if (visibleEvents.length) {
         let evH = '<div class="events-horiz-row">';
-        eventList.slice(0, 4).forEach(e => {
+        visibleEvents.slice(0, 4).forEach(e => {
           const iconMap = {track:'fa-person-running',field:'fa-arrow-up-right-dots',relay:'fa-people-arrows',team:'fa-people-group'};
           const icon = iconMap[e.category] || 'fa-running';
           evH += `<a href="#/events/${e.id}" class="event-horiz-card">
@@ -1410,7 +1415,7 @@ const App = {
         document.getElementById('home-announcements').innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无更多信息</p>';
       }
 
-      // ── 最新成绩：A~E组第一名 ──
+      // ── 最新成绩：A~E组冠军竖条轮播 ──
       const resData = results.value?.data || [];
       let resH = '';
       if (resData.length) {
@@ -1418,32 +1423,170 @@ const App = {
         const groupChamps = {};
         resData.forEach(r => {
           const g = r.user_sport_group || 'A';
-          if (r.rank === 1 && !groupChamps[g]) groupChamps[g] = r;
+          if (r.rank === 1) {
+            if (!groupChamps[g]) groupChamps[g] = [];
+            groupChamps[g].push(r);
+          }
         });
-        const champs = groups.map(g => groupChamps[g] || null).filter(Boolean);
-        if (champs.length) {
-          resH = '<div class="home-result-champs">';
-          champs.forEach(r => {
-            resH += `<a href="#/results" class="home-result-card">
-              <div class="home-result-group">${r.user_sport_group || 'A'}组</div>
-              <div class="home-result-medal">🥇</div>
-              <div class="home-result-name">${r.name || '-'}</div>
-              <div class="home-result-event">${r.event_name || '-'}</div>
-              <div class="home-result-perf">${r.performance || '-'}</div>
-            </a>`;
+        const hasData = Object.keys(groupChamps).length > 0;
+        if (hasData) {
+          this._champData = groupChamps;
+          resH = '<div class="home-champ-strip" id="home-champ-strip">';
+          groups.forEach(g => {
+            const champs = groupChamps[g] || [];
+            if (!champs.length) return;
+            resH += `<div class="champ-strip-row">
+              <div class="champ-strip-group">${g}组</div>
+              <div class="champ-strip-items" data-group="${g}">`;
+            champs.forEach((r, i) => {
+              resH += `<div class="champ-strip-item ${i === 0 ? 'active' : ''}" data-idx="${i}">
+                <span class="champ-strip-medal">🥇</span>
+                <span class="champ-strip-name">${r.name || '-'}</span>
+                <span class="champ-strip-event">${r.event_name || '-'}</span>
+                <span class="champ-strip-perf">${r.performance || '-'}</span>
+              </div>`;
+            });
+            resH += '</div></div>';
           });
           resH += '</div>';
         } else {
           resH = '<p class="text-muted text-center" style="padding:2rem">暂无更多信息</p>';
         }
         document.getElementById('home-results').innerHTML = resH;
+        if (hasData) this._startChampRotation();
       } else {
         document.getElementById('home-results').innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无更多信息</p>';
       }
+      // ── 精彩瞬间 ──
+      this.renderHighlights();
+
     } catch (e) {
       console.error('renderHome error:', e);
       this.showToast('首页加载异常，请刷新重试', 'error');
     }
+  },
+
+  async renderHighlights() {
+    const grid = document.getElementById('photo-grid');
+    if (!grid) return;
+    try {
+      const res = await API.public.getHighlights();
+      const items = res.data || [];
+      // 6 格布局：前 5 格轮播，第 6 格上传
+      const approvedItems = items.filter(i => i.status === 'approved');
+      const hasPhotos = approvedItems.length > 0;
+      
+      let html = '';
+      for (let i = 0; i < 6; i++) {
+        if (i < 5) {
+          // 轮播图位
+          if (approvedItems.length > 0) {
+            const idx = i % approvedItems.length;
+            html += `<div class="carousel-slot" data-index="${idx}" data-url="${approvedItems[idx].url}">
+              <img src="${approvedItems[idx].url}" alt="精彩瞬间" loading="lazy">
+            </div>`;
+          } else {
+            html += `<div class="carousel-slot carousel-slot--empty"><i class="fas fa-image"></i></div>`;
+          }
+        } else {
+          // 上传按钮位
+          html += `<div class="carousel-slot carousel-slot--upload" id="carousel-upload-btn">
+            <i class="fas fa-plus"></i><span>上传照片</span>
+          </div>`;
+        }
+      }
+      grid.innerHTML = html;
+
+      // 轮播逻辑
+      if (approvedItems.length > 1) {
+        this._startCarousel();
+      } else {
+        this._stopCarousel();
+      }
+
+      // 点击任意轮播格打开灯箱
+      grid.querySelectorAll('.carousel-slot[data-url]').forEach(el => {
+        el.addEventListener('click', () => App.openLightbox(el.dataset.url));
+      });
+      document.getElementById('carousel-upload-btn')?.addEventListener('click', () => App.highlightUpload());
+    } catch(e) {
+      grid.innerHTML = '<div class="photo-upload-prompt" id="photo-upload-prompt"><i class="fas fa-camera"></i><p>上传精彩瞬间</p></div>';
+      document.getElementById('photo-upload-prompt')?.addEventListener('click', () => App.highlightUpload());
+    }
+  },
+
+  _carouselTimer: null,
+  _carouselIndex: 0,
+
+  _startCarousel() {
+    this._stopCarousel();
+    const slots = document.querySelectorAll('#photo-grid .carousel-slot[data-url]');
+    if (slots.length <= 1) return;
+    const items = [];
+    slots.forEach(el => items.push(el.dataset.url));
+    const updateCarousel = () => {
+      this._carouselIndex = (this._carouselIndex + 1) % items.length;
+      slots.forEach((el, i) => {
+        const url = items[(this._carouselIndex + i) % items.length];
+        el.dataset.url = url;
+        el.dataset.index = String((this._carouselIndex + i) % items.length);
+        const img = el.querySelector('img');
+        if (img) {
+          img.style.opacity = '0';
+          setTimeout(() => { img.src = url; img.style.opacity = '1'; }, 200);
+        }
+      });
+    };
+    this._carouselTimer = setInterval(updateCarousel, 4000);
+  },
+
+  _stopCarousel() {
+    if (this._carouselTimer) { clearInterval(this._carouselTimer); this._carouselTimer = null; }
+  },
+
+  highlightUpload() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.style.display = 'none';
+    document.body.appendChild(input);
+    input.onchange = async () => {
+      const file = input.files[0];
+      document.body.removeChild(input);
+      if (!file) return;
+      if (file.size > 10 * 1024 * 1024) { App.showToast('图片不超过10MB', 'warning'); return; }
+      const fd = new FormData();
+      fd.append('image', file);
+      App.showToast('上传中...', 'info');
+      try {
+        const r = await API.public.uploadHighlight(fd);
+        if (r.success) {
+          App.showToast('上传成功', 'success');
+          App.renderHighlights();
+        } else {
+          App.showToast(r.error || '上传失败', 'error');
+        }
+      } catch(e) {
+        App.showToast('上传失败: ' + (e.message || '未知错误'), 'error');
+      }
+    };
+    input.addEventListener('cancel', () => document.body.removeChild(input));
+    input.click();
+  },
+
+  openLightbox(url) {
+    if (!this._lightbox) {
+      const el = document.createElement('div');
+      el.className = 'app-lightbox';
+      el.innerHTML = '<div class="app-lightbox__bg"></div><img class="app-lightbox__img"><button class="app-lightbox__close">&times;</button>';
+      document.body.appendChild(el);
+      this._lightbox = el;
+      el.querySelector('.app-lightbox__bg').addEventListener('click', () => this._lightbox.classList.remove('show'));
+      el.querySelector('.app-lightbox__close').addEventListener('click', () => this._lightbox.classList.remove('show'));
+      document.addEventListener('keydown', e => { if (e.key === 'Escape') App._lightbox?.classList.remove('show'); });
+    }
+    this._lightbox.querySelector('.app-lightbox__img').src = url;
+    this._lightbox.classList.add('show');
   },
 
   _updateSchoolLogo(src) {
@@ -1600,30 +1743,40 @@ const App = {
       try {
         this.showLoading();
         const res = await API.get(url);
-        const data = res.data || [];
+        let data = res.data || [];
+        const userGender = this.user?.gender;
+        if (!gen && userGender && userGender !== 'mixed') {
+          data = data.filter(e => e.gender_group === userGender || e.gender_group === 'mixed');
+        }
         const genderL = g => g==='male'?'男子组':g==='female'?'女子组':'混合组';
         const typeL = t => t==='team'?'集体':'个人';
         const catL = c => ({track:'径赛',field:'田赛',relay:'接力',team:'集体'})[c]||c;
-        list.innerHTML = data.length ? data.map(e => `
-          <div class="card event-card">
-            <div class="card-header">
-              <h3>${e.name}</h3>
-              <span class="badge badge-info">${typeL(e.event_type)}</span>
+        const iconMap = {
+          track:'fa-person-running', field:'fa-arrow-up-right-dots', relay:'fa-people-arrows', team:'fa-people-group',
+          '100米':'fa-person-running','200米':'fa-person-running','400米':'fa-person-running',
+          '800米':'fa-person-running','1500米':'fa-person-running','跳远':'fa-up-long',
+          '跳高':'fa-arrow-up','实心球':'fa-volleyball','4×100米接力':'fa-people-arrows',
+          '拔河比赛':'fa-hand-fist','广播体操':'fa-person-walking'
+        };
+        const bgMap = {
+          track:'https://images.unsplash.com/photo-1461896836934-bd45ba2ae6c7?w=600&q=80',
+          field:'https://images.unsplash.com/photo-1552674605-db6ffd4facb9?w=600&q=80',
+          relay:'https://images.unsplash.com/photo-1530549387789-4c1017266635?w=600&q=80',
+          team:'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=600&q=80'
+        };
+        list.className = 'sport-grid';
+        list.innerHTML = data.length ? data.map((e, i) => {
+          const icon = iconMap[e.name] || iconMap[e.category] || 'fa-person-running';
+          const bg = bgMap[e.category] || bgMap.track;
+          return `<a href="#/events/${e.id}" class="sport-card" style="background-image:url(${bg});--delay:${i*0.04}s">
+            <div class="sport-card-overlay"></div>
+            <div class="sport-card-content">
+              <i class="fas ${icon}"></i>
+              <span>${e.name}</span>
+              <small>${genderL(e.gender_group)}</small>
             </div>
-            <div class="card-body">
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem">
-                <p class="text-sm"><i class="fas fa-venus-mars" style="color:var(--red);width:20px"></i> ${genderL(e.gender_group)}</p>
-                <p class="text-sm"><i class="fas fa-tag" style="color:var(--red);width:20px"></i> ${catL(e.category)}</p>
-                <p class="text-sm"><i class="fas fa-location-dot" style="color:var(--red);width:20px"></i> ${e.venue||'待定'}</p>
-                <p class="text-sm"><i class="fas fa-users" style="color:var(--red);width:20px"></i> 上限 ${e.max_participants||'不限'}</p>
-              </div>
-              ${e.rules?`<div class="mt-2 p-2" style="background:var(--bg);border-radius:4px;font-size:0.8rem;color:var(--text2)">${e.rules}</div>`:''}
-            </div>
-            <div class="card-footer">
-              <span></span>
-              <a href="#/events/${e.id}" class="btn btn-outline btn-sm">查看详情</a>
-            </div>
-          </div>`).join('') : '<div class="empty-state" style="grid-column:1/-1"><p class="text-muted">暂无符合条件的赛事</p></div>';
+          </a>`;
+        }).join('') : '<div class="empty-state" style="grid-column:1/-1"><p class="text-muted">暂无符合条件的赛事</p></div>';
       } catch (e) { }
       finally { this.hideLoading(); }
     };
@@ -1664,7 +1817,13 @@ const App = {
 
       let actionHtml = '';
       if (isStudent) {
-        actionHtml = `<button type="button" class="btn btn-primary" id="event-detail-register">提交报名</button>`;
+        const userGender = this.user.gender;
+        const genderMatch = e.gender_group === 'mixed' || !userGender || e.gender_group === userGender;
+        if (genderMatch) {
+          actionHtml = `<button type="button" class="btn btn-primary" id="event-detail-register">提交报名</button>`;
+        } else {
+          actionHtml = `<span class="text-muted text-sm">该项目仅限${genderL(e.gender_group)}报名</span>`;
+        }
       } else if (!this.user) {
         actionHtml = `<a href="#/login" class="btn btn-primary">登录後报名</a>`;
       } else if (this.user.role === 'admin') {
@@ -1946,6 +2105,26 @@ const App = {
     if (!d) return '-';
     try { const t=new Date(d);return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')} ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`; }
     catch(e) { return d; }
+  },
+  _champTimer: null,
+  _champData: null,
+  _startChampRotation() {
+    if (this._champTimer) clearInterval(this._champTimer);
+    this._champTimer = setInterval(() => {
+      if (!this._champData) return;
+      const groups = ['A','B','C','D','E'];
+      groups.forEach(g => {
+        const items = document.querySelector(`.champ-strip-items[data-group="${g}"]`);
+        if (!items) return;
+        const all = items.querySelectorAll('.champ-strip-item');
+        if (all.length <= 1) return;
+        const active = items.querySelector('.champ-strip-item.active');
+        const curIdx = parseInt(active?.dataset?.idx || 0);
+        const nextIdx = (curIdx + 1) % all.length;
+        active.classList.remove('active');
+        all[nextIdx].classList.add('active');
+      });
+    }, 3000);
   },
   getAwardLabel(a) {
     const m={'一等':'一等奖','二等':'二等奖','三等':'三等奖','优秀':'优秀奖','团体':'团体奖'};

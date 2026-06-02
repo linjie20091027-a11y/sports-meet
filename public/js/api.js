@@ -134,6 +134,8 @@ const API = {
     searchSuggest(q) {
       return API.get('/public/search/suggest' + API._qs({ q }));
     },
+    getHighlights() { return API.get('/public/highlights'); },
+    uploadHighlight(formData) { return API.upload('/public/highlights', formData); },
   },
 
   // ==================== 管理员接口 ====================
@@ -186,6 +188,8 @@ const API = {
     getRegistrationDetail(id) { return API.get('/admin/registrations/' + id); },
     approveRegistration(id) { return API.put('/admin/registrations/' + id + '/approve'); },
     rejectRegistration(id) { return API.put('/admin/registrations/' + id + '/reject'); },
+    approveCancel(id) { return API.put('/admin/registrations/' + id + '/approve-cancel'); },
+    rejectCancel(id) { return API.put('/admin/registrations/' + id + '/reject-cancel'); },
 
     // 数据导出
     exportResults(params) { return API.get('/admin/exports/results' + API._qs(params)); },
@@ -198,6 +202,19 @@ const API = {
     // 文件上传
     uploadImage(formData) { return API.upload('/admin/upload/image', formData); },
     uploadFile(formData) { return API.upload('/admin/upload/file', formData); },
+
+    // 照片管理
+    getHighlights() { return API.get('/admin/highlights'); },
+    approveHighlight(id) { return API.put('/admin/highlights/' + id + '/approve'); },
+    rejectHighlight(id) { return API.put('/admin/highlights/' + id + '/reject'); },
+    deleteHighlight(id) { return API.delete('/admin/highlights/' + id); },
+  },
+
+  // ==================== AI ====================
+  ai: {
+    generateSchedule() { return API.get('/ai/generate-schedule'); },
+    exportSchedulePDF(schedule) { return API.post('/ai/export-schedule-pdf', { schedule }, { rawResponse: true }); },
+    getAIStatus() { return API.get('/ai/ai-status'); },
   },
 
   // ==================== 学生接口 ====================
@@ -233,6 +250,16 @@ const API = {
     getMySchedules() { return API.get('/student/schedules'); },
     getUpcomingReminders() { return API.get('/student/upcoming-reminders'); },
     markAnnouncementRead(id) { return API.put('/student/announcements/' + id + '/read'); },
+  },
+
+  gallery: {
+    getApproved(params) { return API.get('/gallery/approved' + API._qs(params)); },
+    upload(formData) { return API.upload('/gallery/upload', formData); },
+    // 管理员
+    adminList(params) { return API.get('/admin/gallery' + API._qs(params)); },
+    approve(id) { return API.put('/admin/gallery/' + id + '/approve'); },
+    reject(id) { return API.put('/admin/gallery/' + id + '/reject'); },
+    delete(id) { return API.delete('/admin/gallery/' + id); },
   },
 
   forum: {

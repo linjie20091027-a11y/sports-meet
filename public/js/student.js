@@ -473,8 +473,8 @@ const Student = {
     try {
       const res = await API.student.getMyRegistrations();
       const regs = res.data || [];
-      const statusLabel = s => ({pending:'待审核',approved:'已通过',rejected:'已驳回'})[s]||s;
-      const statusBadge = s => ({pending:'badge-pending',approved:'badge-approved',rejected:'badge-rejected'})[s]||'';
+      const statusLabel = s => ({pending:'待审核',approved:'已通过',rejected:'已驳回',cancelling:'取消审核中'})[s]||s;
+      const statusBadge = s => ({pending:'badge-pending',approved:'badge-approved',rejected:'badge-rejected',cancelling:'badge-warning'})[s]||'';
       const genderLabel = g => g==='male'?'男子组':g==='female'?'女子组':'混合组';
 
       if (regs.length === 0) {
@@ -491,7 +491,7 @@ const Student = {
           <td>${App.formatDate(r.created_at)}</td>
           <td><span class="badge ${statusBadge(r.status)}">${statusLabel(r.status)}</span></td>
           <td class="text-sm text-muted">${r.reject_reason||''}</td>
-          <td>${r.status==='pending'?`<button class="btn btn-danger btn-xs" onclick="Student._cancelReg(${r.id})">取消</button>`:''}</td>
+          <td>${r.status==='pending'||r.status==='approved'?`<button class="btn btn-danger btn-xs" onclick="Student._cancelReg(${r.id})">取消报名</button>`:''}</td>
         </tr>`;
       });
       html += '</tbody></table></div></div>';
@@ -502,13 +502,24 @@ const Student = {
   },
 
   async _cancelReg(id) {
-    const ok = await App.confirmDialog('确认取消该报名？');
-    if (!ok) return;
+    const confirmed = await new Promise(resolve => {
+      App.showModal(`
+        <div class="modal__header"><h3 class="modal__title">取消报名</h3><button class="modal__close" onclick="App.hideModal(true)"><i class="fas fa-times"></i></button></div>
+        <div class="modal__body"><p style="text-align:center;font-size:.95rem">确认取消该报名？${id > 0 ? '<br><small class="text-muted">已通过的报名需管理员审核</small>' : ''}</p></div>
+        <div class="modal__footer" style="justify-content:center;gap:.5rem">
+          <button class="btn btn--outline" id="cancel-reg-btn-no">取消</button>
+          <button class="btn btn--danger" id="cancel-reg-btn-yes">确认取消</button>
+        </div>
+      `);
+      document.getElementById('cancel-reg-btn-yes').onclick = () => { App.hideModal(true); resolve(true); };
+      document.getElementById('cancel-reg-btn-no').onclick = () => { App.hideModal(true); resolve(false); };
+    });
+    if (!confirmed) return;
     try {
       App.showLoading();
-      await API.student.cancelRegistration(id);
+      const res = await API.student.cancelRegistration(id);
       App.hideLoading();
-      App.showToast('已取消报名', 'success');
+      App.showToast(res.message || '操作成功', 'success');
       this._renderMyRegistrations();
     } catch (e) {
       App.hideLoading();

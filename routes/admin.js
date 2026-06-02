@@ -5,6 +5,7 @@ const multer = require('multer');
 const path = require('path');
 const XLSX = require('xlsx');
 const { getDb } = require('../database/init');
+const { createNotification } = require('../utils/notify');
 const { authMiddleware, adminOnly, logOperation } = require('../middleware/auth');
 
 const upload = multer({
@@ -692,6 +693,38 @@ router.put('/registrations/:id/reject', (req, res) => {
 });
 
 // GET /registrations/stats - 报名统计
+
+// PUT /registrations/:id/approve-cancel - 批准取消报名
+router.put('/registrations/:id/approve-cancel', (req, res) => {
+  try {
+    const db = getDb();
+    const reg = db.prepare("SELECT r.*, e.name AS event_name, u.name AS user_name FROM registrations r LEFT JOIN events e ON r.event_id = e.id LEFT JOIN users u ON r.user_id = u.id WHERE r.id = ? AND r.status = 'cancelling'").get(req.params.id);
+    if (!reg) return res.status(404).json({ success: false, error: '取消申请不存在或已处理' });
+    db.prepare('DELETE FROM registrations WHERE id = ?').run(req.params.id);
+    createNotification(db, reg.user_id, {
+      type: 'success', title: '取消报名已批准',
+      content: `您取消「${reg.event_name||''}」报名的申请已被管理员批准。`,
+      target_url: '#/student'
+    });
+    res.json({ success: true, message: '已批准取消' });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// PUT /registrations/:id/reject-cancel - 驳回取消报名
+router.put('/registrations/:id/reject-cancel', (req, res) => {
+  try {
+    const db = getDb();
+    const reg = db.prepare("SELECT r.*, e.name AS event_name, u.name AS user_name FROM registrations r LEFT JOIN events e ON r.event_id = e.id LEFT JOIN users u ON r.user_id = u.id WHERE r.id = ? AND r.status = 'cancelling'").get(req.params.id);
+    if (!reg) return res.status(404).json({ success: false, error: '取消申请不存在或已处理' });
+    db.prepare("UPDATE registrations SET status = 'approved', reviewed_by = ?, reviewed_at = datetime('now','localtime') WHERE id = ?").run(req.user.id, req.params.id);
+    createNotification(db, reg.user_id, {
+      type: 'warning', title: '取消报名已驳回',
+      content: `您取消「${reg.event_name||''}」报名的申请被管理员驳回，报名仍有效。`,
+      target_url: '#/student'
+    });
+    res.json({ success: true, message: '已驳回取消申请' });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
 router.get('/registrations/stats', (req, res) => {
   try {
     const db = getDb();
@@ -1534,6 +1567,54 @@ router.get('/dashboard', (req, res) => {
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
+});
+
+// GET /highlights — 获取所有照片（管理员用，含待审核）
+router.get('/highlights', (req, res) => {
+  try {
+    const db = getDb();
+    const items = db.prepare('SELECT h.id, h.filename, h.original_name, h.status, h.created_at, u.name as uploader_name FROM highlights h LEFT JOIN users u ON h.uploaded_by = u.id ORDER BY h.created_at DESC').all();
+    res.json({ success: true, data: items.map(r => ({
+      id: r.id, filename: r.filename, original_name: r.original_name,
+      status: r.status, uploader_name: r.uploader_name,
+      url: '/images/' + r.filename, created_at: r.created_at
+    })) });
+  } catch(e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// PUT /highlights/:id/approve
+router.put('/highlights/:id/approve', (req, res) => {
+  try {
+    const db = getDb();
+    db.prepare("UPDATE highlights SET status = 'approved' WHERE id = ?").run(parseInt(req.params.id));
+    res.json({ success: true, message: '已通过' });
+  } catch(e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// PUT /highlights/:id/reject
+router.put('/highlights/:id/reject', (req, res) => {
+  try {
+    const db = getDb();
+    db.prepare("UPDATE highlights SET status = 'rejected' WHERE id = ?").run(parseInt(req.params.id));
+    res.json({ success: true, message: '已驳回' });
+  } catch(e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// DELETE /highlights/:id
+router.delete('/highlights/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const id = parseInt(req.params.id);
+    const row = db.prepare('SELECT filename FROM highlights WHERE id = ?').get(id);
+    if (row) {
+      const fs = require('fs');
+      const path = require('path');
+      const fp = path.join(__dirname, '..', 'public', 'images', row.filename);
+      try { fs.unlinkSync(fp); } catch(_) {}
+      db.prepare('DELETE FROM highlights WHERE id = ?').run(id);
+    }
+    res.json({ success: true, message: '已删除' });
+  } catch(e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 module.exports = router;

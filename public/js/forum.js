@@ -399,22 +399,26 @@ const Forum = {
     });
     document.getElementById('forum-post-submit').addEventListener('click', async () => {
       const title = document.getElementById('forum-post-title')?.value?.trim();
-      const content = document.getElementById('forum-post-content')?.innerHTML?.trim();
+      const contentEl = document.getElementById('forum-post-content');
+      const contentHtml = contentEl?.innerHTML?.trim();
+      const contentText = contentEl?.innerText?.trim();
       const category = document.getElementById('forum-post-category')?.value || 'general';
       const tags = Array.from(document.querySelectorAll('.forum-tag-picker input:checked')).map((item) => item.value);
-      if (!title || !content) return App.showToast('请填写标题和内容', 'warning');
+      const hasImages = this._composerImages && this._composerImages.length > 0;
+      const hasAttachments = this._composerAttachments && this._composerAttachments.length > 0;
+      if (!title && !contentText && !hasImages && !hasAttachments) return App.showToast('请至少填写标题、内容或上传文件', 'warning');
       let r;
-      if (this._composerImages && this._composerImages.length > 0) {
+      if (hasImages) {
         const fd = new FormData();
         fd.append('title', title);
-        fd.append('content', content);
+        fd.append('content', contentHtml);
         fd.append('category', category);
         fd.append('tags', JSON.stringify(tags));
         fd.append('attachments', JSON.stringify(this._composerAttachments || []));
         for (const f of this._composerImages) fd.append('images', f);
         r = await API.forum.createPost(fd);
       } else {
-        r = await API.forum.createPost({ title, content, category, tags, attachments: this._composerAttachments });
+        r = await API.forum.createPost({ title, content: contentHtml, category, tags, attachments: this._composerAttachments });
       }
       if (r.success) {
         App.hideModal();

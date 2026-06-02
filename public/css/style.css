@@ -144,6 +144,61 @@ h1{font-family:var(--title-font);font-size:2.2rem}h2{font-size:1.4rem}h3{font-si
 .event-mini-card h4{font-size:.85rem;font-weight:700;margin-bottom:.2rem;color:var(--text)}.event-mini-card p{font-size:.7rem;color:var(--text2);margin-top:.2rem}
 .event-card .card-body p,.event-card .card__body p{font-size:.75rem;color:var(--text2);margin-bottom:3px}.event-card .card-body i,.event-card .card__body i{width:16px;color:var(--gold)}
 
+/* ═══ 赛事项目网格（7列宫格 + 背景图 + 红色蒙层） ═══ */
+.sport-grid{
+  display:grid;
+  grid-template-columns:repeat(7,1fr);
+  gap:10px;
+  margin-top:.5rem
+}
+.sport-card{
+  position:relative;
+  aspect-ratio:3/4;
+  background-size:cover;
+  background-position:center;
+  border-radius:var(--radius-lg);
+  overflow:hidden;
+  cursor:pointer;
+  text-decoration:none;
+  animation:sportCardIn .5s ease backwards;
+  animation-delay:var(--delay,0s)
+}
+@keyframes sportCardIn{from{opacity:0;transform:scale(.9) translateY(12px)}to{opacity:1;transform:scale(1) translateY(0)}}
+.sport-card-overlay{
+  position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(90,0,0,.75),rgba(50,0,0,.82));
+  transition:opacity .4s ease;
+  z-index:1
+}
+.sport-card-content{
+  position:relative;z-index:2;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  height:100%;gap:.35rem;padding:1rem;
+  color:#fff;text-align:center
+}
+.sport-card-content i{
+  font-size:1.8rem;
+  filter:drop-shadow(0 2px 6px rgba(0,0,0,.4));
+  transition:transform .4s ease
+}
+.sport-card-content span{
+  font-size:.82rem;font-weight:700;
+  letter-spacing:.04em;
+  text-shadow:0 2px 8px rgba(0,0,0,.5)
+}
+.sport-card-content small{
+  font-size:.65rem;opacity:.75;
+  text-shadow:0 1px 4px rgba(0,0,0,.4)
+}
+.sport-card:hover .sport-card-overlay{opacity:0}
+.sport-card:hover .sport-card-content i{transform:scale(1.2)}
+.sport-card:hover .sport-card-content span{text-shadow:0 4px 16px rgba(0,0,0,.7)}
+@media(max-width:1200px){.sport-grid{grid-template-columns:repeat(5,1fr)}}
+@media(max-width:900px){.sport-grid{grid-template-columns:repeat(4,1fr)}}
+@media(max-width:600px){.sport-grid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:400px){.sport-grid{grid-template-columns:repeat(2,1fr)}}
+
 /* ═══ 首页横向赛事卡片 ═══ */
 .events-horiz-row {
   display: flex;
@@ -231,6 +286,7 @@ h1{font-family:var(--title-font);font-size:2.2rem}h2{font-size:1.4rem}h3{font-si
 .btn-secondary,.btn--secondary{background:var(--bg);color:var(--text);border-color:var(--border)}.btn-secondary:hover:not(:disabled){background:var(--border)}
 .btn-success,.btn--success{background:#2d6a4f;color:#fff}.btn-danger,.btn--danger{background:var(--red);color:#fff}
 .btn-outline,.btn--outline{background:transparent;color:var(--red);border-color:var(--red)}.btn-outline:hover:not(:disabled){background:var(--red);color:#fff}
+.btn--accent{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none}.btn--accent:hover:not(:disabled){box-shadow:0 4px 16px rgba(102,126,234,.4);transform:translateY(-1px)}
 .btn--ghost{background:transparent;color:var(--text2)}.btn--ghost:hover:not(:disabled){background:var(--bg)}
 .btn-text{background:none;border:none;color:var(--gold-dark);padding:.2rem .5rem;font-weight:600;cursor:pointer;font-size:.75rem}
 .btn-sm,.btn--sm{padding:.35rem .7rem;font-size:.7rem}.btn-xs{padding:.2rem .5rem;font-size:.65rem}.btn-block,.btn--block{display:flex;width:100%}
@@ -329,31 +385,30 @@ h1{font-family:var(--title-font);font-size:2.2rem}h2{font-size:1.4rem}h3{font-si
 .home-ann-card h4{font-size:.8rem;font-weight:600;color:var(--text);margin:0 0 .25rem;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .home-ann-card-time{font-size:.65rem;color:var(--text3)}
 
-/* ═══ 首页成绩冠军卡片 ═══ */
-.home-result-champs{display:flex;gap:8px;overflow-x:auto;padding:.25rem 0}
-.home-result-champs::-webkit-scrollbar{height:3px}
-.home-result-champs::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
-.home-result-card{
-  flex:0 0 150px;
-  text-align:center;
-  padding:1rem .75rem;
-  background:var(--white);
-  border:1px solid var(--border);
-  border-radius:var(--radius);
-  text-decoration:none;
-  color:inherit;
-  transition:all .2s;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  gap:2px
+/* ═══ 首页冠军竖条轮播 ═══ */
+.home-champ-strip{display:flex;flex-direction:column;gap:6px}
+.champ-strip-row{display:flex;align-items:stretch;gap:8px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--white);transition:all .2s}
+.champ-strip-row:hover{border-color:var(--gold);box-shadow:var(--shadow-sm)}
+.champ-strip-group{
+  flex:0 0 42px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:.7rem;font-weight:800;color:var(--white);
+  background:var(--red);
+  writing-mode:vertical-lr;letter-spacing:.1em
 }
-.home-result-card:hover{border-color:var(--gold);box-shadow:var(--shadow-md);transform:translateY(-2px);background:var(--gold-light)}
-.home-result-group{font-size:.62rem;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.05em}
-.home-result-medal{font-size:1.5rem;line-height:1}
-.home-result-name{font-size:.82rem;font-weight:700;color:var(--text)}
-.home-result-event{font-size:.65rem;color:var(--text2)}
-.home-result-perf{font-size:.78rem;font-weight:600;color:var(--gold-dark)}
+.champ-strip-items{flex:1;position:relative;min-height:52px;overflow:hidden}
+.champ-strip-item{
+  position:absolute;inset:0;
+  display:flex;align-items:center;gap:8px;padding:.3rem .7rem;
+  opacity:0;transform:translateY(10px);
+  transition:opacity .35s,transform .35s;
+  pointer-events:none
+}
+.champ-strip-item.active{opacity:1;transform:translateY(0);pointer-events:auto}
+.champ-strip-medal{font-size:1.3rem;flex-shrink:0}
+.champ-strip-name{font-size:.82rem;font-weight:700;color:var(--text);flex-shrink:0}
+.champ-strip-event{font-size:.72rem;color:var(--text2);flex:1;white-space:nowrap}
+.champ-strip-perf{font-size:.78rem;font-weight:600;color:var(--gold-dark);flex-shrink:0}
 
 /* Forum - redesigned */
 #page-forum{padding-top:calc(var(--nav-h) + 20px)}.forum-card{border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem;margin-bottom:.75rem;background:var(--white);transition:all .2s}.forum-card:hover{border-color:var(--gold);box-shadow:var(--shadow-md);transform:translateY(-2px)}
@@ -397,6 +452,27 @@ h1{font-family:var(--title-font);font-size:2.2rem}h2{font-size:1.4rem}h3{font-si
 .forum-image-preview{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:.5rem;margin-top:.75rem}
 .forum-image-preview-item{position:relative;border-radius:var(--radius);overflow:hidden;border:1px solid var(--border);aspect-ratio:1}.forum-image-preview-item img{width:100%;height:100%;object-fit:cover;display:block}
 .forum-image-preview-item .forum-preview-remove{position:absolute;top:2px;right:2px;width:20px;height:20px;border-radius:50%;border:none;background:rgba(0,0,0,.55);color:#fff;font-size:12px;line-height:1;cursor:pointer}
+/* 首页精彩瞬间 - 6格轮播 */
+.photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;margin-top:1rem}
+.carousel-slot{position:relative;border-radius:var(--radius-lg);overflow:hidden;aspect-ratio:4/3;cursor:pointer;border:1px solid var(--border);transition:transform .2s;background:var(--bg)}
+.carousel-slot:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg)}
+.carousel-slot img{width:100%;height:100%;object-fit:cover;display:block;transition:opacity .4s ease}
+.carousel-slot[data-url]{cursor:zoom-in}
+.carousel-slot--empty{display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:2rem}
+.carousel-slot--upload{display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--gold-light);gap:.35rem;font-size:.8rem;color:var(--gold);border-color:var(--gold);border-style:dashed;cursor:pointer}
+.carousel-slot--upload i{font-size:1.5rem}
+.carousel-slot--upload:hover{background:#fef9e7}
+.photo-item{position:relative;border-radius:var(--radius);overflow:hidden;aspect-ratio:4/3;cursor:pointer;border:1px solid var(--border);transition:transform .2s,box-shadow .2s}.photo-item:hover{transform:translateY(-2px);box-shadow:var(--shadow-md)}
+.photo-item img{width:100%;height:100%;object-fit:cover;display:block}
+.photo-upload-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg);color:var(--text2);gap:.35rem;font-size:.75rem}.photo-upload-btn i{font-size:1.5rem;color:var(--gold)}.photo-upload-btn:hover{background:#fef9e7;border-color:var(--gold)}
+.photo-upload-prompt{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2.5rem 1rem;background:var(--bg);border:2px dashed var(--border);border-radius:var(--radius);cursor:pointer;color:var(--text2);gap:.5rem;transition:all .2s}.photo-upload-prompt:hover{border-color:var(--gold);background:#fef9e7}.photo-upload-prompt i{font-size:2rem;color:var(--gold)}
+@media (max-width:600px){.photo-grid{grid-template-columns:repeat(2,1fr)}}
+/* 通用全屏灯箱 */
+.app-lightbox{position:fixed;inset:0;z-index:5000;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .25s}.app-lightbox.show{opacity:1;pointer-events:auto}
+.app-lightbox__bg{position:absolute;inset:0;background:rgba(0,0,0,.9)}
+.app-lightbox__img{position:relative;z-index:1;max-width:92vw;max-height:92vh;object-fit:contain;border-radius:6px;box-shadow:0 8px 48px rgba(0,0,0,.5)}
+.app-lightbox__close{position:absolute;top:20px;right:24px;z-index:2;width:40px;height:40px;border:none;border-radius:50%;background:rgba(255,255,255,.15);color:#fff;font-size:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s}.app-lightbox__close:hover{background:rgba(255,255,255,.3)}
+.app-lightbox__prev,.app-lightbox__next{position:absolute;top:50%;transform:translateY(-50%);z-index:2;width:44px;height:44px;border:none;border-radius:50%;background:rgba(255,255,255,.15);color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s}.app-lightbox__prev:hover,.app-lightbox__next:hover{background:rgba(255,255,255,.3)}.app-lightbox__prev{left:20px}.app-lightbox__next{right:20px}
 
 /* Toast */
 #toast-container{position:fixed;bottom:1.25rem;left:50%;transform:translateX(-50%);z-index:3000;display:flex;flex-direction:column;gap:5px;align-items:center;pointer-events:none}
@@ -1162,3 +1238,57 @@ body::before {
 #pull-refresh-indicator.show{transform:translateY(0)}
 #pull-refresh-indicator .ptr-spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:ptr-spin .6s linear infinite}
 @keyframes ptr-spin{to{transform:rotate(360deg)}}
+
+/* ═══ 精彩瞬间 图片轮播 ═══ */
+.photo-gallery{margin-top:1rem;margin-bottom:2rem}
+.gallery-controls{display:flex;align-items:center;justify-content:center;gap:.75rem;margin-bottom:.75rem}
+.gallery-btn{
+  width:34px;height:34px;border:1px solid var(--border);border-radius:50%;
+  background:var(--white);color:var(--text2);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  font-size:.85rem;transition:all .2s
+}
+.gallery-btn:hover:not(:disabled){border-color:var(--gold);color:var(--red);background:var(--gold-light)}
+.gallery-btn:disabled{opacity:.3;cursor:default}
+.gallery-page-info{font-size:.75rem;color:var(--text3);font-weight:600;min-width:50px;text-align:center}
+.gallery-flip-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.gallery-flip-card{
+  flex:0 0 calc(20% - 8px);
+  min-width:150px;max-width:220px;
+  border-radius:var(--radius-lg);
+  overflow:hidden;
+  background:var(--white);
+  border:1px solid var(--border);
+  box-shadow:var(--shadow);
+  animation:galleryFlipIn .45s ease backwards
+}
+@keyframes galleryFlipIn{
+  from{opacity:0;transform:rotateY(90deg) scale(.85)}
+  to{opacity:1;transform:rotateY(0) scale(1)}
+}
+.gallery-flip-inner{aspect-ratio:3/2;overflow:hidden;background:var(--bg)}
+.gallery-flip-inner img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .4s}
+.gallery-flip-card:hover .gallery-flip-inner img{transform:scale(1.08)}
+.gallery-flip-caption{
+  padding:.35rem .6rem;
+  font-size:.68rem;
+  color:var(--text2);
+  text-align:center;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis
+}
+.gallery-flip-empty{visibility:hidden}
+@media(max-width:768px){
+  .gallery-flip-card{flex:0 0 calc(33.33% - 7px);min-width:100px}
+  .gallery-flip-card:nth-child(n+4){display:none}
+}
+
+/* ═══ 管理后台 精彩瞬间审核 ═══ */
+.gallery-admin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:.75rem}
+.gallery-admin-card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;transition:all .2s}
+.gallery-admin-card:hover{box-shadow:var(--shadow-md)}
+.gallery-admin-img{aspect-ratio:3/2;overflow:hidden;background:var(--bg)}
+.gallery-admin-img img{width:100%;height:100%;object-fit:cover;display:block}
+.gallery-admin-info{padding:.65rem .8rem;display:flex;flex-direction:column;gap:4px}
+.gallery-admin-actions{display:flex;gap:.4rem;margin-top:4px}

@@ -1,11 +1,34 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const multer = require('multer');
 const router = express.Router();
 const { getDb } = require('../database/init');
 
 const SEARCH_TYPES = ['all', 'users', 'events', 'news', 'announcements', 'results', 'highlights'];
 const HIGHLIGHT_DIR = path.join(__dirname, '..', 'public', 'images');
+
+// 精彩瞬间图片上传配置
+const hlStorage = multer.diskStorage({
+  destination: HIGHLIGHT_DIR,
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const name = 'hl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6) + ext;
+    cb(null, name);
+  }
+});
+const hlUpload = multer({
+  storage: hlStorage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('仅支持 JPG / PNG / GIF / WebP 格式'));
+    }
+  }
+});
 
 let highlightCache = {
   key: '',
@@ -814,6 +837,113 @@ router.get('/stats/overview', (req, res) => {
   } catch (err) {
     res.status(500).json({ error: '获取统计概览失败' });
   }
+});
+
+// GET /highlights — 精彩瞬间列表（仅展示已审核照片）
+router.get('/highlights', (req, res) => {
+  try {
+    const db = getDb();
+    const token = req.headers.authorization?.replace('Bearer ', '') || '';
+    let isAdmin = false;
+    if (token) {
+      try {
+        const jwt = require('jsonwebtoken');
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'sports-meet-2026');
+        isAdmin = decoded?.role === 'admin';
+      } catch(e) {}
+    }
+    const statusFilter = isAdmin ? '' : "WHERE status = 'approved'";
+    let dbItems = [];
+    try {
+      dbItems = db.prepare(`SELECT id, filename, original_name, status, created_at FROM highlights ${statusFilter} ORDER BY created_at DESC`).all();
+    } catch(e) {}
+    const items = dbItems.map(r => ({
+      id: r.id,
+      title: r.original_name || r.filename,
+      file_name: r.filename,
+      url: '/images/' + r.filename,
+      status: r.status,
+      created_at: r.created_at || ''
+    }));
+    res.json({ success: true, data: items });
+  } catch(e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// POST /highlights — 上传精彩瞬间（记录上传者，默认待审核）
+router.post('/highlights', hlUpload.single('image'), (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, error: '请选择图片' });
+    const db = getDb();
+    let uploadedBy = null;
+    const token = req.headers.authorization?.replace('Bearer ', '') || '';
+    if (token) {
+      try {
+        const jwt = require('jsonwebtoken');
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'sports-meet-2026');
+        uploadedBy = decoded?.id || null;
+      } catch(e) {}
+    }
+    db.prepare("INSERT INTO highlights (filename, original_name, status, uploaded_by) VALUES (?, ?, 'pending', ?)").run(
+      req.file.filename,
+      req.file.originalname || '',
+      uploadedBy
+    );
+    res.json({ success: true, message: '上传成功，等待审核', data: { url: '/images/' + req.file.filename } });
+  } catch(e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// PUT /highlights/:id/approve — 管理员通过
+router.put('/highlights/:id/approve', (req, res) => {
+  try {
+    const db = getDb();
+    const id = parseInt(req.params.id);
+    if (!id) return res.status(400).json({ success: false, error: '无效ID' });
+    db.prepare("UPDATE highlights SET status = 'approved' WHERE id = ?").run(id);
+    res.json({ success: true, message: '已通过' });
+  } catch(e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// PUT /highlights/:id/reject — 管理员驳回
+router.put('/highlights/:id/reject', (req, res) => {
+  try {
+    const db = getDb();
+    const id = parseInt(req.params.id);
+    if (!id) return res.status(400).json({ success: false, error: '无效ID' });
+    db.prepare("UPDATE highlights SET status = 'rejected' WHERE id = ?").run(id);
+    res.json({ success: true, message: '已驳回' });
+  } catch(e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// DELETE /highlights/:id — 管理员删除
+router.delete('/highlights/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const id = parseInt(req.params.id);
+    if (!id) return res.status(400).json({ success: false, error: '无效ID' });
+    const row = db.prepare('SELECT filename FROM highlights WHERE id = ?').get(id);
+    if (row) {
+      const fp = path.join(__dirname, '..', 'public', 'images', row.filename);
+      try { fs.unlinkSync(fp); } catch(_) {}
+      db.prepare('DELETE FROM highlights WHERE id = ?').run(id);
+    }
+    res.json({ success: true, message: '已删除' });
+  } catch(e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// GET /highlights/admin — 管理员获取全部（含待审核）
+router.get('/highlights/admin', (req, res) => {
+  try {
+    const db = getDb();
+    const items = db.prepare('SELECT id, filename, original_name, status, created_at FROM highlights ORDER BY created_at DESC').all();
+    res.json({ success: true, data: items.map(r => ({
+      id: r.id, filename: r.filename, original_name: r.original_name,
+      status: r.status, url: '/images/' + r.filename, created_at: r.created_at
+    }))});
+  } catch(e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 module.exports = router;
