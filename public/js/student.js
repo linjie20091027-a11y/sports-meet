@@ -491,7 +491,7 @@ const Student = {
           <td>${App.formatDate(r.created_at)}</td>
           <td><span class="badge ${statusBadge(r.status)}">${statusLabel(r.status)}</span></td>
           <td class="text-sm text-muted">${r.reject_reason||''}</td>
-          <td>${r.status==='pending'?`<button class="btn btn-danger btn-xs" onclick="Student._cancelReg(${r.id})">取消</button>`:''}</td>
+          <td>${r.status==='pending'||r.status==='approved'?`<button class="btn btn-danger btn-xs" onclick="Student._cancelReg(${r.id})">取消报名</button>`:''}</td>
         </tr>`;
       });
       html += '</tbody></table></div></div>';
