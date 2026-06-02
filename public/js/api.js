@@ -239,7 +239,10 @@ const API = {
     getMeta() { return API.get('/forum/meta'); },
     getPosts(params) { return API.get('/forum/posts' + API._qs(params)); },
     getPost(id) { return API.get('/forum/posts/' + id); },
-    createPost(data) { return API.post('/forum/posts', data); },
+    createPost(data) {
+      if (data instanceof FormData) return API.upload('/forum/posts', data);
+      return API.post('/forum/posts', data);
+    },
     uploadAttachments(formData) { return API.upload('/forum/attachments', formData); },
     reply(postId, content) { return API.post('/forum/posts/' + postId + '/replies', { content }); },
     likePost(id) { return API.post('/forum/posts/' + id + '/like', {}); },
@@ -247,6 +250,9 @@ const API = {
     reportPost(id, data) { return API.post('/forum/posts/' + id + '/report', data); },
     deletePost(id) { return API.delete('/forum/posts/' + id); },
     deleteReply(id) { return API.delete('/forum/replies/' + id); },
+    deleteImage(postId, filename) { return API.delete('/forum/posts/' + postId + '/images/' + encodeURIComponent(filename)); },
+    approveImages(postId) { return API.put('/forum/posts/' + postId + '/images/approve'); },
+    rejectImages(postId) { return API.put('/forum/posts/' + postId + '/images/reject'); },
     getAdminPosts(params) { return API.get('/forum/admin/posts' + API._qs(params)); },
     auditPost(id, data) { return API.put('/forum/admin/posts/' + id + '/audit', data); },
     getPendingReplies() { return API.get('/forum/admin/replies/pending'); },

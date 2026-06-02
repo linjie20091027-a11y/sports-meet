@@ -188,6 +188,8 @@ const Forum = {
       const canDelete = isAdmin || Number(post.user_id) === Number(App.user?.id);
       const attachments = Array.isArray(post.attachments) ? post.attachments : [];
       const tags = Array.isArray(post.tags) ? post.tags : [];
+      let images = [];
+      try { images = JSON.parse(post.images || '[]'); } catch(e) {}
 
       root.innerHTML = `
         <nav class="breadcrumb"><a href="#/forum">论坛</a> <span>/</span> <span>帖子详情</span></nav>
@@ -215,6 +217,7 @@ const Forum = {
             </p>
             <div class="forum-card__tags">${tags.map((tag) => `<span>${App._escHtml(tag)}</span>`).join('')}</div>
             <div class="detail-prose">${post.content || ''}</div>
+            ${images.length ? `<div class="forum-images"><div class="forum-images__grid">${images.map((img, i) => `<div class="forum-image-wrap"><img src="${App._escAttr(img)}" alt="帖子图片" loading="lazy" onclick="this.classList.toggle('forum-image-zoomed')">${isAdmin ? `<button type="button" class="btn btn-danger btn-xs forum-del-img-btn" data-file="${App._escAttr(img.split('/').pop())}"><i class="fas fa-trash"></i></button>` : ''}</div>`).join('')}</div>${isAdmin ? (post.image_status === 'pending' ? `<div class="forum-image-admin mt-2"><button type="button" class="btn btn-success btn-xs" id="forum-approve-images">通过图片审核</button> <button type="button" class="btn btn-danger btn-xs" id="forum-reject-images">驳回图片</button></div>` : post.image_status === 'rejected' ? `<span class="badge badge-danger mt-2">图片已驳回</span>` : '') : (post.image_status === 'pending' ? `<span class="badge badge-warning mt-2">图片待审核</span>` : '')}</div>` : ''}
             ${attachments.length ? `<div class="forum-attachments">${attachments.map((item) => `<a href="${App._escAttr(item.url)}" target="_blank" rel="noopener" class="forum-attachment"><i class="fas fa-paperclip"></i> ${App._escHtml(item.name || '附件')}</a>`).join('')}</div>` : ''}
             ${App.user ? `<div class="forum-interactions">
               <button type="button" class="btn btn-outline btn-sm" id="forum-like-btn"><i class="fas fa-heart"></i> ${post.liked ? '已点赞' : '点赞'} (${post.like_count || 0})</button>
@@ -237,10 +240,10 @@ const Forum = {
           </div>
         `).join('') : '<p class="text-muted">暂无回复</p>'}</div>
         ${App.user ? `
-          <div class="card mt-3">
-            <div class="card-body">
-              <div class="form-group"><label>发表评论</label><textarea id="forum-reply-text" class="form-input" rows="3" placeholder="输入评论内容，支持文明交流"></textarea></div>
-              <button type="button" class="btn btn-primary btn-sm" id="forum-reply-submit">提交评论</button>
+          <div class="card mt-3" style="max-height:180px;overflow-y:auto">
+            <div class="card-body" style="padding:.6rem 1rem">
+              <div class="form-group" style="margin-bottom:.3rem"><label style="font-size:.7rem">发表评论</label><textarea id="forum-reply-text" class="form-input" rows="2" placeholder="输入评论内容，支持文明交流" style="overflow-y:auto;resize:none"></textarea></div>
+              <button type="button" class="btn btn-primary btn-sm" id="forum-reply-submit" style="padding:.25rem .6rem;font-size:.7rem">提交评论</button>
             </div>
           </div>
         ` : '<p class="text-muted mt-3"><a href="#/login">登录</a> 後可回复</p>'}
@@ -279,6 +282,25 @@ const Forum = {
         else App.showToast(r.error || '操作失败', 'error');
       });
       document.getElementById('forum-report-post')?.addEventListener('click', () => this._showReportModal(id));
+      root.querySelectorAll('.forum-del-img-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!await App.confirmDialog('确认删除此图片？')) return;
+          const filename = btn.dataset.file;
+          const r = await API.forum.deleteImage(id, filename);
+          if (r.success) { App.showToast('图片已删除', 'success'); this.renderPost(id); }
+          else App.showToast(r.error || '删除失败', 'error');
+        });
+      });
+      document.getElementById('forum-approve-images')?.addEventListener('click', async () => {
+        const r = await API.forum.approveImages(id);
+        if (r.success) { App.showToast('图片已通过审核', 'success'); this.renderPost(id); }
+        else App.showToast(r.error || '操作失败', 'error');
+      });
+      document.getElementById('forum-reject-images')?.addEventListener('click', async () => {
+        const r = await API.forum.rejectImages(id);
+        if (r.success) { App.showToast('图片已驳回', 'success'); this.renderPost(id); }
+        else App.showToast(r.error || '操作失败', 'error');
+      });
     } catch (e) {
       root.innerHTML = `<div class="empty-state"><p>${App._escHtml(e.message)}</p></div>`;
     }
@@ -288,6 +310,7 @@ const Forum = {
     if (!App.user) { window.location.hash = '#/login'; return; }
     await this._ensureMeta();
     this._composerAttachments = [];
+    this._composerImages = [];
     App.showModal(`
       <div class="modal-header"><h3>发表帖子</h3><button type="button" class="modal-close" onclick="App.hideModal()">&times;</button></div>
       <div class="modal-body">
@@ -300,6 +323,8 @@ const Forum = {
           <label>标签</label>
           <div class="forum-tag-picker">${(this._meta.tags || []).map((tag) => `<label><input type="checkbox" value="${App._escHtml(tag)}"> ${App._escHtml(tag)}</label>`).join('')}</div>
         </div>
+        <div class="form-group"><label>图片上传（最多5张，JPG/PNG/GIF/WebP）</label><input type="file" id="forum-post-images" class="form-input" multiple accept="image/*"></div>
+        <div id="forum-post-image-preview" class="forum-image-preview"></div>
         <div class="form-group">
           <label>正文</label>
           <div class="forum-editor__toolbar">
@@ -340,13 +365,30 @@ const Forum = {
       }
       e.target.value = '';
     });
+    document.getElementById('forum-post-images')?.addEventListener('change', (e) => {
+      const files = Array.from(e.target.files || []).slice(0, 5);
+      this._composerImages = files;
+      this._renderComposerImages();
+    });
     document.getElementById('forum-post-submit').addEventListener('click', async () => {
       const title = document.getElementById('forum-post-title')?.value?.trim();
       const content = document.getElementById('forum-post-content')?.innerHTML?.trim();
       const category = document.getElementById('forum-post-category')?.value || 'general';
       const tags = Array.from(document.querySelectorAll('.forum-tag-picker input:checked')).map((item) => item.value);
       if (!title || !content) return App.showToast('请填写标题和内容', 'warning');
-      const r = await API.forum.createPost({ title, content, category, tags, attachments: this._composerAttachments });
+      let r;
+      if (this._composerImages && this._composerImages.length > 0) {
+        const fd = new FormData();
+        fd.append('title', title);
+        fd.append('content', content);
+        fd.append('category', category);
+        fd.append('tags', JSON.stringify(tags));
+        fd.append('attachments', JSON.stringify(this._composerAttachments || []));
+        for (const f of this._composerImages) fd.append('images', f);
+        r = await API.forum.createPost(fd);
+      } else {
+        r = await API.forum.createPost({ title, content, category, tags, attachments: this._composerAttachments });
+      }
       if (r.success) {
         App.hideModal();
         App.showToast(r.message || '发布成功', 'success');
@@ -374,6 +416,27 @@ const Forum = {
       btn.addEventListener('click', () => {
         this._composerAttachments.splice(Number(btn.dataset.index), 1);
         this._renderComposerAttachments();
+      });
+    });
+  },
+
+  _renderComposerImages() {
+    const wrap = document.getElementById('forum-post-image-preview');
+    if (!wrap) return;
+    if (!this._composerImages || !this._composerImages.length) {
+      wrap.innerHTML = '';
+      return;
+    }
+    wrap.innerHTML = this._composerImages.map((file, index) => `
+      <div class="forum-image-preview-item">
+        <img src="${URL.createObjectURL(file)}" alt="预览" style="max-width:100px;max-height:100px;object-fit:cover;">
+        <button type="button" class="btn btn-danger btn-xs forum-remove-image" data-index="${index}">移除</button>
+      </div>
+    `).join('');
+    wrap.querySelectorAll('.forum-remove-image').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this._composerImages.splice(Number(btn.dataset.index), 1);
+        this._renderComposerImages();
       });
     });
   },

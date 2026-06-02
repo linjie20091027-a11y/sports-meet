@@ -169,6 +169,8 @@ function migrateSchema() {
       user_id INTEGER NOT NULL,
       title TEXT NOT NULL,
       content TEXT NOT NULL,
+      images TEXT DEFAULT '[]',
+      image_status TEXT DEFAULT 'approved',
       view_count INTEGER DEFAULT 0,
       reply_count INTEGER DEFAULT 0,
       is_pinned INTEGER DEFAULT 0,
@@ -181,6 +183,8 @@ function migrateSchema() {
       FOREIGN KEY (deleted_by) REFERENCES users(id)
     )
   `);
+  try { _db.run("ALTER TABLE forum_posts ADD COLUMN images TEXT DEFAULT '[]'"); } catch(e) {}
+  try { _db.run("ALTER TABLE forum_posts ADD COLUMN image_status TEXT DEFAULT 'approved'"); } catch(e) {}
   _db.run(`
     CREATE TABLE IF NOT EXISTS forum_replies (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -627,6 +631,8 @@ function initTables() {
       user_id INTEGER NOT NULL,
       title TEXT NOT NULL,
       content TEXT NOT NULL,
+      images TEXT DEFAULT '[]',
+      image_status TEXT DEFAULT 'approved',
       is_pinned INTEGER DEFAULT 0,
       view_count INTEGER DEFAULT 0,
       reply_count INTEGER DEFAULT 0,
@@ -638,6 +644,8 @@ function initTables() {
       FOREIGN KEY (user_id) REFERENCES users(id)
     )
   `);
+  try { _db.run("ALTER TABLE forum_posts ADD COLUMN images TEXT DEFAULT '[]'"); } catch(e) {}
+  try { _db.run("ALTER TABLE forum_posts ADD COLUMN image_status TEXT DEFAULT 'approved'"); } catch(e) {}
   _db.run(`
     CREATE TABLE IF NOT EXISTS forum_replies (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

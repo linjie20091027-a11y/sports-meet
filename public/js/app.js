@@ -51,6 +51,7 @@ const App = {
     // 倒计时独立启动，不依赖API
     this._startCountdownSafe();
     window.addEventListener('hashchange', () => this.handleRoute());
+    initPullToRefresh();
   },
 
   _startCountdownSafe() {
@@ -2101,6 +2102,50 @@ const App = {
 };
 
 window.App = App;
+
+function initPullToRefresh() {
+  var el = document.getElementById('pull-refresh-indicator');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'pull-refresh-indicator';
+    el.innerHTML = '<div class="ptr-spinner" style="display:none"></div><span></span>';
+    document.body.appendChild(el);
+  }
+  var startY = 0, pulling = false, threshold = 60;
+  var spinner = el.querySelector('.ptr-spinner');
+  var text = el.querySelector('span');
+
+  document.addEventListener('touchstart', function(e) {
+    if (window.scrollY <= 0) { startY = e.touches[0].clientY; pulling = true; }
+  }, { passive: true });
+
+  document.addEventListener('touchmove', function(e) {
+    if (!pulling) return;
+    var dy = e.touches[0].clientY - startY;
+    if (dy > 10) {
+      text.textContent = dy > threshold ? '松开立即刷新' : '下拉刷新';
+      text.style.display = '';
+      spinner.style.display = 'none';
+      el.classList.add('show');
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchend', function() {
+    if (!pulling) return;
+    var dy = (typeof event !== 'undefined' && event.changedTouches) ? (event.changedTouches[0] && event.changedTouches[0].clientY || 0) - startY : 0;
+    if (dy > threshold) {
+      text.textContent = '刷新中...';
+      spinner.style.display = '';
+      text.style.display = 'none';
+      el.classList.add('show');
+      setTimeout(function() { location.reload(); }, 300);
+    } else {
+      el.classList.remove('show');
+    }
+    pulling = false;
+    startY = 0;
+  });
+}
 
 // 背景点击关闭 + ESC关闭
 document.getElementById('modal-overlay')?.addEventListener('click', (e) => {

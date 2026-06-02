@@ -37,6 +37,30 @@ const upload = multer({
   }
 });
 
+// 论坛图片上传配置
+const forumUploadDir = path.join(__dirname, '..', 'public', 'uploads', 'forum');
+if (!fs.existsSync(forumUploadDir)) fs.mkdirSync(forumUploadDir, { recursive: true });
+const forumStorage = multer.diskStorage({
+  destination: forumUploadDir,
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const name = 'forum_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8) + ext;
+    cb(null, name);
+  }
+});
+const forumUpload = multer({
+  storage: forumStorage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'].includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('仅支持 JPG / PNG / GIF / WebP / BMP 图片格式'));
+    }
+  }
+});
+
 function optionalAuth(req, res, next) {
   const token = req.headers.authorization?.replace('Bearer ', '') || req.cookies?.token;
   if (!token) return next();
@@ -376,7 +400,7 @@ router.get('/posts/:id', optionalAuth, (req, res) => {
   }
 });
 
-router.post('/posts', authMiddleware, ensureNotMuted, (req, res) => {
+router.post('/posts', authMiddleware, ensureNotMuted, forumUpload.array('images', 5), (req, res) => {
   try {
     const db = getDb();
     const user = ensureActiveUser(db, req.user.id);
@@ -403,12 +427,15 @@ router.post('/posts', authMiddleware, ensureNotMuted, (req, res) => {
     assertPostingRate(db, req.user.id, 'forum_posts', 'title', title);
     const status = user.role === 'admin' ? 'approved' : 'pending';
     const stage = user.role === 'admin' ? 2 : 1;
+    const imageFiles = (req.files || []).map(f => 'uploads/forum/' + f.filename);
+    const imagesJson = JSON.stringify(imageFiles);
+    const imageStatus = req.user.role === 'admin' ? 'approved' : 'pending';
     const inserted = db.prepare(`
       INSERT INTO forum_posts (
         user_id, title, summary, content, category, tags, attachments,
-        status, review_stage, is_pinned, is_featured, last_interaction_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, datetime('now','localtime'))
-    `).run(req.user.id, title, summary, content, category, JSON.stringify(tags), JSON.stringify(attachments), status, stage);
+        status, review_stage, images, image_status, is_pinned, is_featured, last_interaction_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, datetime('now','localtime'))
+    `).run(req.user.id, title, summary, content, category, JSON.stringify(tags), JSON.stringify(attachments), status, stage, imagesJson, imageStatus);
     insertModerationLog(db, { post_id: inserted.lastInsertRowid, action: status === 'approved' ? 'publish_post' : 'submit_post', stage, operator_id: req.user.id });
     if (status !== 'approved') {
       notifyAdmins(db, {
@@ -1068,6 +1095,45 @@ router.get('/admin/stats', authMiddleware, adminOnly, (req, res) => {
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
+});
+
+// DELETE /posts/:id/images/:filename — 管理员删除帖子中的图片
+router.delete('/posts/:id/images/:filename', authMiddleware, adminOnly, (req, res) => {
+  try {
+    const db = getDb();
+    const post = db.prepare('SELECT id, images FROM forum_posts WHERE id = ? AND is_deleted = 0').get(req.params.id);
+    if (!post) return res.status(404).json({ success: false, error: '帖子不存在' });
+    let images = [];
+    try { images = JSON.parse(post.images || '[]'); } catch(e) {}
+    const target = req.params.filename;
+    const idx = images.findIndex(img => img.endsWith(target));
+    if (idx === -1) return res.status(404).json({ success: false, error: '图片不存在' });
+    const filePath = path.join(__dirname, '..', 'public', images[idx]);
+    try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch(e) {}
+    images.splice(idx, 1);
+    db.prepare('UPDATE forum_posts SET images = ? WHERE id = ?').run(JSON.stringify(images), req.params.id);
+    res.json({ success: true, message: '图片已删除' });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+// PUT /posts/:id/images/approve — 管理员通过帖子图片审核
+router.put('/posts/:id/images/approve', authMiddleware, adminOnly, (req, res) => {
+  try {
+    const db = getDb();
+    const post = db.prepare('SELECT id FROM forum_posts WHERE id = ? AND is_deleted = 0').get(req.params.id);
+    if (!post) return res.status(404).json({ success: false, error: '帖子不存在' });
+    db.prepare("UPDATE forum_posts SET image_status = 'approved' WHERE id = ?").run(req.params.id);
+    res.json({ success: true, message: '图片已通过审核' });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+// PUT /posts/:id/images/reject — 管理员驳回帖子图片
+router.put('/posts/:id/images/reject', authMiddleware, adminOnly, (req, res) => {
+  try {
+    const db = getDb();
+    const post = db.prepare('SELECT id FROM forum_posts WHERE id = ? AND is_deleted = 0').get(req.params.id);
+    if (!post) return res.status(404).json({ success: false, error: '帖子不存在' });
+    db.prepare("UPDATE forum_posts SET image_status = 'rejected' WHERE id = ?").run(req.params.id);
+    res.json({ success: true, message: '图片已驳回' });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 module.exports = { forumRouter: router, aiRouter: AI_ROUTER };
