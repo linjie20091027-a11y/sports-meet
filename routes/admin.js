@@ -771,102 +771,38 @@ router.get('/registrations/:id', (req, res) => {
   }
 });
 
+function registrationReviewFlowDisabled(res) {
+  return res.status(403).json({
+    success: false,
+    error: '管理员审核流程已下线，请使用班主任教师端处理报名审核'
+  });
+}
+
 // PUT /registrations/:id/approve - 审核通过
 router.put('/registrations/:id/approve', (req, res) => {
-  try {
-    const db = getDb();
-    const { id } = req.params;
-    const reg = db.prepare('SELECT * FROM registrations WHERE id = ?').get(id);
-    if (!reg) return res.status(404).json({ success: false, error: '报名记录不存在' });
-    db.prepare("UPDATE registrations SET status = 'approved', reviewed_by = ?, reviewed_at = datetime('now','localtime') WHERE id = ?").run(req.user.id, id);
-    // 发送通知
-    const event = db.prepare('SELECT name FROM events WHERE id = ?').get(reg.event_id);
-    db.prepare("INSERT INTO notifications (user_id, type, title, content, target_url) VALUES (?, 'success', '报名已通过', ?, '/student')").run(
-      reg.user_id, `您报名的【${event ? event.name : '项目'}】已通过审核，请查看赛程安排`
-    );
-    logOperation(req.user.id, req.user.username, '审核通过报名', `报名ID:${id}`, getIp(req));
-    res.json({ success: true, message: '已通过' });
-  } catch (e) {
-    res.status(500).json({ success: false, error: e.message });
-  }
+  return registrationReviewFlowDisabled(res);
 });
 
 // PUT /registrations/batch-approve - 批量通过
 router.put('/registrations/batch-approve', (req, res) => {
-  try {
-    const db = getDb();
-    const { ids } = req.body;
-    if (!ids || !Array.isArray(ids) || ids.length === 0) return res.status(400).json({ success: false, error: '请提供ID数组' });
-    const stmt = db.prepare("UPDATE registrations SET status = 'approved', reviewed_by = ?, reviewed_at = datetime('now','localtime') WHERE id = ?");
-    const notiStmt = db.prepare("INSERT INTO notifications (user_id, type, title, content, target_url) VALUES (?,'success','报名已通过',?,'/student')");
-    ids.forEach(id => {
-      stmt.run(req.user.id, id);
-      const reg = db.prepare('SELECT user_id, event_id FROM registrations WHERE id = ?').get(id);
-      if (reg) {
-        const event = db.prepare('SELECT name FROM events WHERE id = ?').get(reg.event_id);
-        notiStmt.run(reg.user_id, `您报名的【${event ? event.name : '项目'}】已通过审核`);
-      }
-    });
-    logOperation(req.user.id, req.user.username, '批量通过报名', `批量通过${ids.length}条报名`, getIp(req));
-    res.json({ success: true, message: `已批量通过${ids.length}条报名` });
-  } catch (e) {
-    res.status(500).json({ success: false, error: e.message });
-  }
+  return registrationReviewFlowDisabled(res);
 });
 
 // PUT /registrations/:id/reject - 驳回
 router.put('/registrations/:id/reject', (req, res) => {
-  try {
-    const db = getDb();
-    const { id } = req.params;
-    const { reason } = req.body;
-    const reg = db.prepare('SELECT * FROM registrations WHERE id = ?').get(id);
-    if (!reg) return res.status(404).json({ success: false, error: '报名记录不存在' });
-    db.prepare("UPDATE registrations SET status = 'rejected', reject_reason = ?, reviewed_by = ?, reviewed_at = datetime('now','localtime') WHERE id = ?").run(reason || '', req.user.id, id);
-    // 发送通知
-    const event = db.prepare('SELECT name FROM events WHERE id = ?').get(reg.event_id);
-    db.prepare("INSERT INTO notifications (user_id, type, title, content, target_url) VALUES (?, 'warning', '报名已驳回', ?, '/student')").run(
-      reg.user_id, `您报名的【${event ? event.name : '项目'}】已被驳回${reason ? '，原因：' + reason : ''}`
-    );
-    logOperation(req.user.id, req.user.username, '驳回报名', `报名ID:${id} 原因:${reason}`, getIp(req));
-    res.json({ success: true, message: '已驳回' });
-  } catch (e) {
-    res.status(500).json({ success: false, error: e.message });
-  }
+  return registrationReviewFlowDisabled(res);
 });
 
 // GET /registrations/stats - 报名统计
 
 // PUT /registrations/:id/approve-cancel - 批准取消报名
 router.put('/registrations/:id/approve-cancel', (req, res) => {
-  try {
-    const db = getDb();
-    const reg = db.prepare("SELECT r.*, e.name AS event_name, u.name AS user_name FROM registrations r LEFT JOIN events e ON r.event_id = e.id LEFT JOIN users u ON r.user_id = u.id WHERE r.id = ? AND r.status = 'cancelling'").get(req.params.id);
-    if (!reg) return res.status(404).json({ success: false, error: '取消申请不存在或已处理' });
-    db.prepare('DELETE FROM registrations WHERE id = ?').run(req.params.id);
-    createNotification(db, reg.user_id, {
-      type: 'success', title: '取消报名已批准',
-      content: `您取消「${reg.event_name||''}」报名的申请已被管理员批准。`,
-      target_url: '#/student'
-    });
-    res.json({ success: true, message: '已批准取消' });
-  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+  return registrationReviewFlowDisabled(res);
 });
 
 // PUT /registrations/:id/reject-cancel - 驳回取消报名
 router.put('/registrations/:id/reject-cancel', (req, res) => {
-  try {
-    const db = getDb();
-    const reg = db.prepare("SELECT r.*, e.name AS event_name, u.name AS user_name FROM registrations r LEFT JOIN events e ON r.event_id = e.id LEFT JOIN users u ON r.user_id = u.id WHERE r.id = ? AND r.status = 'cancelling'").get(req.params.id);
-    if (!reg) return res.status(404).json({ success: false, error: '取消申请不存在或已处理' });
-    db.prepare("UPDATE registrations SET status = 'approved', reviewed_by = ?, reviewed_at = datetime('now','localtime') WHERE id = ?").run(req.user.id, req.params.id);
-    createNotification(db, reg.user_id, {
-      type: 'warning', title: '取消报名已驳回',
-      content: `您取消「${reg.event_name||''}」报名的申请被管理员驳回，报名仍有效。`,
-      target_url: '#/student'
-    });
-    res.json({ success: true, message: '已驳回取消申请' });
-  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+  return registrationReviewFlowDisabled(res);
 });
 router.get('/registrations/stats', (req, res) => {
   try {

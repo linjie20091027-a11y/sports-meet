@@ -17,6 +17,8 @@ const SKIP = '\x1b[36m[SKIP]\x1b[0m';
 let results = { total: 0, passed: 0, failed: 0, skipped: 0 };
 let adminToken = null;
 let adminUser = null;
+let homeroomTeacherToken = null;
+let eventTeacherToken = null;
 let studentPrimaryToken = null;
 let studentSecondaryToken = null;
 let studentTertiaryToken = null;
@@ -354,6 +356,28 @@ async function runAllTests() {
       return true;
     }
     return '登录失败 — 无法认证';
+  });
+
+  const homeroomLoginRes = await request('POST', '/api/auth/quick-login', {
+    body: { email: 'teacher_homeroom@hkms.hktedu.com', password: 'teacher123' }
+  });
+  if (homeroomLoginRes.status === 200 && homeroomLoginRes.body?.success && homeroomLoginRes.body?.data?.token) {
+    homeroomTeacherToken = homeroomLoginRes.body.data.token;
+  }
+  await test('认证', 'POST /api/auth/quick-login 班主任', async () => {
+    if (!homeroomTeacherToken) return `登录失败: ${JSON.stringify(homeroomLoginRes.body).slice(0, 100)}`;
+    return true;
+  });
+
+  const eventTeacherLoginRes = await request('POST', '/api/auth/quick-login', {
+    body: { email: 'teacher_event@hkms.hktedu.com', password: 'teacher123' }
+  });
+  if (eventTeacherLoginRes.status === 200 && eventTeacherLoginRes.body?.success && eventTeacherLoginRes.body?.data?.token) {
+    eventTeacherToken = eventTeacherLoginRes.body.data.token;
+  }
+  await test('认证', 'POST /api/auth/quick-login 任课教师', async () => {
+    if (!eventTeacherToken) return `登录失败: ${JSON.stringify(eventTeacherLoginRes.body).slice(0, 100)}`;
+    return true;
   });
 
   await test('认证', 'POST /api/auth/register', async () => {
@@ -748,9 +772,69 @@ async function runAllTests() {
   }
 
   // =====================================================
-  // 5. 管理员功能
+  // 5. 教师功能
   // =====================================================
-  console.log('\n━━━ 5. 管理员功能（需登录token） ━━━');
+  console.log('\n━━━ 5. 教师功能（需登录token） ━━━');
+
+  if (homeroomTeacherToken) {
+    await test('教师', 'GET /api/teacher/me 班主任', async () => {
+      const res = await request('GET', '/api/teacher/me', { token: homeroomTeacherToken });
+      if (res.status !== 200) return `状态码 ${res.status}: ${JSON.stringify(res.body).slice(0, 120)}`;
+      if (res.body?.data?.staff_type !== 'homeroom_teacher') return `身份异常: ${JSON.stringify(res.body).slice(0, 120)}`;
+      return true;
+    });
+
+    await test('教师', 'GET /api/teacher/homeroom/overview', async () => {
+      const res = await request('GET', '/api/teacher/homeroom/overview', { token: homeroomTeacherToken });
+      if (res.status !== 200) return `状态码 ${res.status}: ${JSON.stringify(res.body).slice(0, 120)}`;
+      const summary = res.body?.data?.summary;
+      if (!summary || typeof summary.student_count !== 'number') return `响应异常: ${JSON.stringify(res.body).slice(0, 120)}`;
+      console.log(` (学生${summary.student_count}人, 待审${summary.pending_registration_count || 0}条)`);
+      return true;
+    });
+  } else {
+    await testSkip('教师', 'GET /api/teacher/me 班主任', '无可用token');
+    await testSkip('教师', 'GET /api/teacher/homeroom/overview', '无可用token');
+  }
+
+  if (eventTeacherToken) {
+    await test('教师', 'GET /api/teacher/me 任课教师', async () => {
+      const res = await request('GET', '/api/teacher/me', { token: eventTeacherToken });
+      if (res.status !== 200) return `状态码 ${res.status}: ${JSON.stringify(res.body).slice(0, 120)}`;
+      if (res.body?.data?.staff_type !== 'event_teacher') return `身份异常: ${JSON.stringify(res.body).slice(0, 120)}`;
+      return true;
+    });
+
+    await test('教师', 'GET /api/teacher/event/assignments', async () => {
+      const res = await request('GET', '/api/teacher/event/assignments', { token: eventTeacherToken });
+      if (res.status !== 200) return `状态码 ${res.status}: ${JSON.stringify(res.body).slice(0, 120)}`;
+      if (!Array.isArray(res.body?.data?.events)) return `响应异常: ${JSON.stringify(res.body).slice(0, 120)}`;
+      const firstEvent = res.body.data.events[0];
+      if (!firstEvent?.id) return '未返回分配项目';
+      console.log(` (${res.body.data.events.length}个项目, 首项ID:${firstEvent.id})`);
+      return true;
+    });
+
+    await test('教师', 'GET /api/teacher/event/results-entry', async () => {
+      const assignmentsRes = await request('GET', '/api/teacher/event/assignments', { token: eventTeacherToken });
+      const firstEventId = assignmentsRes.body?.data?.events?.[0]?.id;
+      if (!firstEventId) return '缺少已分配项目';
+      const res = await request('GET', `/api/teacher/event/results-entry?event_id=${firstEventId}`, { token: eventTeacherToken });
+      if (res.status !== 200) return `状态码 ${res.status}: ${JSON.stringify(res.body).slice(0, 120)}`;
+      if (!res.body?.data || !Array.isArray(res.body.data.participants)) return `响应异常: ${JSON.stringify(res.body).slice(0, 120)}`;
+      console.log(` (项目${firstEventId}, ${res.body.data.participants.length}条待录入)`);
+      return true;
+    });
+  } else {
+    await testSkip('教师', 'GET /api/teacher/me 任课教师', '无可用token');
+    await testSkip('教师', 'GET /api/teacher/event/assignments', '无可用token');
+    await testSkip('教师', 'GET /api/teacher/event/results-entry', '无可用token');
+  }
+
+  // =====================================================
+  // 6. 管理员功能
+  // =====================================================
+  console.log('\n━━━ 6. 管理员功能（需登录token） ━━━');
 
   if (adminToken) {
     const adminEndpoints = [
@@ -774,16 +858,27 @@ async function runAllTests() {
         return true;
       });
     }
+
+    await test('管理员', 'PUT /api/admin/registrations/batch-approve 已下线', async () => {
+      const res = await request('PUT', '/api/admin/registrations/batch-approve', {
+        token: adminToken,
+        body: { ids: [1] }
+      });
+      if (res.status !== 403) return `预期403，实际${res.status}`;
+      if (!String(res.body?.error || '').includes('已下线')) return `错误信息异常: ${JSON.stringify(res.body).slice(0, 120)}`;
+      return true;
+    });
   } else {
     for (const ep of ['dashboard','users','events','registrations','schedules','results','logs']) {
       await testSkip('管理员', `GET /api/admin/${ep}`, '无可用token');
     }
+    await testSkip('管理员', 'PUT /api/admin/registrations/batch-approve 已下线', '无可用token');
   }
 
   // =====================================================
-  // 6. 前端页面
+  // 7. 前端页面
   // =====================================================
-  console.log('\n━━━ 6. 前端页面 ━━━');
+  console.log('\n━━━ 7. 前端页面 ━━━');
 
   const pages = [
     { path: '/', name: '首页' },

@@ -1036,8 +1036,11 @@ const Admin = {
     this._regPage = 1;
     container.innerHTML = `
       <div class="card" style="margin-bottom:24px;">
-        <div class="card__header"><h3 class="card__title">报名记录</h3><div class="card__actions"><button class="btn btn--success btn--sm" id="btn-batch-approve"><i class="fas fa-check-double"></i> 批量通过</button><button class="btn btn--outline btn--sm" id="btn-export-reg"><i class="fas fa-download"></i> 导出报名表</button></div></div>
+        <div class="card__header"><h3 class="card__title">报名记录</h3><div class="card__actions"><button class="btn btn--outline btn--sm" id="btn-export-reg"><i class="fas fa-download"></i> 导出报名表</button></div></div>
         <div class="card__body">
+          <div class="empty-state" style="padding:1rem 0 1.25rem;text-align:left">
+            <div class="empty-state__desc">管理员审核流程已下线，当前页面仅保留只读查看与导出能力。报名审核与取消审核统一由班主任在教师端处理。</div>
+          </div>
           <div class="search-filter-bar" id="reg-filter-bar"></div>
           <div class="table-container" id="reg-table-container"></div>
           <div id="reg-pagination"></div>
@@ -1169,7 +1172,6 @@ const Admin = {
   },
 
   _bindRegEvents(container) {
-    container.querySelector('#btn-batch-approve').addEventListener('click', () => this._batchApprove(container));
     container.querySelector('#btn-export-reg').addEventListener('click', () => this._exportRegistrations());
   },
 
@@ -1193,26 +1195,18 @@ const Admin = {
 
       let html = '';
       if (list.length > 0) {
-        html = '<table class="table table--striped"><thead><tr><th><input type="checkbox" id="reg-select-all"></th><th>学号</th><th>姓名</th><th>班级</th><th>年级</th><th>项目</th><th>状态</th><th>操作</th></tr></thead><tbody>';
+        html = '<table class="table table--striped"><thead><tr><th>学号</th><th>姓名</th><th>班级</th><th>年级</th><th>项目</th><th>状态</th><th>说明</th><th>操作</th></tr></thead><tbody>';
         list.forEach(r => {
           const statusMap = { pending: '<span class="badge badge--pending">待审核</span>', approved: '<span class="badge badge--approved">已通过</span>', rejected: '<span class="badge badge--rejected">已驳回</span>', cancelling: '<span class="badge badge--warning">取消审核中</span>' };
-          html += '<tr><td><input type="checkbox" class="reg-checkbox" data-id="' + r.id + '" data-status="' + r.status + '"></td>';
-          html += '<td>' + (r.student_id || '-') + '</td>';
+          html += '<tr><td>' + (r.student_id || '-') + '</td>';
           html += '<td>' + (r.user_name || '-') + '</td>';
           html += '<td>' + (r.class_name || '-') + '</td>';
           html += '<td>' + (r.grade || '-') + '</td>';
           html += '<td>' + (r.event_name || '-') + '</td>';
           html += '<td>' + (statusMap[r.status] || r.status) + '</td>';
+          html += '<td>' + (r.status === 'pending' || r.status === 'cancelling' ? '请由班主任教师端处理' : '已归档') + '</td>';
           html += '<td><div class="table__actions">';
           html += '<button class="btn btn--outline btn--xs btn-detail-reg" data-id="' + r.id + '"><i class="fas fa-eye"></i> 详情</button>';
-          if (r.status === 'pending') {
-            html += '<button class="btn btn--success btn--xs btn-approve-reg" data-id="' + r.id + '"><i class="fas fa-check"></i> 通过</button>';
-            html += '<button class="btn btn--warning btn--xs btn-reject-reg" data-id="' + r.id + '"><i class="fas fa-times"></i> 驳回</button>';
-          }
-          if (r.status === 'cancelling') {
-            html += '<button class="btn btn--success btn--xs btn-approve-cancel" data-id="' + r.id + '"><i class="fas fa-check"></i> 批准取消</button>';
-            html += '<button class="btn btn--warning btn--xs btn-reject-cancel" data-id="' + r.id + '"><i class="fas fa-times"></i> 驳回取消</button>';
-          }
           html += '</div></td></tr>';
         });
         html += '</tbody></table>';
@@ -1223,73 +1217,13 @@ const Admin = {
       container.querySelector('#reg-table-container').innerHTML = html;
       const pagInfo = this._paginate({ page: this._regPage, total, limit: this._regLimit, callback: (p) => { this._regPage = p; this._loadRegistrations(container); } });
       container.querySelector('#reg-pagination').innerHTML = this._renderPagination(pagInfo, 'reg-pagination');
-
-      // 全选
-      const selectAll = container.querySelector('#reg-select-all');
-      if (selectAll) {
-        selectAll.addEventListener('change', () => {
-          container.querySelectorAll('.reg-checkbox').forEach(cb => { if (cb.dataset.status === 'pending') cb.checked = selectAll.checked; });
-        });
-      }
-
-      container.querySelectorAll('.btn-approve-reg').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          try {
-            await API.admin.approveRegistration(btn.dataset.id);
-            App.showToast('已通过', 'success');
-            this._loadRegistrations(container);
-          } catch (e) { App.showToast(e.message, 'error'); }
-        });
-      });
-      container.querySelectorAll('.btn-reject-reg').forEach(btn => {
-        btn.addEventListener('click', () => this._showRejectReason(btn.dataset.id, container));
-      });
       container.querySelectorAll('.btn-detail-reg').forEach(btn => {
         btn.addEventListener('click', () => this._showRegDetail(btn.dataset.id, container));
-      });
-      container.querySelectorAll('.btn-approve-cancel').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          try {
-            await API.admin.approveCancel(btn.dataset.id);
-            App.showToast('已批准取消', 'success');
-            this._loadRegistrations(container);
-          } catch (e) { App.showToast(e.message, 'error'); }
-        });
-      });
-      container.querySelectorAll('.btn-reject-cancel').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          try {
-            await API.admin.rejectCancel(btn.dataset.id);
-            App.showToast('已驳回取消申请', 'success');
-            this._loadRegistrations(container);
-          } catch (e) { App.showToast(e.message, 'error'); }
-        });
       });
     } catch (e) {
       App.hideLoading();
       App.showToast(e.message, 'error');
     }
-  },
-
-  _showRejectReason(id, container) {
-    let html = '<div class="modal__header"><h3 class="modal__title">驳回报名</h3><button class="modal__close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>';
-    html += '<div class="modal__body"><div class="form"><div class="form__group"><label class="form__label">驳回原因</label><textarea class="form__textarea" id="reject-reason" rows="3" placeholder="请输入驳回原因..."></textarea></div></div></div>';
-    html += '<div class="modal__footer"><button class="btn btn--outline" onclick="App.hideModal()">取消</button><button class="btn btn--warning" id="btn-confirm-reject">确认驳回</button></div>';
-    App.showModal(html);
-    document.getElementById('btn-confirm-reject').addEventListener('click', async () => {
-      const reason = document.getElementById('reject-reason').value.trim();
-      try {
-        App.showLoading();
-        await API.put('/admin/registrations/' + id + '/reject', { reason });
-        App.hideLoading();
-        App.hideModal();
-        App.showToast('已驳回', 'success');
-        this._loadRegistrations(container);
-      } catch (e) {
-        App.hideLoading();
-        App.showToast(e.message, 'error');
-      }
-    });
   },
 
   async _showRegDetail(id, container) {
@@ -1332,22 +1266,6 @@ const Admin = {
       html += '</div><div class="modal-footer"><button class="btn btn-secondary" onclick="App.hideModal()">关闭</button></div>';
       App.showModal(html);
     } catch(e) { App.hideLoading(); App.showToast(e.message, 'error'); }
-  },
-
-  async _batchApprove(container) {
-    const ids = [];
-    container.querySelectorAll('.reg-checkbox:checked').forEach(cb => { if (cb.dataset.status === 'pending') ids.push(parseInt(cb.dataset.id)); });
-    if (ids.length === 0) { App.showToast('请勾选待审核的记录', 'warning'); return; }
-    try {
-      App.showLoading();
-      await API.put('/admin/registrations/batch-approve', { ids });
-      App.hideLoading();
-      App.showToast('已批量通过 ' + ids.length + ' 条报名', 'success');
-      this._loadRegistrations(container);
-    } catch (e) {
-      App.hideLoading();
-      App.showToast(e.message, 'error');
-    }
   },
 
   async _renderRegPieChart(container) {
