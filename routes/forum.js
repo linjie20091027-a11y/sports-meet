@@ -400,7 +400,7 @@ router.get('/posts/:id', optionalAuth, (req, res) => {
   }
 });
 
-router.post('/posts', authMiddleware, ensureNotMuted, forumUpload.array('images', 5), (req, res) => {
+router.post('/posts', authMiddleware, ensureNotMuted, forumUpload.array('images', 5), async (req, res) => {
   try {
     const db = getDb();
     const user = ensureActiveUser(db, req.user.id);
@@ -428,19 +428,38 @@ router.post('/posts', authMiddleware, ensureNotMuted, forumUpload.array('images'
       return res.status(400).json({ success: false, error: '帖子内容含违规词，已自动拦截' });
     }
 
+    // AI 自动审核（非管理员）
+    let aiResult = null;
+    if (user.role !== 'admin') {
+      try { aiResult = await aiModeratePost(title, summary, hasFiles); }
+      catch (_) { aiResult = null; }
+    }
+
     assertPostingRate(db, req.user.id, 'forum_posts', 'title', title);
-    const status = user.role === 'admin' ? 'approved' : 'pending';
-    const stage = user.role === 'admin' ? 2 : 1;
+    let status, stage;
+    if (user.role === 'admin') {
+      status = 'approved';
+      stage = 2;
+    } else if (aiResult && aiResult.action === 'approved') {
+      status = 'approved';
+      stage = 2;
+    } else if (aiResult && aiResult.action === 'rejected') {
+      status = 'rejected';
+      stage = 2;
+    } else {
+      status = 'pending';
+      stage = 1;
+    }
+    const imageStatus = user.role === 'admin' ? 'approved' : (status === 'approved' ? 'approved' : 'pending');
     const imagesJson = JSON.stringify(imageFiles);
-    const imageStatus = req.user.role === 'admin' ? 'approved' : 'pending';
     const inserted = db.prepare(`
       INSERT INTO forum_posts (
         user_id, title, summary, content, category, tags, attachments,
         status, review_stage, images, image_status, is_pinned, is_featured, last_interaction_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, datetime('now','localtime'))
     `).run(req.user.id, title, summary, content, category, JSON.stringify(tags), JSON.stringify(attachments), status, stage, imagesJson, imageStatus);
-    insertModerationLog(db, { post_id: inserted.lastInsertRowid, action: status === 'approved' ? 'publish_post' : 'submit_post', stage, operator_id: req.user.id });
-    if (status !== 'approved') {
+      insertModerationLog(db, { post_id: inserted.lastInsertRowid, action: status === 'approved' ? (aiResult ? 'ai_approve_post' : 'publish_post') : (aiResult ? 'ai_reject_post' : 'submit_post'), stage, operator_id: req.user.id, comment: aiResult?.reason || '' });
+    if (status === 'pending') {
       notifyAdmins(db, {
         type: 'warning',
         title: '论坛有新帖子待审核',
@@ -458,7 +477,7 @@ router.post('/posts', authMiddleware, ensureNotMuted, forumUpload.array('images'
   }
 });
 
-router.post('/posts/:id/replies', authMiddleware, ensureNotMuted, (req, res) => {
+router.post('/posts/:id/replies', authMiddleware, ensureNotMuted, async (req, res) => {
   try {
     const db = getDb();
     const post = db.prepare('SELECT id, user_id, title, status, is_deleted FROM forum_posts WHERE id = ?').get(req.params.id);
@@ -469,14 +488,30 @@ router.post('/posts/:id/replies', authMiddleware, ensureNotMuted, (req, res) => 
     if (containsSensitiveContent(text)) return res.status(400).json({ success: false, error: '评论内容含违规词，已自动拦截' });
     assertPostingRate(db, req.user.id, 'forum_replies', 'content', text);
 
-    const status = req.user.role === 'admin' ? 'approved' : 'pending';
+    // AI 自动审核
+    let aiResult = null;
+    if (req.user.role !== 'admin') {
+      try { aiResult = await aiModeratePost('', text, false); }
+      catch (_) { aiResult = null; }
+    }
+
+    let replyStatus;
+    if (req.user.role === 'admin') {
+      replyStatus = 'approved';
+    } else if (aiResult && aiResult.action === 'approved') {
+      replyStatus = 'approved';
+    } else if (aiResult && aiResult.action === 'rejected') {
+      replyStatus = 'rejected';
+    } else {
+      replyStatus = 'pending';
+    }
     const inserted = db.prepare(
       'INSERT INTO forum_replies (post_id, user_id, content, status) VALUES (?, ?, ?, ?)'
-    ).run(post.id, req.user.id, text, status);
-    if (status === 'approved') {
+    ).run(post.id, req.user.id, text, replyStatus);
+    if (replyStatus === 'approved') {
       rebuildReplyCount(db, post.id);
       touchPost(db, post.id);
-    } else {
+    } else if (replyStatus === 'pending') {
       notifyAdmins(db, {
         type: 'warning',
         title: '论坛有新评论待审核',
@@ -484,8 +519,8 @@ router.post('/posts/:id/replies', authMiddleware, ensureNotMuted, (req, res) => 
         target_url: '#/admin'
       });
     }
-    insertModerationLog(db, { post_id: post.id, reply_id: inserted.lastInsertRowid, action: status === 'approved' ? 'approve_reply_auto' : 'submit_reply', stage: status === 'approved' ? 2 : 1, operator_id: req.user.id });
-    if (post.user_id !== req.user.id && status === 'approved') {
+    insertModerationLog(db, { post_id: post.id, reply_id: inserted.lastInsertRowid, action: replyStatus === 'approved' ? (aiResult ? 'ai_approve_reply' : 'approve_reply_auto') : (aiResult ? 'ai_reject_reply' : 'submit_reply'), stage: replyStatus === 'approved' ? 2 : 1, operator_id: req.user.id, comment: aiResult?.reason || '' });
+    if (post.user_id !== req.user.id && replyStatus === 'approved') {
       createNotification(db, post.user_id, {
         type: 'info',
         title: '论坛有新评论',
@@ -493,7 +528,7 @@ router.post('/posts/:id/replies', authMiddleware, ensureNotMuted, (req, res) => 
         target_url: `#/forum/${post.id}`
       });
     }
-    res.json({ success: true, message: status === 'approved' ? '评论成功' : '评论已提交，等待审核' });
+    res.json({ success: true, message: replyStatus === 'approved' ? '评论成功' : '评论已提交，等待审核' });
   } catch (e) {
     res.status(400).json({ success: false, error: e.message });
   }
@@ -557,7 +592,7 @@ router.post('/posts/:id/report', authMiddleware, (req, res) => {
       INSERT INTO forum_reports (target_type, target_id, post_id, reporter_id, reason, detail)
       VALUES ('post', ?, ?, ?, ?, ?)
     `).run(post.id, post.id, req.user.id, reason, detail);
-    db.prepare('UPDATE forum_posts SET report_count = report_count + 1 WHERE id = ?').run(post.id);
+    db.prepare('UPDATE forum_posts SET report_count = report_count + 1, status = CASE WHEN status = \'approved\' THEN \'pending\' ELSE status END, review_stage = CASE WHEN status = \'approved\' THEN 1 ELSE review_stage END WHERE id = ?').run(post.id);
     notifyAdmins(db, {
       type: 'warning',
       title: '论坛帖子被举报',
@@ -613,6 +648,54 @@ router.delete('/replies/:id', authMiddleware, (req, res) => {
 
 // ==================== AI 助手 ====================
 const AI_ROUTER = express.Router();
+
+// AI 内容审核
+async function aiModeratePost(title, content, hasFiles) {
+  loadApiKey();
+  if (!DEEPSEEK_API_KEY) return null;
+  const text = [title, content].filter(Boolean).join('\n');
+  if (!text) return null;
+  const prompt = `你是一个校园论坛内容审核助手。请审核以下帖子内容是否适合在学校运动会论坛发布。
+
+审核规则：
+1. 允许：运动会相关讨论、加油鼓励、比赛建议、正常交流
+2. 拒绝：脏话辱骂、人身攻击、广告推广、色情暴力、政治敏感内容
+
+请以JSON格式回复（不要包含其他文字）：
+{"action":"approved 或 rejected","reason":"审核理由（20字以内）"}
+
+待审核内容：
+${text.slice(0, 2000)}`;
+  const https = require('https');
+  return new Promise((resolve) => {
+    try {
+      const url = new URL(DEEPSEEK_BASE_URL);
+      const apiReq = https.request({
+        hostname: url.hostname,
+        port: 443,
+        path: url.pathname,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${DEEPSEEK_API_KEY}` },
+        timeout: 10000
+      }, (resp) => {
+        let body = '';
+        resp.on('data', chunk => body += chunk);
+        resp.on('end', () => {
+          try {
+            const json = JSON.parse(body);
+            const reply = json.choices?.[0]?.message?.content || '';
+            const match = reply.match(/\{[\s\S]*\}/);
+            if (match) resolve(JSON.parse(match[0]));
+            else resolve(null);
+          } catch (_) { resolve(null); }
+        });
+      });
+      apiReq.on('error', () => resolve(null));
+      apiReq.write(JSON.stringify({ model: 'deepseek-chat', messages: [{ role: 'user', content: prompt }], max_tokens: 200, temperature: 0.1 }));
+      apiReq.end();
+    } catch (_) { resolve(null); }
+  });
+}
 
 // DeepSeek API 配置
 let DEEPSEEK_API_KEY = '';
