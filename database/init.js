@@ -8,6 +8,15 @@ const DB_PATH = path.join(__dirname, 'sports_meet.db');
 let _db = null;
 let _sql = null;
 
+function persistRawDb(sqlDb) {
+  try {
+    const data = sqlDb.export();
+    fs.writeFileSync(DB_PATH, Buffer.from(data));
+  } catch (e) {
+    console.error('持久化数据库失败:', e.message);
+  }
+}
+
 // 包装层：将 sql.js API 转换为 better-sqlite3 兼容 API
 function wrapDb(sqlDb) {
   let transactionDepth = 0;
@@ -155,8 +164,10 @@ async function initDatabase() {
   if (isNew) {
     seedDefaultData();
   }
+  ensureTeacherAccounts();
   // seedEventDescriptions disabled - missing column
   migrateSchema();
+  persistRawDb(_db);
 
   return wrapDb(_db);
 }
@@ -207,6 +218,10 @@ function migrateSchema() {
     "ALTER TABLE users ADD COLUMN gender TEXT DEFAULT ''",
     "ALTER TABLE users ADD COLUMN age INTEGER DEFAULT 16",
     "ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT ''",
+    "ALTER TABLE users ADD COLUMN staff_type TEXT DEFAULT ''",
+    "ALTER TABLE users ADD COLUMN managed_grade TEXT DEFAULT ''",
+    "ALTER TABLE users ADD COLUMN managed_class_name TEXT DEFAULT ''",
+    "ALTER TABLE users ADD COLUMN assigned_event_ids TEXT DEFAULT '[]'",
     "ALTER TABLE results ADD COLUMN is_school_record INTEGER DEFAULT 0",
     "ALTER TABLE users ADD COLUMN muted_until TEXT DEFAULT ''",
     "ALTER TABLE notifications ADD COLUMN sender_name TEXT DEFAULT ''",
@@ -427,10 +442,14 @@ function initTables() {
       email TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'student' CHECK(role IN ('admin','student')),
+      staff_type TEXT DEFAULT '' CHECK(staff_type IN ('','homeroom_teacher','event_teacher')),
       student_id TEXT UNIQUE,
       name TEXT NOT NULL,
       class_name TEXT DEFAULT '',
       grade TEXT DEFAULT '',
+      managed_grade TEXT DEFAULT '',
+      managed_class_name TEXT DEFAULT '',
+      assigned_event_ids TEXT DEFAULT '[]',
       gender TEXT DEFAULT '',
       age INTEGER DEFAULT 16,
       avatar TEXT DEFAULT '',
@@ -960,6 +979,76 @@ function seedDefaultData() {
 
   const data = _db.export();
   fs.writeFileSync(DB_PATH, Buffer.from(data));
+}
+
+function ensureTeacherAccounts() {
+  const teacherHash = bcrypt.hashSync('teacher123', 10);
+  const defaults = [
+    {
+      username: 'teacher_homeroom',
+      email: 'teacher_homeroom@hkms.hktedu.com',
+      student_id: 'TEACHER001',
+      name: '默认班主任',
+      staff_type: 'homeroom_teacher',
+      managed_grade: '高一',
+      managed_class_name: '高一(11)班',
+      assigned_event_ids: '[]'
+    },
+    {
+      username: 'teacher_event',
+      email: 'teacher_event@hkms.hktedu.com',
+      student_id: 'TEACHER002',
+      name: '默认任课教师',
+      staff_type: 'event_teacher',
+      managed_grade: '',
+      managed_class_name: '',
+      assigned_event_ids: '[1,2]'
+    }
+  ];
+
+  defaults.forEach((teacher) => {
+    const stmt = _db.prepare('SELECT id FROM users WHERE email = ?');
+    stmt.bind([teacher.email]);
+    const exists = stmt.step() ? stmt.getAsObject() : null;
+    stmt.free();
+
+    if (exists && exists.id) {
+      _db.run(`
+        UPDATE users
+        SET role = 'admin',
+            staff_type = ?,
+            managed_grade = ?,
+            managed_class_name = ?,
+            assigned_event_ids = ?,
+            updated_at = datetime('now','localtime')
+        WHERE id = ?
+      `, [
+        teacher.staff_type,
+        teacher.managed_grade,
+        teacher.managed_class_name,
+        teacher.assigned_event_ids,
+        exists.id
+      ]);
+      return;
+    }
+
+    _db.run(`
+      INSERT INTO users (
+        username, email, password, role, staff_type, student_id, name,
+        class_name, grade, managed_grade, managed_class_name, assigned_event_ids
+      ) VALUES (?, ?, ?, 'admin', ?, ?, ?, '', '', ?, ?, ?)
+    `, [
+      teacher.username,
+      teacher.email,
+      teacherHash,
+      teacher.staff_type,
+      teacher.student_id,
+      teacher.name,
+      teacher.managed_grade,
+      teacher.managed_class_name,
+      teacher.assigned_event_ids
+    ]);
+  });
 }
 
 function seedEventDescriptions() {

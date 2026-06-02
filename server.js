@@ -62,6 +62,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/public', require('./routes/public'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/student', require('./routes/student'));
+app.use('/api/teacher', require('./routes/teacher'));
 app.use('/api/gallery', require('./routes/gallery').publicRouter);
 app.use('/api/admin/gallery', require('./routes/gallery').adminRouter);
 const forumRoutes = require('./routes/forum');

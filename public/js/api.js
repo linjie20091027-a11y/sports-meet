@@ -252,6 +252,17 @@ const API = {
     markAnnouncementRead(id) { return API.put('/student/announcements/' + id + '/read'); },
   },
 
+  teacher: {
+    getProfile() { return API.get('/teacher/me'); },
+    getHomeroomOverview() { return API.get('/teacher/homeroom/overview'); },
+    getHomeroomRegistrations(params) { return API.get('/teacher/homeroom/registrations' + API._qs(params)); },
+    reviewRegistration(id, data) { return API.put('/teacher/registrations/' + id + '/review', data); },
+    reviewCancelRegistration(id, data) { return API.put('/teacher/registrations/' + id + '/cancel-review', data); },
+    getAssignments() { return API.get('/teacher/event/assignments'); },
+    getResultsEntry(params) { return API.get('/teacher/event/results-entry' + API._qs(params)); },
+    batchSaveResults(data) { return API.post('/teacher/event/results/batch-save', data); },
+  },
+
   gallery: {
     getApproved(params) { return API.get('/gallery/approved' + API._qs(params)); },
     upload(formData) { return API.upload('/gallery/upload', formData); },

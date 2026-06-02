@@ -5,7 +5,16 @@ const JWT_SECRET = process.env.JWT_SECRET || 'sports_meet_secret_key_2026';
 
 function generateToken(user) {
   return jwt.sign(
-    { id: user.id, username: user.username, email: user.email, role: user.role, name: user.name },
+    {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      name: user.name,
+      staff_type: user.staff_type || '',
+      managed_grade: user.managed_grade || '',
+      managed_class_name: user.managed_class_name || ''
+    },
     JWT_SECRET,
     { expiresIn: '24h' }
   );
@@ -33,8 +42,29 @@ function authMiddleware(req, res, next) {
 }
 
 function adminOnly(req, res, next) {
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({ error: '权限不足，仅管理员可操作' });
+  if (req.user.role !== 'admin' || req.user.staff_type) {
+    return res.status(403).json({ error: '权限不足，仅平台管理员可操作' });
+  }
+  next();
+}
+
+function teacherOnly(req, res, next) {
+  if (req.user.role !== 'admin' || !req.user.staff_type) {
+    return res.status(403).json({ error: '权限不足，仅教师可操作' });
+  }
+  next();
+}
+
+function homeroomTeacherOnly(req, res, next) {
+  if (req.user.role !== 'admin' || req.user.staff_type !== 'homeroom_teacher') {
+    return res.status(403).json({ error: '权限不足，仅班主任可操作' });
+  }
+  next();
+}
+
+function eventTeacherOnly(req, res, next) {
+  if (req.user.role !== 'admin' || req.user.staff_type !== 'event_teacher') {
+    return res.status(403).json({ error: '权限不足，仅任课教师可操作' });
   }
   next();
 }
@@ -49,4 +79,14 @@ function logOperation(userId, username, action, detail, ip) {
   }
 }
 
-module.exports = { generateToken, verifyToken, authMiddleware, adminOnly, logOperation, JWT_SECRET };
+module.exports = {
+  generateToken,
+  verifyToken,
+  authMiddleware,
+  adminOnly,
+  teacherOnly,
+  homeroomTeacherOnly,
+  eventTeacherOnly,
+  logOperation,
+  JWT_SECRET
+};

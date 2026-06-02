@@ -33,6 +33,36 @@ const RESULT_ALLOWED_TEXT_REGEX = /^[A-Za-z0-9\u4e00-\u9fa5\s:.,()\-+/（）]*$/
 const RESULT_ALLOWED_NOTE_REGEX = /^[A-Za-z0-9\u4e00-\u9fa5\s:.,()\-+/，。！？；：“”‘’、（）【】#&]*$/;
 const RESULT_PERFORMANCE_REGEX = /^(?:\d{1,2}:\d{1,2}(?:\.\d{1,3})?|\d{1,5}(?:\.\d{1,3})?|DNS|DNF|DQ|NM)$/i;
 const RESULT_ALLOWED_NAME_REGEX = /^[A-Za-z0-9\u4e00-\u9fa5\s·.．・()（）-]{1,50}$/;
+const STAFF_TYPES = new Set(['', 'homeroom_teacher', 'event_teacher']);
+
+function normalizeStaffType(value) {
+  const normalized = String(value || '').trim();
+  return STAFF_TYPES.has(normalized) ? normalized : '';
+}
+
+function normalizeAssignedEventIds(input) {
+  let raw = [];
+  if (Array.isArray(input)) {
+    raw = input;
+  } else if (typeof input === 'string') {
+    const text = input.trim();
+    if (text.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(text);
+        raw = Array.isArray(parsed) ? parsed : [];
+      } catch (_) {
+        raw = text.split(',').map((item) => item.trim()).filter(Boolean);
+      }
+    } else {
+      raw = text.split(',').map((item) => item.trim()).filter(Boolean);
+    }
+  } else if (input !== undefined && input !== null) {
+    raw = [input];
+  }
+  return [...new Set(raw
+    .map((item) => parseInt(item, 10))
+    .filter((item) => Number.isInteger(item) && item > 0))];
+}
 
 function cleanResultText(value, maxLength, regex) {
   const text = String(value || '').trim().slice(0, maxLength);
@@ -305,9 +335,36 @@ router.get('/users', (req, res) => {
     if (keyword) { conditions.push('(u.name LIKE ? OR u.username LIKE ? OR u.student_id LIKE ? OR u.email LIKE ?)'); params.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`); }
 
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
-    const query = `SELECT u.id, u.username, u.email, u.role, u.student_id, u.name, u.class_name, u.grade, u.status, u.created_at FROM users u ${where} ORDER BY u.id DESC`;
+    const query = `SELECT
+      u.id, u.username, u.email, u.role, u.student_id, u.name, u.class_name, u.grade, u.status, u.created_at,
+      COALESCE(u.staff_type, '') AS staff_type,
+      COALESCE(u.managed_grade, '') AS managed_grade,
+      COALESCE(u.managed_class_name, '') AS managed_class_name,
+      COALESCE(u.assigned_event_ids, '[]') AS assigned_event_ids
+      FROM users u ${where} ORDER BY u.id DESC`;
     const result = paginate(query, params, page, limit);
     res.json({ success: true, data: result });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// GET /users/:id - 用户详情
+router.get('/users/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const user = db.prepare(`
+      SELECT
+        id, username, email, role, student_id, name, class_name, grade, status, created_at,
+        COALESCE(staff_type, '') AS staff_type,
+        COALESCE(managed_grade, '') AS managed_grade,
+        COALESCE(managed_class_name, '') AS managed_class_name,
+        COALESCE(assigned_event_ids, '[]') AS assigned_event_ids
+      FROM users
+      WHERE id = ?
+    `).get(req.params.id);
+    if (!user) return res.status(404).json({ success: false, error: '用户不存在' });
+    res.json({ success: true, data: user });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
@@ -317,14 +374,52 @@ router.get('/users', (req, res) => {
 router.post('/users', (req, res) => {
   try {
     const db = getDb();
-    const { username, email, password, name, student_id, class_name, grade } = req.body;
-    if (!username || !email || !password || !name || !student_id || !class_name || !grade) {
-      return res.status(400).json({ success: false, error: '所有字段必填' });
+    const {
+      username,
+      email,
+      password,
+      name,
+      student_id,
+      class_name,
+      grade,
+      role,
+      staff_type,
+      managed_grade,
+      managed_class_name,
+      assigned_event_ids
+    } = req.body;
+    const normalizedRole = String(role || 'student').trim() === 'admin' ? 'admin' : 'student';
+    const normalizedStaffType = normalizedRole === 'admin' ? normalizeStaffType(staff_type) : '';
+    if (!username || !email || !password || !name) {
+      return res.status(400).json({ success: false, error: '用户名、邮箱、密码、姓名为必填项' });
+    }
+    if (normalizedRole === 'student' && (!student_id || !class_name || !grade)) {
+      return res.status(400).json({ success: false, error: '学生账号必须填写学号、班级和年级' });
+    }
+    if (normalizedStaffType === 'homeroom_teacher' && (!String(managed_grade || grade || '').trim() || !String(managed_class_name || class_name || '').trim())) {
+      return res.status(400).json({ success: false, error: '班主任必须配置负责的年级和班级' });
+    }
+    if (normalizedStaffType === 'event_teacher' && normalizeAssignedEventIds(assigned_event_ids).length === 0) {
+      return res.status(400).json({ success: false, error: '任课教师必须分配至少一个录入项目' });
     }
     const hash = bcrypt.hashSync(password, 10);
-    db.prepare(`INSERT INTO users (username, email, password, role, student_id, name, class_name, grade)
-      VALUES (?, ?, ?, 'student', ?, ?, ?, ?)`).run(username, email, hash, student_id, name, class_name, grade);
-    logOperation(req.user.id, req.user.username, '添加学生', `添加学生: ${name}(${student_id})`, getIp(req));
+    db.prepare(`INSERT INTO users (
+      username, email, password, role, staff_type, student_id, name, class_name, grade, managed_grade, managed_class_name, assigned_event_ids
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      username,
+      email,
+      hash,
+      normalizedRole,
+      normalizedStaffType,
+      student_id || '',
+      name,
+      class_name || '',
+      grade || '',
+      normalizedStaffType === 'homeroom_teacher' ? String(managed_grade || grade || '').trim() : '',
+      normalizedStaffType === 'homeroom_teacher' ? String(managed_class_name || class_name || '').trim() : '',
+      JSON.stringify(normalizedStaffType === 'event_teacher' ? normalizeAssignedEventIds(assigned_event_ids) : [])
+    );
+    logOperation(req.user.id, req.user.username, '添加用户', `添加用户: ${name}(${normalizedRole}${normalizedStaffType ? ':' + normalizedStaffType : ''})`, getIp(req));
     res.json({ success: true, message: '添加成功' });
   } catch (e) {
     if (e.message.includes('UNIQUE')) return res.status(400).json({ success: false, error: '用户名/邮箱/学号已存在' });
@@ -373,7 +468,19 @@ router.put('/users/:id', (req, res) => {
   try {
     const db = getDb();
     const { id } = req.params;
-    const { name, student_id, class_name, grade, email, username, role } = req.body;
+    const {
+      name,
+      student_id,
+      class_name,
+      grade,
+      email,
+      username,
+      role,
+      staff_type,
+      managed_grade,
+      managed_class_name,
+      assigned_event_ids
+    } = req.body;
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
     if (!user) return res.status(404).json({ success: false, error: '用户不存在' });
 
@@ -384,8 +491,44 @@ router.put('/users/:id', (req, res) => {
     if (grade !== undefined) fields.grade = grade;
     if (email !== undefined) fields.email = email;
     if (username !== undefined) fields.username = username;
-    if (role !== undefined && ['admin', 'student'].includes(role) && user.id !== 1) {
-      fields.role = role;
+    const normalizedRole = role !== undefined ? (String(role).trim() === 'admin' ? 'admin' : 'student') : user.role;
+    const normalizedStaffType = normalizedRole === 'admin'
+      ? normalizeStaffType(staff_type !== undefined ? staff_type : user.staff_type)
+      : '';
+    if (role !== undefined && ['admin', 'student'].includes(normalizedRole) && user.id !== 1) {
+      fields.role = normalizedRole;
+    }
+    if (staff_type !== undefined || role !== undefined) {
+      fields.staff_type = normalizedStaffType;
+    }
+    if (managed_grade !== undefined || staff_type !== undefined || role !== undefined) {
+      fields.managed_grade = normalizedStaffType === 'homeroom_teacher'
+        ? String(managed_grade !== undefined ? managed_grade : user.managed_grade || grade || '').trim()
+        : '';
+    }
+    if (managed_class_name !== undefined || staff_type !== undefined || role !== undefined) {
+      fields.managed_class_name = normalizedStaffType === 'homeroom_teacher'
+        ? String(managed_class_name !== undefined ? managed_class_name : user.managed_class_name || class_name || '').trim()
+        : '';
+    }
+    if (assigned_event_ids !== undefined || staff_type !== undefined || role !== undefined) {
+      fields.assigned_event_ids = JSON.stringify(
+        normalizedStaffType === 'event_teacher'
+          ? normalizeAssignedEventIds(assigned_event_ids !== undefined ? assigned_event_ids : user.assigned_event_ids)
+          : []
+      );
+    }
+    const effectiveManagedGrade = fields.managed_grade !== undefined ? fields.managed_grade : (user.managed_grade || '');
+    const effectiveManagedClassName = fields.managed_class_name !== undefined ? fields.managed_class_name : (user.managed_class_name || '');
+    if (normalizedStaffType === 'homeroom_teacher' && (!String(effectiveManagedGrade).trim() || !String(effectiveManagedClassName).trim())) {
+      return res.status(400).json({ success: false, error: '班主任必须配置负责的年级和班级' });
+    }
+    if (normalizedStaffType === 'event_teacher') {
+      const eventIds = normalizeAssignedEventIds(fields.assigned_event_ids !== undefined ? fields.assigned_event_ids : user.assigned_event_ids);
+      if (eventIds.length === 0) {
+        return res.status(400).json({ success: false, error: '任课教师必须分配至少一个录入项目' });
+      }
+      fields.assigned_event_ids = JSON.stringify(eventIds);
     }
 
     if (Object.keys(fields).length > 0) {

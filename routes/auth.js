@@ -121,13 +121,7 @@ router.post('/login', (req, res) => {
 
     db.prepare('UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = ?').run(user.id);
 
-    const token = generateToken({
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      role: user.role,
-      name: user.name
-    });
+    const token = generateToken(user);
 
     logOperation(user.id, user.username, 'login', `用户登录: ${email}`, getClientIp(req));
 
@@ -141,7 +135,11 @@ router.post('/login', (req, res) => {
           username: user.username,
           email: user.email,
           role: user.role,
-          name: user.name
+          name: user.name,
+          staff_type: user.staff_type || '',
+          managed_grade: user.managed_grade || '',
+          managed_class_name: user.managed_class_name || '',
+          assigned_event_ids: user.assigned_event_ids || '[]'
         }
       }
     });
@@ -162,9 +160,25 @@ router.post('/quick-login', (req, res) => {
     if (!bcrypt.compareSync(password, user.password)) return res.json({ success: false, error: '密码错误' });
     if (user.role !== 'admin') return res.json({ success: false, error: '快速登录仅限管理员' });
     db.prepare('UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = ?').run(user.id);
-    const token = generateToken({ id: user.id, username: user.username, email: user.email, role: user.role, name: user.name });
+    const token = generateToken(user);
     logOperation(user.id, user.username, 'quick-login', `快速登录: ${email}`, getClientIp(req));
-    res.json({ success: true, data: { token, user: { id: user.id, username: user.username, email: user.email, role: user.role, name: user.name } } });
+    res.json({
+      success: true,
+      data: {
+        token,
+        user: {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          role: user.role,
+          name: user.name,
+          staff_type: user.staff_type || '',
+          managed_grade: user.managed_grade || '',
+          managed_class_name: user.managed_class_name || '',
+          assigned_event_ids: user.assigned_event_ids || '[]'
+        }
+      }
+    });
   } catch (e) {
     res.json({ success: false, error: '登录失败' });
   }
@@ -174,7 +188,12 @@ router.get('/me', authMiddleware, (req, res) => {
   try {
     const db = getDb();
     const user = db.prepare(
-      'SELECT id, username, email, role, name, student_id, class_name, grade FROM users WHERE id = ?'
+      `SELECT id, username, email, role, name, student_id, class_name, grade,
+        COALESCE(staff_type, '') AS staff_type,
+        COALESCE(managed_grade, '') AS managed_grade,
+        COALESCE(managed_class_name, '') AS managed_class_name,
+        COALESCE(assigned_event_ids, '[]') AS assigned_event_ids
+      FROM users WHERE id = ?`
     ).get(req.user.id);
     if (!user) {
       return res.status(404).json({ success: false, error: '用户不存在' });
