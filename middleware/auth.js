@@ -59,6 +59,14 @@ function teacherOnly(req, res, next) {
   next();
 }
 
+function studentOnly(req, res, next) {
+  const access = resolveAccessProfile(req.user);
+  if (!access.isStudent) {
+    return res.status(403).json({ error: '权限不足，仅学生可操作' });
+  }
+  next();
+}
+
 function homeroomTeacherOnly(req, res, next) {
   const access = resolveAccessProfile(req.user);
   if (!access.isHomeroomTeacher) {
@@ -90,6 +98,7 @@ module.exports = {
   verifyToken,
   authMiddleware,
   adminOnly,
+  studentOnly,
   teacherOnly,
   homeroomTeacherOnly,
   eventTeacherOnly,

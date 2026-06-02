@@ -27,3 +27,18 @@
   - `@' ... require('./server') + /api/auth/quick-login + /api/admin/users ... '@ | node`：确认全局管理员登录后返回 `permission_role=global_admin`，管理员用户列表可返回教师账号的 `permission_role=teacher`。
   - `test_all.js`：已新增“权限角色解析优先使用持久化 permission_role”回归用例。
 - 结果：通过。
+
+## 第 3 次迭代
+
+- 目标：收紧学生端访问范围，确保学生账号只能进入学生接口，且只能查看本人体育数据。
+- 本次变更：
+  - 新增 `studentOnly` 鉴权中间件，学生路由统一只允许学生账号访问。
+  - 学生端班级排名、年级排名接口直接关闭，避免返回跨用户体育数据。
+  - 学生好友链路新增目标用户角色过滤，禁止学生通过好友入口接触教师或全局管理员账号资料。
+  - 学生好友列表、申请箱、已发申请查询增加学生角色过滤，避免混入非学生对象。
+- 测试记录：
+  - `@' ... generateToken(student/teacher) + /api/student/profile ... '@ | node`：验证学生访问个人资料返回 `200`，教师访问学生资料返回 `403`。
+  - 同一脚本验证 `/api/student/results/class`、`/api/student/results/grade` 均返回 `403`。
+  - 同一脚本验证学生向教师账号发起好友申请返回 `404`，不再暴露教师资料入口。
+  - `test_all.js`：已补充“教师访问学生接口被拒绝”“学生访问班级/年级排名被拒绝”“学生向教师发好友申请被拦截”等回归用例。
+- 结果：通过。

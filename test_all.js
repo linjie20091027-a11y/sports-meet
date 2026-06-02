@@ -443,8 +443,6 @@ async function runAllTests() {
       const stu3Result = await tryLogin('20250003@hkms.hktedu.com', '123456');
       studentSecondaryToken = stu2Result?.token || null;
       studentTertiaryToken = stu3Result?.token || null;
-    } else {
-      studentToken = adminToken; // 用管理员token回退
     }
   }
 
@@ -458,6 +456,16 @@ async function runAllTests() {
       }
       return `响应异常: ${JSON.stringify(res.body).slice(0,60)}`;
     });
+
+    if (homeroomTeacherToken) {
+      await test('学生', 'GET /api/student/profile 拒绝教师访问', async () => {
+        const res = await request('GET', '/api/student/profile', { token: homeroomTeacherToken });
+        if (res.status !== 403) return `预期403，实际${res.status}`;
+        return true;
+      });
+    } else {
+      await testSkip('学生', 'GET /api/student/profile 拒绝教师访问', '无教师token');
+    }
 
     await test('学生', 'GET /api/student/events', async () => {
       const res = await request('GET', '/api/student/events', { token: studentToken });
@@ -499,6 +507,31 @@ async function runAllTests() {
       if (res.status !== 200) return `状态码 ${res.status}: ${JSON.stringify(res.body).slice(0,80)}`;
       const len = Array.isArray(res.body?.data) ? res.body.data.length : '?';
       console.log(` (${len}条成绩)`);
+      return true;
+    });
+
+    await test('学生', 'GET /api/student/results/class 已关闭', async () => {
+      const res = await request('GET', '/api/student/results/class', { token: studentToken });
+      if (res.status !== 403) return `预期403，实际${res.status}`;
+      return true;
+    });
+
+    await test('学生', 'GET /api/student/results/grade 已关闭', async () => {
+      const res = await request('GET', '/api/student/results/grade', { token: studentToken });
+      if (res.status !== 403) return `预期403，实际${res.status}`;
+      return true;
+    });
+
+    await test('学生', 'POST /api/student/friends/requests 禁止指向教师', async () => {
+      if (!homeroomTeacherToken) return '无教师token';
+      const teacherMe = await request('GET', '/api/teacher/me', { token: homeroomTeacherToken });
+      const teacherId = teacherMe.body?.data?.id;
+      if (!teacherId) return '未取到教师ID';
+      const res = await request('POST', '/api/student/friends/requests', {
+        token: studentToken,
+        body: { target_user_id: teacherId, remark: '越权测试', friend_group: '同学' }
+      });
+      if (res.status !== 404) return `预期404，实际${res.status}`;
       return true;
     });
 
@@ -612,9 +645,10 @@ async function runAllTests() {
       return true;
     });
   } else {
-    for (const name of ['profile','events','registrations POST','registrations GET','my-schedules','my-results','friends accept flow','friends reject flow']) {
+    for (const name of ['profile','events','registrations POST','registrations GET','my-schedules','my-results','results/class closed','results/grade closed','friends to teacher blocked','friends accept flow','friends reject flow']) {
       await testSkip('学生', name, '无可用token');
     }
+    await testSkip('学生', 'GET /api/student/profile 拒绝教师访问', '无学生token');
   }
 
   // =====================================================

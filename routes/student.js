@@ -2,13 +2,15 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const { getDb } = require('../database/init');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, studentOnly } = require('../middleware/auth');
 const { createNotification } = require('../utils/notify');
 
 router.use(authMiddleware);
+router.use(studentOnly);
 
 const DEFAULT_FRIEND_GROUP = '同学';
 let studentFeatureSchemaReady = false;
+const STUDENT_PERMISSION_SQL = "COALESCE(u.permission_role, CASE WHEN u.role = 'admin' AND COALESCE(u.staff_type, '') != '' THEN 'teacher' WHEN u.role = 'admin' THEN 'global_admin' ELSE 'student' END) = 'student'";
 
 function normalizeFriendGroup(value) {
   const groupName = String(value || '').trim();
@@ -127,7 +129,7 @@ function getFriendData(db, userId) {
       WHERE r.status != 'rejected'
       GROUP BY r.user_id
     ) ev ON ev.user_id = u.id
-    WHERE f.user_id = ?
+    WHERE f.user_id = ? AND ${STUDENT_PERMISSION_SQL}
     ORDER BY ${friendOrder.join(', ')}
   `).all(userId);
 
@@ -150,7 +152,7 @@ function getFriendData(db, userId) {
       u.role
     FROM friend_requests fr
     JOIN users u ON u.id = fr.requester_id
-    WHERE fr.receiver_id = ?
+    WHERE fr.receiver_id = ? AND ${STUDENT_PERMISSION_SQL}
     ORDER BY ${requestOrder.join(', ')}
   `).all(userId);
 
@@ -173,7 +175,7 @@ function getFriendData(db, userId) {
       u.role
     FROM friend_requests fr
     JOIN users u ON u.id = fr.receiver_id
-    WHERE fr.requester_id = ?
+    WHERE fr.requester_id = ? AND ${STUDENT_PERMISSION_SQL}
     ORDER BY ${requestOrder.join(', ')}
   `).all(userId);
 
@@ -199,7 +201,7 @@ router.get('/profile', (req, res) => {
     ).get(req.user.id);
 
     if (!user) {
-      return res.status(404).json({ error: '用户不存在' });
+      return res.status(404).json({ error: '目标学生不存在' });
     }
 
     res.json({ success: true, data: user });
@@ -285,7 +287,9 @@ router.post('/friends/requests', (req, res) => {
     }
 
     const targetUser = db.prepare(`
-      SELECT id, name, status FROM users WHERE id = ? AND status = 'active'
+      SELECT id, name, status FROM users
+      WHERE id = ? AND status = 'active'
+        AND COALESCE(permission_role, CASE WHEN role = 'admin' AND COALESCE(staff_type, '') != '' THEN 'teacher' WHEN role = 'admin' THEN 'global_admin' ELSE 'student' END) = 'student'
     `).get(targetUserId);
     if (!targetUser) {
       return res.status(404).json({ success: false, error: '目标用户不存在或已停用' });
@@ -667,49 +671,12 @@ router.get('/my-results', (req, res) => {
 
 // GET /results/class - 查看班级成绩排名
 router.get('/results/class', (req, res) => {
-  try {
-    const db = getDb();
-    const rankings = db.prepare(`
-      SELECT u.class_name, u.grade,
-        COUNT(res.id) as result_count,
-        COALESCE(SUM(res.score), 0) as total_score,
-        COUNT(DISTINCT u.id) as student_count
-      FROM results res
-      JOIN users u ON res.user_id = u.id
-      WHERE res.is_published = 1
-      GROUP BY u.class_name
-      ORDER BY total_score DESC, u.class_name
-    `).all();
-
-    res.json({ success: true, data: rankings });
-  } catch (e) {
-    console.error('获取班级排名失败:', e.message);
-    res.status(500).json({ error: '服务器内部错误' });
-  }
+  return res.status(403).json({ error: '学生仅可查看本人成绩数据，班级排名入口已关闭' });
 });
 
 // GET /results/grade - 查看年级成绩排名
 router.get('/results/grade', (req, res) => {
-  try {
-    const db = getDb();
-    const rankings = db.prepare(`
-      SELECT u.grade,
-        COUNT(res.id) as result_count,
-        COALESCE(SUM(res.score), 0) as total_score,
-        COUNT(DISTINCT u.id) as student_count,
-        COUNT(DISTINCT u.class_name) as class_count
-      FROM results res
-      JOIN users u ON res.user_id = u.id
-      WHERE res.is_published = 1
-      GROUP BY u.grade
-      ORDER BY total_score DESC, u.grade
-    `).all();
-
-    res.json({ success: true, data: rankings });
-  } catch (e) {
-    console.error('获取年级排名失败:', e.message);
-    res.status(500).json({ error: '服务器内部错误' });
-  }
+  return res.status(403).json({ error: '学生仅可查看本人成绩数据，年级排名入口已关闭' });
 });
 
 // ==================== 公告 ====================
