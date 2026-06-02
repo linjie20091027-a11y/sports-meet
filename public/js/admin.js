@@ -1802,19 +1802,24 @@ const Admin = {
         approved: '<span class="badge badge--approved">已通过</span>',
         rejected: '<span class="badge badge--rejected">已驳回</span>'
       };
-      if (!items.length) { wrap.innerHTML = '<div class="empty-state"><p>暂无照片</p></div>'; return; }
+      if (!items.length) { wrap.innerHTML = '<div class="empty-state"><div class="empty-state__icon"><i class="fas fa-images"></i></div><p>暂无照片</p><p class="text-sm text-muted">用户在首页上传后，照片将在此处显示</p></div>'; return; }
       wrap.innerHTML = '<table class="table"><thead><tr><th>预览</th><th>文件名</th><th>上传者</th><th>状态</th><th>时间</th><th>操作</th></tr></thead><tbody>' +
         items.map(item => '<tr>' +
-          '<td><img src="' + (item.url || '/images/' + item.filename) + '" style="width:60px;height:45px;object-fit:cover;border-radius:4px;cursor:pointer" onclick="App.openLightbox(\'' + (item.url || '/images/' + item.filename) + '\')"></td>' +
-          '<td style="font-size:.78rem">' + (item.original_name || item.filename || '') + '</td>' +
+          '<td><img src="' + (item.url || '/images/' + item.filename) + '" class="admin-hl-thumb" data-lightbox="' + (item.url || '/images/' + item.filename) + '" style="width:120px;height:80px;object-fit:cover;border-radius:6px;cursor:zoom-in;border:1px solid var(--border)"></td>' +
+          '<td style="font-size:.78rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (item.original_name || item.filename || '') + '">' + (item.original_name || item.filename || '') + '</td>' +
           '<td>' + (item.uploader_name || '匿名') + '</td>' +
           '<td>' + (statusMap[item.status] || item.status) + '</td>' +
-          '<td style="font-size:.72rem">' + (item.created_at || '') + '</td>' +
-          '<td><div style="display:flex;gap:.3rem">' +
+          '<td style="font-size:.72rem;white-space:nowrap">' + (item.created_at || '') + '</td>' +
+          '<td><div style="display:flex;gap:.3rem;flex-wrap:wrap">' +
           (item.status !== 'approved' ? '<button class="btn btn-success btn-xs admin-hl-approve" data-id="' + item.id + '">通过</button>' : '') +
           (item.status !== 'rejected' ? '<button class="btn btn-warning btn-xs admin-hl-reject" data-id="' + item.id + '">驳回</button>' : '') +
           '<button class="btn btn-danger btn-xs admin-hl-delete" data-id="' + item.id + '" data-file="' + (item.filename || '') + '">删除</button></div></td>' +
           '</tr>').join('') + '</tbody></table>';
+
+      // 缩略图点击全屏灯箱
+      wrap.querySelectorAll('.admin-hl-thumb').forEach(img => {
+        img.addEventListener('click', () => App.openLightbox(img.dataset.lightbox));
+      });
 
       wrap.querySelectorAll('.admin-hl-approve').forEach(btn => {
         btn.addEventListener('click', async () => {
