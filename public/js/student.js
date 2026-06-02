@@ -502,13 +502,14 @@ const Student = {
   },
 
   async _cancelReg(id) {
+    App.showToast('正在处理取消请求...', 'info');
     const ok = await App.confirmDialog('确认取消该报名？');
     if (!ok) return;
     try {
       App.showLoading();
-      await API.student.cancelRegistration(id);
+      const res = await API.student.cancelRegistration(id);
       App.hideLoading();
-      App.showToast('已取消报名', 'success');
+      App.showToast(res.message || '操作成功', 'success');
       this._renderMyRegistrations();
     } catch (e) {
       App.hideLoading();
