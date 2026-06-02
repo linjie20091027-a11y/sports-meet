@@ -1363,9 +1363,13 @@ const App = {
       const genderL = g => g === 'male' ? '男子' : g === 'female' ? '女子' : '混合';
       const typeL = t => t === 'team' ? '集体' : '个人';
       const eventList = (events.value?.data || []);
-      if (eventList.length) {
+      const userGender = this.user?.gender;
+      const visibleEvents = userGender && userGender !== 'mixed'
+        ? eventList.filter(e => e.gender_group === userGender || e.gender_group === 'mixed')
+        : eventList;
+      if (visibleEvents.length) {
         let evH = '<div class="events-horiz-row">';
-        eventList.slice(0, 4).forEach(e => {
+        visibleEvents.slice(0, 4).forEach(e => {
           const iconMap = {track:'fa-person-running',field:'fa-arrow-up-right-dots',relay:'fa-people-arrows',team:'fa-people-group'};
           const icon = iconMap[e.category] || 'fa-running';
           evH += `<a href="#/events/${e.id}" class="event-horiz-card">
@@ -1739,7 +1743,11 @@ const App = {
       try {
         this.showLoading();
         const res = await API.get(url);
-        const data = res.data || [];
+        let data = res.data || [];
+        const userGender = this.user?.gender;
+        if (!gen && userGender && userGender !== 'mixed') {
+          data = data.filter(e => e.gender_group === userGender || e.gender_group === 'mixed');
+        }
         const genderL = g => g==='male'?'男子组':g==='female'?'女子组':'混合组';
         const typeL = t => t==='team'?'集体':'个人';
         const catL = c => ({track:'径赛',field:'田赛',relay:'接力',team:'集体'})[c]||c;
@@ -1809,7 +1817,13 @@ const App = {
 
       let actionHtml = '';
       if (isStudent) {
-        actionHtml = `<button type="button" class="btn btn-primary" id="event-detail-register">提交报名</button>`;
+        const userGender = this.user.gender;
+        const genderMatch = e.gender_group === 'mixed' || !userGender || e.gender_group === userGender;
+        if (genderMatch) {
+          actionHtml = `<button type="button" class="btn btn-primary" id="event-detail-register">提交报名</button>`;
+        } else {
+          actionHtml = `<span class="text-muted text-sm">该项目仅限${genderL(e.gender_group)}报名</span>`;
+        }
       } else if (!this.user) {
         actionHtml = `<a href="#/login" class="btn btn-primary">登录後报名</a>`;
       } else if (this.user.role === 'admin') {
