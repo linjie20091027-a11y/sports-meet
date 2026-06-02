@@ -5,12 +5,27 @@ const svgCaptcha = require('svg-captcha');
 const crypto = require('crypto');
 const { getDb } = require('../database/init');
 const { generateToken, logOperation, authMiddleware } = require('../middleware/auth');
+const { buildPermissionPayload } = require('../utils/accessControl');
 
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 const SCHOOL_EMAIL_SUFFIX = '@hkms.hktedu.com';
 
 function getClientIp(req) {
   return req.headers['x-forwarded-for'] || req.connection.remoteAddress || '';
+}
+
+function serializeAuthUser(user) {
+  return {
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    role: user.role,
+    name: user.name,
+    ...buildPermissionPayload(user),
+    managed_grade: user.managed_grade || '',
+    managed_class_name: user.managed_class_name || '',
+    assigned_event_ids: user.assigned_event_ids || '[]'
+  };
 }
 
 function verifyCaptcha(db, token, code) {
@@ -130,17 +145,7 @@ router.post('/login', (req, res) => {
       message: '登录成功',
       data: {
         token,
-        user: {
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          role: user.role,
-          name: user.name,
-          staff_type: user.staff_type || '',
-          managed_grade: user.managed_grade || '',
-          managed_class_name: user.managed_class_name || '',
-          assigned_event_ids: user.assigned_event_ids || '[]'
-        }
+        user: serializeAuthUser(user)
       }
     });
   } catch (e) {
@@ -166,17 +171,7 @@ router.post('/quick-login', (req, res) => {
       success: true,
       data: {
         token,
-        user: {
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          role: user.role,
-          name: user.name,
-          staff_type: user.staff_type || '',
-          managed_grade: user.managed_grade || '',
-          managed_class_name: user.managed_class_name || '',
-          assigned_event_ids: user.assigned_event_ids || '[]'
-        }
+        user: serializeAuthUser(user)
       }
     });
   } catch (e) {
@@ -198,7 +193,7 @@ router.get('/me', authMiddleware, (req, res) => {
     if (!user) {
       return res.status(404).json({ success: false, error: '用户不存在' });
     }
-    res.json({ success: true, data: user });
+    res.json({ success: true, data: serializeAuthUser(user) });
   } catch (e) {
     res.status(500).json({ success: false, error: '无法取得用户资訊' });
   }

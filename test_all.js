@@ -5,6 +5,7 @@ const path = require('path');
 const { sortSportGroups, BUSINESS_ORDER } = require('./utils/sportGroupOrder');
 const { buildCloudDbConfig, maskDatabaseUrl } = require('./config/cloudDatabase');
 const { buildBackupFileName, pruneBackupList } = require('./database/backupManager');
+const { PRIMARY_ROLES, ROLE_CODES, resolveAccessProfile } = require('./utils/accessControl');
 
 const BASE = process.env.BASE_URL || 'http://localhost:3000';
 const DB_PATH = path.join(__dirname, 'database', 'sports_meet.db');
@@ -322,6 +323,26 @@ async function runAllTests() {
     ], 2);
     if (obsolete.length !== 1 || obsolete[0].name !== 'sports_meet-20260602-101112.db') {
       return `备份轮转异常: ${JSON.stringify(obsolete)}`;
+    }
+    return true;
+  });
+
+  await test('公开', '权限角色解析兼容旧管理员与教师模型', async () => {
+    const student = resolveAccessProfile({ role: 'student' });
+    const homeroomTeacher = resolveAccessProfile({ role: 'admin', staff_type: 'homeroom_teacher' });
+    const eventTeacher = resolveAccessProfile({ role: 'admin', staff_type: 'event_teacher' });
+    const globalAdmin = resolveAccessProfile({ role: 'admin', staff_type: '' });
+    if (student.primaryRole !== PRIMARY_ROLES.STUDENT || student.roleCode !== ROLE_CODES.STUDENT) {
+      return `学生角色异常: ${JSON.stringify(student)}`;
+    }
+    if (!homeroomTeacher.isTeacher || !homeroomTeacher.isHomeroomTeacher || homeroomTeacher.primaryRole !== PRIMARY_ROLES.TEACHER) {
+      return `班主任角色异常: ${JSON.stringify(homeroomTeacher)}`;
+    }
+    if (!eventTeacher.isTeacher || !eventTeacher.isEventTeacher || eventTeacher.roleCode !== ROLE_CODES.EVENT_TEACHER) {
+      return `任课教师角色异常: ${JSON.stringify(eventTeacher)}`;
+    }
+    if (!globalAdmin.isGlobalAdmin || globalAdmin.primaryRole !== PRIMARY_ROLES.GLOBAL_ADMIN) {
+      return `全局管理员角色异常: ${JSON.stringify(globalAdmin)}`;
     }
     return true;
   });

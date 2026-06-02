@@ -3,6 +3,7 @@ const router = express.Router();
 const { getDb } = require('../database/init');
 const { authMiddleware, teacherOnly, logOperation } = require('../middleware/auth');
 const { createNotification } = require('../utils/notify');
+const { resolveAccessProfile } = require('../utils/accessControl');
 
 router.use(authMiddleware);
 router.use(teacherOnly);
@@ -40,13 +41,15 @@ function getTeacherProfile(db, userId) {
 }
 
 function assertHomeroomTeacher(profile) {
-  if (!profile || profile.role !== 'admin' || profile.staff_type !== 'homeroom_teacher') {
+  const access = resolveAccessProfile(profile);
+  if (!access.isHomeroomTeacher) {
     throw new Error('仅班主任可操作此功能');
   }
 }
 
 function assertEventTeacher(profile) {
-  if (!profile || profile.role !== 'admin' || profile.staff_type !== 'event_teacher') {
+  const access = resolveAccessProfile(profile);
+  if (!access.isEventTeacher) {
     throw new Error('仅任课教师可操作此功能');
   }
 }

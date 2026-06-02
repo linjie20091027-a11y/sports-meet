@@ -1,9 +1,11 @@
 const jwt = require('jsonwebtoken');
 const { getDb } = require('../database/init');
+const { buildPermissionPayload, resolveAccessProfile } = require('../utils/accessControl');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'sports_meet_secret_key_2026';
 
 function generateToken(user) {
+  const permissionPayload = buildPermissionPayload(user);
   return jwt.sign(
     {
       id: user.id,
@@ -11,7 +13,7 @@ function generateToken(user) {
       email: user.email,
       role: user.role,
       name: user.name,
-      staff_type: user.staff_type || '',
+      ...permissionPayload,
       managed_grade: user.managed_grade || '',
       managed_class_name: user.managed_class_name || ''
     },
@@ -42,28 +44,32 @@ function authMiddleware(req, res, next) {
 }
 
 function adminOnly(req, res, next) {
-  if (req.user.role !== 'admin' || req.user.staff_type) {
+  const access = resolveAccessProfile(req.user);
+  if (!access.isGlobalAdmin) {
     return res.status(403).json({ error: '权限不足，仅平台管理员可操作' });
   }
   next();
 }
 
 function teacherOnly(req, res, next) {
-  if (req.user.role !== 'admin' || !req.user.staff_type) {
+  const access = resolveAccessProfile(req.user);
+  if (!access.isTeacher) {
     return res.status(403).json({ error: '权限不足，仅教师可操作' });
   }
   next();
 }
 
 function homeroomTeacherOnly(req, res, next) {
-  if (req.user.role !== 'admin' || req.user.staff_type !== 'homeroom_teacher') {
+  const access = resolveAccessProfile(req.user);
+  if (!access.isHomeroomTeacher) {
     return res.status(403).json({ error: '权限不足，仅班主任可操作' });
   }
   next();
 }
 
 function eventTeacherOnly(req, res, next) {
-  if (req.user.role !== 'admin' || req.user.staff_type !== 'event_teacher') {
+  const access = resolveAccessProfile(req.user);
+  if (!access.isEventTeacher) {
     return res.status(403).json({ error: '权限不足，仅任课教师可操作' });
   }
   next();
