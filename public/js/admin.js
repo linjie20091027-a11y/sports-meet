@@ -43,6 +43,9 @@ const Admin = {
             <li class="admin-menu-item" data-tab="forum" style="display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;font-size:0.875rem;color:#6b7280;transition:all 150ms;border-left:3px solid transparent;">
               <i class="fas fa-comments" style="width:18px;text-align:center;"></i> 论坛管理
             </li>
+            <li class="admin-menu-item" data-tab="highlights" style="display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;font-size:0.875rem;color:#6b7280;transition:all 150ms;border-left:3px solid transparent;">
+              <i class="fas fa-images" style="width:18px;text-align:center;"></i> 照片管理
+            </li>
             <li class="admin-menu-item" data-tab="settings" style="display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;font-size:0.875rem;color:#6b7280;transition:all 150ms;border-left:3px solid transparent;">
               <i class="fas fa-cog" style="width:18px;text-align:center;"></i> 系统设置
             </li>
@@ -109,6 +112,7 @@ const Admin = {
       case 'stats': this.renderStats(content); break;
       case 'announcements': this.renderAnnouncements(content); break;
       case 'forum': this.renderForumManagement(content); break;
+      case 'highlights': this.renderHighlightsAdmin(content); break;
       case 'settings': this.renderSettings(content); break;
       case 'logs': this.renderLogs(content); break;
       case 'grades': this._renderGrades(content); break;
@@ -1780,6 +1784,62 @@ const Admin = {
       });
     } catch (e) {
       container.innerHTML = '<div class="empty-state"><p class="empty-state__desc">论坛管理加载失败：' + this._escapeHtml(e.message) + '</p></div>';
+    }
+  },
+
+  async renderHighlightsAdmin(container) {
+    container.innerHTML = '<h3>照片管理 · 首页精彩瞬间</h3><div class="admin-table-wrap" id="admin-highlights-table"><div class="text-center p-4"><div class="spinner"></div></div></div>';
+    await this._loadHighlightsAdmin();
+  },
+
+  async _loadHighlightsAdmin() {
+    const wrap = document.getElementById('admin-highlights-table');
+    try {
+      const res = await API.admin.getHighlights();
+      const items = res.data || [];
+      const statusMap = {
+        pending: '<span class="badge badge--pending">待审核</span>',
+        approved: '<span class="badge badge--approved">已通过</span>',
+        rejected: '<span class="badge badge--rejected">已驳回</span>'
+      };
+      if (!items.length) { wrap.innerHTML = '<div class="empty-state"><p>暂无照片</p></div>'; return; }
+      wrap.innerHTML = '<table class="table"><thead><tr><th>预览</th><th>文件名</th><th>上传者</th><th>状态</th><th>时间</th><th>操作</th></tr></thead><tbody>' +
+        items.map(item => '<tr>' +
+          '<td><img src="' + (item.url || '/images/' + item.filename) + '" style="width:60px;height:45px;object-fit:cover;border-radius:4px;cursor:pointer" onclick="App.openLightbox(\'' + (item.url || '/images/' + item.filename) + '\')"></td>' +
+          '<td style="font-size:.78rem">' + (item.original_name || item.filename || '') + '</td>' +
+          '<td>' + (item.uploader_name || '匿名') + '</td>' +
+          '<td>' + (statusMap[item.status] || item.status) + '</td>' +
+          '<td style="font-size:.72rem">' + (item.created_at || '') + '</td>' +
+          '<td><div style="display:flex;gap:.3rem">' +
+          (item.status !== 'approved' ? '<button class="btn btn-success btn-xs admin-hl-approve" data-id="' + item.id + '">通过</button>' : '') +
+          (item.status !== 'rejected' ? '<button class="btn btn-warning btn-xs admin-hl-reject" data-id="' + item.id + '">驳回</button>' : '') +
+          '<button class="btn btn-danger btn-xs admin-hl-delete" data-id="' + item.id + '" data-file="' + (item.filename || '') + '">删除</button></div></td>' +
+          '</tr>').join('') + '</tbody></table>';
+
+      wrap.querySelectorAll('.admin-hl-approve').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const r = await API.admin.approveHighlight(btn.dataset.id);
+          if (r.success) { App.showToast('已通过', 'success'); this._loadHighlightsAdmin(); }
+          else App.showToast(r.error || '操作失败', 'error');
+        });
+      });
+      wrap.querySelectorAll('.admin-hl-reject').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const r = await API.admin.rejectHighlight(btn.dataset.id);
+          if (r.success) { App.showToast('已驳回', 'success'); this._loadHighlightsAdmin(); }
+          else App.showToast(r.error || '操作失败', 'error');
+        });
+      });
+      wrap.querySelectorAll('.admin-hl-delete').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!await App.confirmDialog('确认删除此照片？')) return;
+          const r = await API.admin.deleteHighlight(btn.dataset.id);
+          if (r.success) { App.showToast('已删除', 'success'); this._loadHighlightsAdmin(); }
+          else App.showToast(r.error || '删除失败', 'error');
+        });
+      });
+    } catch(e) {
+      wrap.innerHTML = '<div class="empty-state"><p>加载失败：' + e.message + '</p></div>';
     }
   },
 

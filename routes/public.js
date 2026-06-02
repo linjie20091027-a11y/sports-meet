@@ -843,36 +843,40 @@ router.get('/stats/overview', (req, res) => {
 router.get('/highlights', (req, res) => {
   try {
     const db = getDb();
+    // 检查是否是管理员
+    const token = req.headers.authorization?.replace('Bearer ', '') || '';
+    let isAdmin = false;
+    if (token) {
+      try {
+        const jwt = require('jsonwebtoken');
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'sports-meet-2026');
+        isAdmin = decoded?.role === 'admin';
+      } catch(e) {}
+    }
+    const statusFilter = isAdmin ? '' : "WHERE status = 'approved'";
     let dbItems = [];
     try {
-      dbItems = db.prepare('SELECT id, filename, original_name, created_at FROM highlights ORDER BY created_at DESC').all();
+      dbItems = db.prepare(`SELECT id, filename, original_name, status, created_at FROM highlights ${statusFilter} ORDER BY created_at DESC`).all();
     } catch(e) {}
-    // 从 DB 记录的图片
     const items = dbItems.map(r => ({
       id: 'db-' + r.id,
       title: r.original_name || r.filename,
-      description: '',
       file_name: r.filename,
       url: '/images/' + r.filename,
+      status: r.status,
       created_at: r.created_at || ''
     }));
-    // 合并文件系统中未被 DB 记录的老图片
-    const getDirItems = () => {
-      try {
-        return fs.readdirSync(HIGHLIGHT_DIR)
-          .filter(name => /\.(png|jpe?g|gif|webp)$/i.test(name))
-          .filter(name => !dbItems.some(r => r.filename === name))
-          .map(name => ({
-            id: 'fs-' + name,
-            title: name,
-            description: '',
-            file_name: name,
-            url: '/images/' + name,
-            created_at: ''
-          }));
-      } catch(_) { return []; }
-    };
-    const fsItems = getDirItems();
+    // 合并文件系统中的老图片
+    const fsItems = [];
+    try {
+      const names = fs.readdirSync(HIGHLIGHT_DIR)
+        .filter(n => /\.(png|jpe?g|gif|webp)$/i.test(n));
+      names.forEach(name => {
+        if (!dbItems.some(r => r.filename === name)) {
+          fsItems.push({ id: 'fs-' + name, title: name, file_name: name, url: '/images/' + name, status: 'approved', created_at: '' });
+        }
+      });
+    } catch(_) {}
     res.json({ success: true, data: items.concat(fsItems) });
   } catch(e) {
     res.status(500).json({ success: false, error: e.message });
@@ -893,6 +897,56 @@ router.post('/highlights', hlUpload.single('image'), (req, res) => {
   } catch(e) {
     res.status(500).json({ success: false, error: e.message });
   }
+});
+
+// PUT /highlights/:id/approve — 管理员通过
+router.put('/highlights/:id/approve', (req, res) => {
+  try {
+    const db = getDb();
+    const id = parseInt(req.params.id);
+    if (!id) return res.status(400).json({ success: false, error: '无效ID' });
+    db.prepare("UPDATE highlights SET status = 'approved' WHERE id = ?").run(id);
+    res.json({ success: true, message: '已通过' });
+  } catch(e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// PUT /highlights/:id/reject — 管理员驳回
+router.put('/highlights/:id/reject', (req, res) => {
+  try {
+    const db = getDb();
+    const id = parseInt(req.params.id);
+    if (!id) return res.status(400).json({ success: false, error: '无效ID' });
+    db.prepare("UPDATE highlights SET status = 'rejected' WHERE id = ?").run(id);
+    res.json({ success: true, message: '已驳回' });
+  } catch(e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// DELETE /highlights/:id — 管理员删除
+router.delete('/highlights/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const id = parseInt(req.params.id);
+    if (!id) return res.status(400).json({ success: false, error: '无效ID' });
+    const row = db.prepare('SELECT filename FROM highlights WHERE id = ?').get(id);
+    if (row) {
+      const fp = path.join(__dirname, '..', 'public', 'images', row.filename);
+      try { fs.unlinkSync(fp); } catch(_) {}
+      db.prepare('DELETE FROM highlights WHERE id = ?').run(id);
+    }
+    res.json({ success: true, message: '已删除' });
+  } catch(e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// GET /highlights/admin — 管理员获取全部（含待审核）
+router.get('/highlights/admin', (req, res) => {
+  try {
+    const db = getDb();
+    const items = db.prepare('SELECT id, filename, original_name, status, created_at FROM highlights ORDER BY created_at DESC').all();
+    res.json({ success: true, data: items.map(r => ({
+      id: r.id, filename: r.filename, original_name: r.original_name,
+      status: r.status, url: '/images/' + r.filename, created_at: r.created_at
+    }))});
+  } catch(e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 module.exports = router;

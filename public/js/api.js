@@ -200,6 +200,12 @@ const API = {
     // 文件上传
     uploadImage(formData) { return API.upload('/admin/upload/image', formData); },
     uploadFile(formData) { return API.upload('/admin/upload/file', formData); },
+
+    // 照片管理
+    getHighlights() { return API.get('/admin/highlights'); },
+    approveHighlight(id) { return API.put('/admin/highlights/' + id + '/approve'); },
+    rejectHighlight(id) { return API.put('/admin/highlights/' + id + '/reject'); },
+    deleteHighlight(id) { return API.delete('/admin/highlights/' + id); },
   },
 
   // ==================== 学生接口 ====================

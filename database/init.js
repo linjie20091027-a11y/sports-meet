@@ -318,10 +318,12 @@ function migrateSchema() {
       filename TEXT NOT NULL,
       original_name TEXT,
       uploaded_by INTEGER,
+      status TEXT DEFAULT 'pending',
       created_at TEXT DEFAULT (datetime('now','localtime')),
       FOREIGN KEY (uploaded_by) REFERENCES users(id)
     )
   `);
+  try { _db.run("ALTER TABLE highlights ADD COLUMN status TEXT DEFAULT 'approved'"); } catch(e) {}
   _db.run(`
     CREATE TABLE IF NOT EXISTS forum_moderation_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -677,10 +679,12 @@ function initTables() {
       filename TEXT NOT NULL,
       original_name TEXT,
       uploaded_by INTEGER,
+      status TEXT DEFAULT 'pending',
       created_at TEXT DEFAULT (datetime('now','localtime')),
       FOREIGN KEY (uploaded_by) REFERENCES users(id)
     )
   `);
+  try { _db.run("ALTER TABLE highlights ADD COLUMN status TEXT DEFAULT 'approved'"); } catch(e) {}
 
   // 保存初始表结构
   const data = _db.export();
