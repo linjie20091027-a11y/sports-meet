@@ -1536,4 +1536,48 @@ router.get('/dashboard', (req, res) => {
   }
 });
 
+// GET /highlights — 获取所有照片（管理员用）
+router.get('/highlights', (req, res) => {
+  try {
+    const db = getDb();
+    const items = db.prepare('SELECT h.id, h.filename, h.original_name, h.status, h.created_at, u.name as uploader_name FROM highlights h LEFT JOIN users u ON h.uploaded_by = u.id ORDER BY h.created_at DESC').all();
+    res.json({ success: true, data: items });
+  } catch(e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// PUT /highlights/:id/approve
+router.put('/highlights/:id/approve', (req, res) => {
+  try {
+    const db = getDb();
+    db.prepare("UPDATE highlights SET status = 'approved' WHERE id = ?").run(parseInt(req.params.id));
+    res.json({ success: true, message: '已通过' });
+  } catch(e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// PUT /highlights/:id/reject
+router.put('/highlights/:id/reject', (req, res) => {
+  try {
+    const db = getDb();
+    db.prepare("UPDATE highlights SET status = 'rejected' WHERE id = ?").run(parseInt(req.params.id));
+    res.json({ success: true, message: '已驳回' });
+  } catch(e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// DELETE /highlights/:id
+router.delete('/highlights/:id', (req, res) => {
+  try {
+    const db = getDb();
+    const id = parseInt(req.params.id);
+    const row = db.prepare('SELECT filename FROM highlights WHERE id = ?').get(id);
+    if (row) {
+      const fs = require('fs');
+      const path = require('path');
+      const fp = path.join(__dirname, '..', 'public', 'images', row.filename);
+      try { fs.unlinkSync(fp); } catch(_) {}
+      db.prepare('DELETE FROM highlights WHERE id = ?').run(id);
+    }
+    res.json({ success: true, message: '已删除' });
+  } catch(e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
 module.exports = router;
