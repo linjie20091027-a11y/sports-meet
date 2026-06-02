@@ -418,6 +418,7 @@ h1{font-family:var(--title-font);font-size:2.2rem}h2{font-size:1.4rem}h3{font-si
 .app-lightbox__bg{position:absolute;inset:0;background:rgba(0,0,0,.9)}
 .app-lightbox__img{position:relative;z-index:1;max-width:92vw;max-height:92vh;object-fit:contain;border-radius:6px;box-shadow:0 8px 48px rgba(0,0,0,.5)}
 .app-lightbox__close{position:absolute;top:20px;right:24px;z-index:2;width:40px;height:40px;border:none;border-radius:50%;background:rgba(255,255,255,.15);color:#fff;font-size:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s}.app-lightbox__close:hover{background:rgba(255,255,255,.3)}
+.app-lightbox__prev,.app-lightbox__next{position:absolute;top:50%;transform:translateY(-50%);z-index:2;width:44px;height:44px;border:none;border-radius:50%;background:rgba(255,255,255,.15);color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s}.app-lightbox__prev:hover,.app-lightbox__next:hover{background:rgba(255,255,255,.3)}.app-lightbox__prev{left:20px}.app-lightbox__next{right:20px}
 
 /* Toast */
 #toast-container{position:fixed;bottom:1.25rem;left:50%;transform:translateX(-50%);z-index:3000;display:flex;flex-direction:column;gap:5px;align-items:center;pointer-events:none}
@@ -1183,3 +1184,57 @@ body::before {
 #pull-refresh-indicator.show{transform:translateY(0)}
 #pull-refresh-indicator .ptr-spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:ptr-spin .6s linear infinite}
 @keyframes ptr-spin{to{transform:rotate(360deg)}}
+
+/* ═══ 精彩瞬间 图片轮播 ═══ */
+.photo-gallery{margin-top:1rem;margin-bottom:2rem}
+.gallery-controls{display:flex;align-items:center;justify-content:center;gap:.75rem;margin-bottom:.75rem}
+.gallery-btn{
+  width:34px;height:34px;border:1px solid var(--border);border-radius:50%;
+  background:var(--white);color:var(--text2);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  font-size:.85rem;transition:all .2s
+}
+.gallery-btn:hover:not(:disabled){border-color:var(--gold);color:var(--red);background:var(--gold-light)}
+.gallery-btn:disabled{opacity:.3;cursor:default}
+.gallery-page-info{font-size:.75rem;color:var(--text3);font-weight:600;min-width:50px;text-align:center}
+.gallery-flip-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.gallery-flip-card{
+  flex:0 0 calc(20% - 8px);
+  min-width:150px;max-width:220px;
+  border-radius:var(--radius-lg);
+  overflow:hidden;
+  background:var(--white);
+  border:1px solid var(--border);
+  box-shadow:var(--shadow);
+  animation:galleryFlipIn .45s ease backwards
+}
+@keyframes galleryFlipIn{
+  from{opacity:0;transform:rotateY(90deg) scale(.85)}
+  to{opacity:1;transform:rotateY(0) scale(1)}
+}
+.gallery-flip-inner{aspect-ratio:3/2;overflow:hidden;background:var(--bg)}
+.gallery-flip-inner img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .4s}
+.gallery-flip-card:hover .gallery-flip-inner img{transform:scale(1.08)}
+.gallery-flip-caption{
+  padding:.35rem .6rem;
+  font-size:.68rem;
+  color:var(--text2);
+  text-align:center;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis
+}
+.gallery-flip-empty{visibility:hidden}
+@media(max-width:768px){
+  .gallery-flip-card{flex:0 0 calc(33.33% - 7px);min-width:100px}
+  .gallery-flip-card:nth-child(n+4){display:none}
+}
+
+/* ═══ 管理后台 精彩瞬间审核 ═══ */
+.gallery-admin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:.75rem}
+.gallery-admin-card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;transition:all .2s}
+.gallery-admin-card:hover{box-shadow:var(--shadow-md)}
+.gallery-admin-img{aspect-ratio:3/2;overflow:hidden;background:var(--bg)}
+.gallery-admin-img img{width:100%;height:100%;object-fit:cover;display:block}
+.gallery-admin-info{padding:.65rem .8rem;display:flex;flex-direction:column;gap:4px}
+.gallery-admin-actions{display:flex;gap:.4rem;margin-top:4px}
