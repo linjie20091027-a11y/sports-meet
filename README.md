@@ -5,12 +5,6 @@
 <h1 align="center">🏅 第三十届田径运动会管理系统</h1>
 <h3 align="center">澳门濠江中学 · 全流程数位化管理平台</h3>
 
-<p align="center">
-  <img src="https://img.shields.io/badge/学生-628人-blue?style=flat-square">
-  <img src="https://img.shields.io/badge/项目-20个-green?style=flat-square">
-  <img src="https://img.shields.io/badge/报名-1884条-orange?style=flat-square">
-  <img src="https://img.shields.io/badge/成绩-1884条-red?style=flat-square">
-</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/前端-HTML5/CSS3/JS-blue?style=flat-square">
