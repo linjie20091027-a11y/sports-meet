@@ -1368,6 +1368,7 @@ const Admin = {
           <h3 class="card__title">赛程编排</h3>
           <div class="card__actions">
             <button class="btn btn--primary btn--sm" id="btn-add-schedule"><i class="fas fa-plus"></i> 添加赛程</button>
+            <button class="btn btn--accent btn--sm" id="btn-ai-schedule"><i class="fas fa-robot"></i> AI 智能编排</button>
             <button class="btn btn--success btn--sm" id="btn-auto-schedule"><i class="fas fa-magic"></i> 自动编排</button>
             <button class="btn btn--warning btn--sm" id="btn-publish-schedules"><i class="fas fa-bullhorn"></i> 发布赛程</button>
             <button class="btn btn--outline btn--sm" id="btn-export-schedules"><i class="fas fa-download"></i> 导出赛程表</button>
@@ -1384,6 +1385,7 @@ const Admin = {
 
   _bindSchedulesEvents(container) {
     container.querySelector('#btn-add-schedule').addEventListener('click', () => this._showScheduleModal(null, container));
+    container.querySelector('#btn-ai-schedule').addEventListener('click', () => this._showAISchedule(container));
     container.querySelector('#btn-auto-schedule').addEventListener('click', () => this._showAutoSchedule(container));
     container.querySelector('#btn-publish-schedules').addEventListener('click', () => this._publishSchedules(container));
     container.querySelector('#btn-export-schedules').addEventListener('click', () => this._exportSchedules());
@@ -1534,6 +1536,101 @@ const Admin = {
         App.showToast(res.message || '自动编排完成', 'success');
         this._loadSchedules(container);
       } catch (e) { App.hideLoading(); App.showToast(e.message, 'error'); }
+    });
+  },
+
+  // AI 智能编排赛程
+  _aiScheduleData: null,
+  async _showAISchedule(container) {
+    App.showLoading();
+    try {
+      const res = await API.ai.generateSchedule();
+      App.hideLoading();
+      if (!res.success) { App.showToast(res.error || '生成失败', 'error'); return; }
+      this._aiScheduleData = res.data;
+
+      const sections = [
+        { key: 'day1_am', label: '第一天 上午 (08:00-12:00)' },
+        { key: 'day1_pm', label: '第一天 下午 (14:00-17:00)' },
+        { key: 'day2_am', label: '第二天 上午 (08:00-12:00)' },
+        { key: 'day2_pm', label: '第二天 下午 (14:00-17:00)' }
+      ];
+
+      let html = '<div class="modal__header"><h3 class="modal__title">AI 智能赛程编排</h3><button class="modal__close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>';
+      html += '<div class="modal__body"><div style="max-height:60vh;overflow-y:auto">';
+      sections.forEach(sec => {
+        const items = this._aiScheduleData[sec.key];
+        if (!items || !items.length) return;
+        html += `<h4 style="margin:12px 0 6px;color:var(--primary)">${sec.label}</h4>`;
+        html += '<table class="table table--striped" style="font-size:.75rem"><thead><tr><th style="width:8%">时间</th><th style="width:22%">项目</th><th style="width:18%">轮次</th><th style="width:10%">场地</th><th style="width:42%">参赛者</th></tr></thead><tbody>';
+        items.forEach(it => {
+          html += `<tr><td style="white-space:nowrap">${it.time||'-'}</td><td>${it.event||'-'}</td><td>${it.round||'-'} <span class="badge badge--info">${it.groupSize||'?'}人</span></td><td>${it.venue||'-'}</td><td style="font-size:.7rem;line-height:1.4">${(it.students||[]).join('、')||'-'}</td></tr>`;
+        });
+        html += '</tbody></table>';
+      });
+      html += '</div></div>';
+      html += '<div class="modal__footer">';
+      html += '<button class="btn btn--outline" onclick="App.hideModal()">关闭</button>';
+      html += '<button class="btn btn--primary" id="btn-ai-save"><i class="fas fa-save"></i> 确认并导入赛程</button>';
+      html += '<button class="btn btn--success" id="btn-ai-pdf"><i class="fas fa-file-pdf"></i> 导出 PDF</button>';
+      html += '</div>';
+      App.showModal(html);
+
+      document.getElementById('btn-ai-pdf').addEventListener('click', () => this._downloadSchedulePDF());
+      document.getElementById('btn-ai-save').addEventListener('click', async () => {
+        if (!this._aiScheduleData) return;
+        App.showLoading();
+        try {
+          // 将 AI 结果导入为赛程记录
+          let saved = 0;
+          for (const sec of Object.values(this._aiScheduleData)) {
+            if (!sec || !sec.length) continue;
+            for (const item of sec) {
+              const eventRes = await API.get('/public/events?gender_group=' + (item.gender || ''));
+              // 简化：按项目名匹配
+              const events = (eventRes.data || []);
+              const matched = events.find(e => item.event && item.event.includes(e.name));
+              if (matched) {
+                await API.admin.createSchedule({
+                  event_id: matched.id,
+                  round_name: item.round || '预赛',
+                  start_time: item.time || '',
+                  venue: item.venue || '',
+                  max_heats: 1,
+                  note: (item.students || []).join('、')
+                });
+                saved++;
+              }
+            }
+          }
+          App.hideLoading();
+          App.hideModal();
+          App.showToast(`已导入 ${saved} 条赛程`, 'success');
+          this._loadSchedules(container);
+        } catch (e) { App.hideLoading(); App.showToast('导入失败: ' + e.message, 'error'); }
+      });
+    } catch(e) {
+      App.hideLoading();
+      App.showToast('AI 生成失败: ' + e.message, 'error');
+    }
+  },
+
+  _downloadSchedulePDF() {
+    if (!this._aiScheduleData) return;
+    App.showLoading();
+    // 直接 fetch PDF 并在新窗口打开
+    fetch('/api/ai/export-schedule-pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API.token },
+      body: JSON.stringify({ schedule: this._aiScheduleData })
+    }).then(res => res.blob()).then(blob => {
+      App.hideLoading();
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      App.showToast('PDF 已生成', 'success');
+    }).catch(e => {
+      App.hideLoading();
+      App.showToast('PDF 生成失败: ' + e.message, 'error');
     });
   },
 

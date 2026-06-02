@@ -722,7 +722,7 @@ AI_ROUTER.post('/ai-chat', optionalAuth, async (req, res) => {
     });
 
     apiReq.write(JSON.stringify({
-      model: 'deepseek-v4-flash',
+      model: 'deepseek-v4-pro',
       messages: messages,
       max_tokens: 1000,
       temperature: 0.7
@@ -733,11 +733,11 @@ AI_ROUTER.post('/ai-chat', optionalAuth, async (req, res) => {
   }
 });
 
-// AI 自动生成赛程
+// AI 自动生成赛程（DeepSeek V4 Pro）
 AI_ROUTER.get('/generate-schedule', authMiddleware, adminOnly, async (req, res) => {
   try {
     loadApiKey();
-    if (!DEEPSEEK_API_KEY) return res.json({ success: false, error: 'AI 尚未配置 API Key' });
+    if (!DEEPSEEK_API_KEY) return res.json({ success: false, error: 'AI 尚未配置 API Key，请在系统设置中配置' });
 
     const db = getDb();
     const https = require('https');
@@ -772,25 +772,26 @@ AI_ROUTER.get('/generate-schedule', authMiddleware, adminOnly, async (req, res) 
       eventSummary += `\n项目：${e.name}（${e.type==='team'?'集体':'个人'}，${e.gender==='male'?'男子':e.gender==='female'?'女子':'混合'}）| 參赛人数：${e.students.length} | 參赛者：${e.students.map(s=>s.name+'('+s.class+')').join('、')}`;
     });
 
-    const prompt = `你是澳门濠江中学运动会的赛程编排專家。请根据以下报名数据，生成一份合理的比赛时间表。
+    const prompt = `你是运动会赛程编排专家。请根据报名数据生成详细赛程表。
 
-【编排要求】
-1. 运动会日期：第一天上午(8:00-12:00)、下午(14:00-17:00)；第二天上午(8:00-12:00)、下午(14:00-17:00)
-2. 徑赛项目安排在上午（天氣較涼爽），田赛和集体项目安排在下午
-3. 每個项目按參赛人数分组（每组6-8人），计算需要的轮次
-4. 同一运动员不应同时參加兩個项目（根据參赛者名單避免衝突）
-5. 100米、200米等短项目先进行預赛再決赛；長跑项目直接決赛
-6. 接力项目安排在每天最後时段
-7. 请用純JSON格式返回，格式如下：
+【编排规则】
+1. 时间：第一天 08:00-12:00 / 14:00-17:00；第二天 08:00-12:00 / 14:00-17:00
+2. 径赛(100/200/400/800/1500/接力)安排在上午，田赛(跳远/跳高/实心球)和集体项目(拔河/广播操)安排在下午
+3. 每个项目按参赛人数分组：短跑4-6人/组，长跑8-12人/组，田赛8-10人/组
+4. 径赛: 预赛→决赛；田赛: 一轮制取最佳成绩；接力/集体: 一轮制
+5. 同一运动员不同项目之间至少间隔45分钟
+6. 每组实际参赛者须列出姓名(班级)，例如"张三(初三1班)、李四(初三2班)"
+7. 每组标注：预赛第X组(X人)、决赛
 
+【返回纯JSON格式，不要代码块标记】
 {
-  "day1_am": [{"time":"08:00","event":"100米男子預赛","venue":"田徑场","round":"預赛第1组","students":["姓名(班級)"]}],
+  "day1_am": [
+    {"time":"08:00","event":"100米男子预赛","round":"预赛第1组","venue":"田径场","groupSize":6,"students":["张三(初三1班)","李四(初三2班)"]}
+  ],
   "day1_pm": [...],
   "day2_am": [...],
   "day2_pm": [...]
 }
-
-只返回JSON，不要任何其他文字。
 
 【报名数据】
 ${eventSummary}`;
@@ -820,7 +821,7 @@ ${eventSummary}`;
     });
 
     apiReq.on('error', (e) => res.json({ success: false, error: 'AI 服务暂不可用' }));
-    apiReq.write(JSON.stringify({ model: 'deepseek-chat', messages: [{ role: 'user', content: prompt }], max_tokens: 4000, temperature: 0.3 }));
+    apiReq.write(JSON.stringify({ model: 'deepseek-v4-pro', messages: [{ role: 'user', content: prompt }], max_tokens: 8000, temperature: 0.2 }));
     apiReq.end();
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
@@ -830,6 +831,60 @@ ${eventSummary}`;
 // 检查 API Key 状态
 AI_ROUTER.get('/ai-status', (req, res) => {
   res.json({ success: true, data: { configured: !!DEEPSEEK_API_KEY } });
+});
+
+// 导出赛程 PDF
+AI_ROUTER.post('/export-schedule-pdf', authMiddleware, adminOnly, (req, res) => {
+  try {
+    const PDFDocument = require('pdfkit');
+    const { schedule } = req.body;
+    if (!schedule) return res.status(400).json({ success: false, error: '无赛程数据' });
+
+    const doc = new PDFDocument({ size: 'A4', margin: 40, layout: 'landscape' });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename=schedule.pdf');
+    doc.pipe(res);
+
+    // 标题
+    doc.fontSize(18).text('运动会赛程表', { align: 'center' }).moveDown(0.8);
+
+    const sections = [
+      { key: 'day1_am', label: '第一天 上午 (08:00-12:00)' },
+      { key: 'day1_pm', label: '第一天 下午 (14:00-17:00)' },
+      { key: 'day2_am', label: '第二天 上午 (08:00-12:00)' },
+      { key: 'day2_pm', label: '第二天 下午 (14:00-17:00)' }
+    ];
+
+    sections.forEach(sec => {
+      const items = schedule[sec.key];
+      if (!items || !items.length) return;
+
+      doc.fontSize(13).text(sec.label, { underline: true }).moveDown(0.4);
+
+      items.forEach((item, idx) => {
+        doc.fontSize(10).text(
+          `${item.time || '-'}  ${item.event || '-'}  |  ${item.round || '-'}  |  ${item.venue || '-'}  |  ${item.groupSize || '?'}人/组`,
+          { indent: 10 }
+        );
+        if (item.students && item.students.length) {
+          doc.fontSize(8).fillColor('#555').text(
+            `    参赛者: ${item.students.slice(0, 12).join('、')}${item.students.length > 12 ? '...等' + item.students.length + '人' : ''}`,
+            { indent: 20 }
+          ).fillColor('#000');
+        }
+        if (idx < items.length - 1) doc.moveDown(0.2);
+      });
+      doc.moveDown(0.6);
+    });
+
+    doc.fontSize(8).fillColor('#999').text(
+      `生成时间: ${new Date().toLocaleString('zh-CN')}`, { align: 'right' }
+    );
+
+    doc.end();
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 router.get('/admin/posts', authMiddleware, adminOnly, (req, res) => {

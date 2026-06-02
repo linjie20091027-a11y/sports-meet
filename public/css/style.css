@@ -231,6 +231,7 @@ h1{font-family:var(--title-font);font-size:2.2rem}h2{font-size:1.4rem}h3{font-si
 .btn-secondary,.btn--secondary{background:var(--bg);color:var(--text);border-color:var(--border)}.btn-secondary:hover:not(:disabled){background:var(--border)}
 .btn-success,.btn--success{background:#2d6a4f;color:#fff}.btn-danger,.btn--danger{background:var(--red);color:#fff}
 .btn-outline,.btn--outline{background:transparent;color:var(--red);border-color:var(--red)}.btn-outline:hover:not(:disabled){background:var(--red);color:#fff}
+.btn--accent{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none}.btn--accent:hover:not(:disabled){box-shadow:0 4px 16px rgba(102,126,234,.4);transform:translateY(-1px)}
 .btn--ghost{background:transparent;color:var(--text2)}.btn--ghost:hover:not(:disabled){background:var(--bg)}
 .btn-text{background:none;border:none;color:var(--gold-dark);padding:.2rem .5rem;font-weight:600;cursor:pointer;font-size:.75rem}
 .btn-sm,.btn--sm{padding:.35rem .7rem;font-size:.7rem}.btn-xs{padding:.2rem .5rem;font-size:.65rem}.btn-block,.btn--block{display:flex;width:100%}
@@ -397,12 +398,21 @@ h1{font-family:var(--title-font);font-size:2.2rem}h2{font-size:1.4rem}h3{font-si
 .forum-image-preview{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:.5rem;margin-top:.75rem}
 .forum-image-preview-item{position:relative;border-radius:var(--radius);overflow:hidden;border:1px solid var(--border);aspect-ratio:1}.forum-image-preview-item img{width:100%;height:100%;object-fit:cover;display:block}
 .forum-image-preview-item .forum-preview-remove{position:absolute;top:2px;right:2px;width:20px;height:20px;border-radius:50%;border:none;background:rgba(0,0,0,.55);color:#fff;font-size:12px;line-height:1;cursor:pointer}
-/* 首页精彩瞬间 */
-.photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:.75rem;margin-top:1rem}
+/* 首页精彩瞬间 - 6格轮播 */
+.photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;margin-top:1rem}
+.carousel-slot{position:relative;border-radius:var(--radius-lg);overflow:hidden;aspect-ratio:4/3;cursor:pointer;border:1px solid var(--border);transition:transform .2s;background:var(--bg)}
+.carousel-slot:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg)}
+.carousel-slot img{width:100%;height:100%;object-fit:cover;display:block;transition:opacity .4s ease}
+.carousel-slot[data-url]{cursor:zoom-in}
+.carousel-slot--empty{display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:2rem}
+.carousel-slot--upload{display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--gold-light);gap:.35rem;font-size:.8rem;color:var(--gold);border-color:var(--gold);border-style:dashed;cursor:pointer}
+.carousel-slot--upload i{font-size:1.5rem}
+.carousel-slot--upload:hover{background:#fef9e7}
 .photo-item{position:relative;border-radius:var(--radius);overflow:hidden;aspect-ratio:4/3;cursor:pointer;border:1px solid var(--border);transition:transform .2s,box-shadow .2s}.photo-item:hover{transform:translateY(-2px);box-shadow:var(--shadow-md)}
 .photo-item img{width:100%;height:100%;object-fit:cover;display:block}
 .photo-upload-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg);color:var(--text2);gap:.35rem;font-size:.75rem}.photo-upload-btn i{font-size:1.5rem;color:var(--gold)}.photo-upload-btn:hover{background:#fef9e7;border-color:var(--gold)}
 .photo-upload-prompt{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2.5rem 1rem;background:var(--bg);border:2px dashed var(--border);border-radius:var(--radius);cursor:pointer;color:var(--text2);gap:.5rem;transition:all .2s}.photo-upload-prompt:hover{border-color:var(--gold);background:#fef9e7}.photo-upload-prompt i{font-size:2rem;color:var(--gold)}
+@media (max-width:600px){.photo-grid{grid-template-columns:repeat(2,1fr)}}
 /* 通用全屏灯箱 */
 .app-lightbox{position:fixed;inset:0;z-index:5000;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .25s}.app-lightbox.show{opacity:1;pointer-events:auto}
 .app-lightbox__bg{position:absolute;inset:0;background:rgba(0,0,0,.9)}

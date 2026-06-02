@@ -1455,26 +1455,76 @@ const App = {
     try {
       const res = await API.public.getHighlights();
       const items = res.data || [];
-      if (!items.length) {
-        grid.innerHTML = `<div class="photo-upload-prompt" id="photo-upload-prompt"><i class="fas fa-camera"></i><p>上传第一张精彩瞬间</p></div>`;
-        document.getElementById('photo-upload-prompt')?.addEventListener('click', () => App.highlightUpload());
-        return;
+      // 6 格布局：前 5 格轮播，第 6 格上传
+      const approvedItems = items.filter(i => i.status === 'approved');
+      const hasPhotos = approvedItems.length > 0;
+      
+      let html = '';
+      for (let i = 0; i < 6; i++) {
+        if (i < 5) {
+          // 轮播图位
+          if (approvedItems.length > 0) {
+            const idx = i % approvedItems.length;
+            html += `<div class="carousel-slot" data-index="${idx}" data-url="${approvedItems[idx].url}">
+              <img src="${approvedItems[idx].url}" alt="精彩瞬间" loading="lazy">
+            </div>`;
+          } else {
+            html += `<div class="carousel-slot carousel-slot--empty"><i class="fas fa-image"></i></div>`;
+          }
+        } else {
+          // 上传按钮位
+          html += `<div class="carousel-slot carousel-slot--upload" id="carousel-upload-btn">
+            <i class="fas fa-plus"></i><span>上传照片</span>
+          </div>`;
+        }
       }
-      let h = items.map(item => `
-        <div class="photo-item" data-lightbox="${item.url}">
-          <img src="${item.url}" alt="${item.title || ''}" loading="lazy">
-        </div>
-      `).join('');
-      h += `<div class="photo-item photo-upload-btn" id="photo-upload-btn"><i class="fas fa-plus"></i><span>上传</span></div>`;
-      grid.innerHTML = h;
-      grid.querySelectorAll('.photo-item[data-lightbox]').forEach(el => {
-        el.addEventListener('click', () => App.openLightbox(el.dataset.lightbox));
+      grid.innerHTML = html;
+
+      // 轮播逻辑
+      if (approvedItems.length > 1) {
+        this._startCarousel();
+      } else {
+        this._stopCarousel();
+      }
+
+      // 点击任意轮播格打开灯箱
+      grid.querySelectorAll('.carousel-slot[data-url]').forEach(el => {
+        el.addEventListener('click', () => App.openLightbox(el.dataset.url));
       });
-      document.getElementById('photo-upload-btn')?.addEventListener('click', () => App.highlightUpload());
+      document.getElementById('carousel-upload-btn')?.addEventListener('click', () => App.highlightUpload());
     } catch(e) {
       grid.innerHTML = '<div class="photo-upload-prompt" id="photo-upload-prompt"><i class="fas fa-camera"></i><p>上传精彩瞬间</p></div>';
       document.getElementById('photo-upload-prompt')?.addEventListener('click', () => App.highlightUpload());
     }
+  },
+
+  _carouselTimer: null,
+  _carouselIndex: 0,
+
+  _startCarousel() {
+    this._stopCarousel();
+    const slots = document.querySelectorAll('#photo-grid .carousel-slot[data-url]');
+    if (slots.length <= 1) return;
+    const items = [];
+    slots.forEach(el => items.push(el.dataset.url));
+    const updateCarousel = () => {
+      this._carouselIndex = (this._carouselIndex + 1) % items.length;
+      slots.forEach((el, i) => {
+        const url = items[(this._carouselIndex + i) % items.length];
+        el.dataset.url = url;
+        el.dataset.index = String((this._carouselIndex + i) % items.length);
+        const img = el.querySelector('img');
+        if (img) {
+          img.style.opacity = '0';
+          setTimeout(() => { img.src = url; img.style.opacity = '1'; }, 200);
+        }
+      });
+    };
+    this._carouselTimer = setInterval(updateCarousel, 4000);
+  },
+
+  _stopCarousel() {
+    if (this._carouselTimer) { clearInterval(this._carouselTimer); this._carouselTimer = null; }
   },
 
   highlightUpload() {

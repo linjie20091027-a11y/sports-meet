@@ -208,6 +208,13 @@ const API = {
     deleteHighlight(id) { return API.delete('/admin/highlights/' + id); },
   },
 
+  // ==================== AI ====================
+  ai: {
+    generateSchedule() { return API.get('/ai/generate-schedule'); },
+    exportSchedulePDF(schedule) { return API.post('/ai/export-schedule-pdf', { schedule }, { rawResponse: true }); },
+    getAIStatus() { return API.get('/ai/ai-status'); },
+  },
+
   // ==================== 学生接口 ====================
   student: {
     getMyProfile() { return API.get('/student/profile'); },
