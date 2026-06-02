@@ -384,6 +384,30 @@ function migrateSchema() {
   _db.run('CREATE INDEX IF NOT EXISTS idx_users_student_id ON users(student_id)');
   _db.run('CREATE INDEX IF NOT EXISTS idx_events_status ON events(status)');
   _db.run('CREATE INDEX IF NOT EXISTS idx_captchas_token ON captchas(token)');
+
+  try {
+    _db.run("BEGIN TRANSACTION");
+    _db.run("ALTER TABLE registrations RENAME TO registrations_old");
+    _db.run(`CREATE TABLE registrations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      event_id INTEGER NOT NULL,
+      status TEXT DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected','cancelling')),
+      reject_reason TEXT DEFAULT '',
+      reviewed_by INTEGER,
+      reviewed_at TEXT,
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
+      FOREIGN KEY (reviewed_by) REFERENCES users(id),
+      UNIQUE(user_id, event_id)
+    )`);
+    _db.run("INSERT INTO registrations SELECT * FROM registrations_old");
+    _db.run("DROP TABLE registrations_old");
+    _db.run("CREATE INDEX IF NOT EXISTS idx_registrations_user ON registrations(user_id)");
+    _db.run("CREATE INDEX IF NOT EXISTS idx_registrations_event ON registrations(event_id)");
+    _db.run("COMMIT");
+  } catch (_) { try { _db.run("ROLLBACK"); } catch(__) {} }
 }
 
 function getDb() {
@@ -491,7 +515,7 @@ function initTables() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
       event_id INTEGER NOT NULL,
-      status TEXT DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
+      status TEXT DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected','cancelling')),
       reject_reason TEXT DEFAULT '',
       reviewed_by INTEGER,
       reviewed_at TEXT,
@@ -693,7 +717,7 @@ function initTables() {
       filename TEXT NOT NULL,
       original_name TEXT DEFAULT '',
       description TEXT DEFAULT '',
-      status TEXT DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
+      status TEXT DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected','cancelling')),
       approved_by INTEGER,
       approved_at TEXT,
       sort_order INTEGER DEFAULT 0,

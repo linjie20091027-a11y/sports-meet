@@ -5,6 +5,7 @@ const multer = require('multer');
 const path = require('path');
 const XLSX = require('xlsx');
 const { getDb } = require('../database/init');
+const { createNotification } = require('../utils/notify');
 const { authMiddleware, adminOnly, logOperation } = require('../middleware/auth');
 
 const upload = multer({
@@ -692,6 +693,38 @@ router.put('/registrations/:id/reject', (req, res) => {
 });
 
 // GET /registrations/stats - 报名统计
+
+// PUT /registrations/:id/approve-cancel - 批准取消报名
+router.put('/registrations/:id/approve-cancel', (req, res) => {
+  try {
+    const db = getDb();
+    const reg = db.prepare("SELECT r.*, e.name AS event_name, u.name AS user_name FROM registrations r LEFT JOIN events e ON r.event_id = e.id LEFT JOIN users u ON r.user_id = u.id WHERE r.id = ? AND r.status = 'cancelling'").get(req.params.id);
+    if (!reg) return res.status(404).json({ success: false, error: '取消申请不存在或已处理' });
+    db.prepare('DELETE FROM registrations WHERE id = ?').run(req.params.id);
+    createNotification(db, reg.user_id, {
+      type: 'success', title: '取消报名已批准',
+      content: `您取消「${reg.event_name||''}」报名的申请已被管理员批准。`,
+      target_url: '#/student'
+    });
+    res.json({ success: true, message: '已批准取消' });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// PUT /registrations/:id/reject-cancel - 驳回取消报名
+router.put('/registrations/:id/reject-cancel', (req, res) => {
+  try {
+    const db = getDb();
+    const reg = db.prepare("SELECT r.*, e.name AS event_name, u.name AS user_name FROM registrations r LEFT JOIN events e ON r.event_id = e.id LEFT JOIN users u ON r.user_id = u.id WHERE r.id = ? AND r.status = 'cancelling'").get(req.params.id);
+    if (!reg) return res.status(404).json({ success: false, error: '取消申请不存在或已处理' });
+    db.prepare("UPDATE registrations SET status = 'approved', reviewed_by = ?, reviewed_at = datetime('now','localtime') WHERE id = ?").run(req.user.id, req.params.id);
+    createNotification(db, reg.user_id, {
+      type: 'warning', title: '取消报名已驳回',
+      content: `您取消「${reg.event_name||''}」报名的申请被管理员驳回，报名仍有效。`,
+      target_url: '#/student'
+    });
+    res.json({ success: true, message: '已驳回取消申请' });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
 router.get('/registrations/stats', (req, res) => {
   try {
     const db = getDb();

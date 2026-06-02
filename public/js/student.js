@@ -473,8 +473,8 @@ const Student = {
     try {
       const res = await API.student.getMyRegistrations();
       const regs = res.data || [];
-      const statusLabel = s => ({pending:'待审核',approved:'已通过',rejected:'已驳回'})[s]||s;
-      const statusBadge = s => ({pending:'badge-pending',approved:'badge-approved',rejected:'badge-rejected'})[s]||'';
+      const statusLabel = s => ({pending:'待审核',approved:'已通过',rejected:'已驳回',cancelling:'取消审核中'})[s]||s;
+      const statusBadge = s => ({pending:'badge-pending',approved:'badge-approved',rejected:'badge-rejected',cancelling:'badge-warning'})[s]||'';
       const genderLabel = g => g==='male'?'男子组':g==='female'?'女子组':'混合组';
 
       if (regs.length === 0) {
