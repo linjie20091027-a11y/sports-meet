@@ -350,9 +350,10 @@ const App = {
     document.getElementById('nav-toggle')?.addEventListener('click', () => {
       document.getElementById('nav-links')?.classList.toggle('show');
     });
-    document.getElementById('menu-logout')?.addEventListener('click', (e) => {
+    document.getElementById('menu-logout')?.addEventListener('click', async (e) => {
       e.preventDefault();
-      this.logout();
+      const confirmed = await this.confirmDialog('确定要退出登录吗？');
+      if (confirmed) this.logout();
     });
     // 移动端点击切换用户下拉菜单
     document.getElementById('user-name-display')?.addEventListener('click', (e) => {
