@@ -2,6 +2,7 @@ const http = require('http');
 const url = require('url');
 const fs = require('fs');
 const path = require('path');
+const { sortSportGroups, BUSINESS_ORDER } = require('./utils/sportGroupOrder');
 
 const BASE = process.env.BASE_URL || 'http://localhost:3000';
 const DB_PATH = path.join(__dirname, 'database', 'sports_meet.db');
@@ -270,6 +271,19 @@ async function runAllTests() {
     if (res.status !== 200) return `状态码 ${res.status}`;
     console.log(` (${elapsed}ms)`);
     if (elapsed > 500) return `响应超过 500ms: ${elapsed}ms`;
+    return true;
+  });
+
+  await test('公开', '运动组别业务排序规则', async () => {
+    const sorted = sortSportGroups(['A', 'C', 'E', 'B', 'D', 'A', 'Z']);
+    const expected = ['E', 'D', 'C', 'B', 'A', 'Z'];
+    if (JSON.stringify(BUSINESS_ORDER) !== JSON.stringify(['E', 'D', 'C', 'B', 'A'])) {
+      return `业务顺序异常: ${JSON.stringify(BUSINESS_ORDER)}`;
+    }
+    if (JSON.stringify(sorted) !== JSON.stringify(expected)) {
+      return `排序结果异常: ${JSON.stringify(sorted)}`;
+    }
+    console.log(` (${sorted.join(' -> ')})`);
     return true;
   });
 

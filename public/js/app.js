@@ -1415,14 +1415,13 @@ const App = {
         document.getElementById('home-announcements').innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无更多信息</p>';
       }
 
-      // ── 最新成绩：A~E组冠军竖条轮播 ──
+      // ── 最新成绩：按业务组别顺序展示冠军轮播 ──
       const resData = results.value?.data || [];
       let resH = '';
       if (resData.length) {
-        const groups = ['A','B','C','D','E'];
         const groupChamps = {};
         resData.forEach(r => {
-          const g = r.user_sport_group || 'A';
+          const g = String(r.user_sport_group || 'A').trim().toUpperCase();
           if (r.rank === 1) {
             if (!groupChamps[g]) groupChamps[g] = [];
             groupChamps[g].push(r);
@@ -1432,7 +1431,7 @@ const App = {
         if (hasData) {
           this._champData = groupChamps;
           resH = '<div class="home-champ-strip" id="home-champ-strip">';
-          groups.forEach(g => {
+          this._sortSportGroups(Object.keys(groupChamps)).forEach(g => {
             const champs = groupChamps[g] || [];
             if (!champs.length) return;
             resH += `<div class="champ-strip-row">
@@ -1886,8 +1885,11 @@ const App = {
 
       // 统计各组人数
       var grpCount = {};
-      data.forEach(function(r){ var sg=(r.user_sport_group||'A'); grpCount[sg]=(grpCount[sg]||0)+1; });
-      var activeGroups = ['A','B','C','D','E'].filter(function(sg){ return !!grpCount[sg]; });
+      data.forEach(function(r){
+        var sg = String(r.user_sport_group || 'A').trim().toUpperCase();
+        grpCount[sg] = (grpCount[sg] || 0) + 1;
+      });
+      var activeGroups = this._sortSportGroups(Object.keys(grpCount).filter(function(sg){ return !!grpCount[sg]; }));
       var eventCount = new Set(data.map(function(r){ return r.event_name || ''; }).filter(Boolean)).size;
 
       var html = '<div class="results-shell">';
@@ -2108,11 +2110,34 @@ const App = {
   },
   _champTimer: null,
   _champData: null,
+  _sportGroupRank(group) {
+    if (window.SportGroupOrder?.getSportGroupRank) {
+      return window.SportGroupOrder.getSportGroupRank(group);
+    }
+    const normalized = String(group || '').trim().toUpperCase();
+    const businessOrder = ['E', 'D', 'C', 'B', 'A'];
+    const index = businessOrder.indexOf(normalized);
+    if (index !== -1) return index;
+    const letterCode = normalized.charCodeAt(0);
+    if (letterCode >= 65 && letterCode <= 90) return businessOrder.length + (90 - letterCode);
+    return businessOrder.length + 100;
+  },
+  _sortSportGroups(groups) {
+    if (window.SportGroupOrder?.sortSportGroups) {
+      return window.SportGroupOrder.sortSportGroups(groups);
+    }
+    return [...new Set((groups || []).map((item) => String(item || '').trim().toUpperCase()).filter(Boolean))]
+      .sort((a, b) => {
+        const rankDiff = this._sportGroupRank(a) - this._sportGroupRank(b);
+        if (rankDiff !== 0) return rankDiff;
+        return a.localeCompare(b, 'en');
+      });
+  },
   _startChampRotation() {
     if (this._champTimer) clearInterval(this._champTimer);
     this._champTimer = setInterval(() => {
       if (!this._champData) return;
-      const groups = ['A','B','C','D','E'];
+      const groups = this._sortSportGroups(Object.keys(this._champData));
       groups.forEach(g => {
         const items = document.querySelector(`.champ-strip-items[data-group="${g}"]`);
         if (!items) return;
