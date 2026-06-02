@@ -415,8 +415,12 @@ router.post('/posts', authMiddleware, ensureNotMuted, forumUpload.array('images'
     })).filter((item) => item.url);
     const content = sanitizeRichText(req.body.content);
     const summary = stripHtml(content).slice(0, 180);
-    if (!title || !summary) return res.status(400).json({ success: false, error: '标题和内容不能为空' });
-    if (title.length < 4) return res.status(400).json({ success: false, error: '标题至少 4 个字' });
+    const imageFiles = (req.files || []).map(f => 'uploads/forum/' + f.filename);
+    const hasTitle = !!title;
+    const hasContent = !!summary;
+    const hasFiles = imageFiles.length > 0 || attachments.length > 0;
+    if (!hasTitle && !hasContent && !hasFiles) return res.status(400).json({ success: false, error: '请至少填写标题、内容或上传文件' });
+    if (hasTitle && title.length < 4) return res.status(400).json({ success: false, error: '标题至少 4 个字' });
 
     const sensitive = containsSensitiveContent(title + ' ' + summary);
     if (sensitive) {
@@ -427,7 +431,6 @@ router.post('/posts', authMiddleware, ensureNotMuted, forumUpload.array('images'
     assertPostingRate(db, req.user.id, 'forum_posts', 'title', title);
     const status = user.role === 'admin' ? 'approved' : 'pending';
     const stage = user.role === 'admin' ? 2 : 1;
-    const imageFiles = (req.files || []).map(f => 'uploads/forum/' + f.filename);
     const imagesJson = JSON.stringify(imageFiles);
     const imageStatus = req.user.role === 'admin' ? 'approved' : 'pending';
     const inserted = db.prepare(`
