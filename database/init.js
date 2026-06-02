@@ -686,6 +686,23 @@ function initTables() {
   `);
   try { _db.run("ALTER TABLE highlights ADD COLUMN status TEXT DEFAULT 'approved'"); } catch(e) {}
 
+  _db.run(`
+    CREATE TABLE IF NOT EXISTS gallery_photos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      filename TEXT NOT NULL,
+      original_name TEXT DEFAULT '',
+      description TEXT DEFAULT '',
+      status TEXT DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
+      approved_by INTEGER,
+      approved_at TEXT,
+      sort_order INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (approved_by) REFERENCES users(id)
+    )
+  `);
+
   // 保存初始表结构
   const data = _db.export();
   fs.writeFileSync(DB_PATH, Buffer.from(data));

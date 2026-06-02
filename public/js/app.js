@@ -1440,9 +1440,8 @@ const App = {
       } else {
         document.getElementById('home-results').innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无更多信息</p>';
       }
-      // ── 精彩瞬间 ──
-      this.renderHighlights();
-
+      // ── 精彩瞬间：审核通过的图片翻页轮播 ──
+      this._renderPhotoGallery();
     } catch (e) {
       console.error('renderHome error:', e);
       this.showToast('首页加载异常，请刷新重试', 'error');
@@ -1661,6 +1660,69 @@ const App = {
       root.innerHTML = '<div class="empty-state"><div class="empty-state__icon"><i class="fas fa-circle-exclamation"></i></div><p class="empty-state__desc">通知详情加载失败：' + this._escHtml(e.message || '请稍后重试') + '</p><button type="button" class="btn btn-outline mt-2" id="notification-detail-retry-btn">重新加载</button></div>';
       root.querySelector('#notification-detail-retry-btn')?.addEventListener('click', () => this.showNotificationDetail(id));
     }
+  },
+
+  _photoPage: 0,
+  _photoTotalPages: 0,
+
+  async _renderPhotoGallery() {
+    const grid = document.getElementById('photo-grid');
+    if (!grid) return;
+    try {
+      const res = await API.gallery.getApproved({ limit: 100 });
+      const photos = res.data || [];
+      if (!photos.length) {
+        grid.innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无精彩瞬间</p>';
+        return;
+      }
+      const perPage = 5;
+      this._photoTotalPages = Math.ceil(photos.length / perPage);
+      this._photoPage = 0;
+      this._photoCache = photos;
+      this._renderPhotoPage();
+    } catch (e) {
+      grid.innerHTML = '<p class="text-muted text-center" style="padding:2rem">精彩瞬间加载中...</p>';
+    }
+  },
+
+  _renderPhotoPage() {
+    const grid = document.getElementById('photo-grid');
+    if (!grid || !this._photoCache) return;
+    const perPage = 5;
+    const start = this._photoPage * perPage;
+    const pagePhotos = this._photoCache.slice(start, start + perPage);
+    let html = '<div class="gallery-controls">';
+    html += `<button class="gallery-btn" onclick="App._photoPrev()" ${this._photoPage === 0 ? 'disabled' : ''}><i class="fas fa-chevron-left"></i></button>`;
+    html += `<span class="gallery-page-info">${this._photoPage + 1} / ${this._photoTotalPages}</span>`;
+    html += `<button class="gallery-btn" onclick="App._photoNext()" ${this._photoPage >= this._photoTotalPages - 1 ? 'disabled' : ''}><i class="fas fa-chevron-right"></i></button>`;
+    html += '</div>';
+    html += '<div class="gallery-flip-row">';
+    pagePhotos.forEach((p, i) => {
+      html += `<div class="gallery-flip-card" style="animation-delay:${i * 0.08}s">
+        <div class="gallery-flip-inner">
+          <img src="/images/gallery/${p.filename}" alt="${p.original_name || ''}" loading="lazy">
+        </div>
+        ${p.description ? `<div class="gallery-flip-caption">${p.description}</div>` : ''}
+      </div>`;
+    });
+    const emptySlots = perPage - pagePhotos.length;
+    for (let i = 0; i < emptySlots; i++) {
+      html += '<div class="gallery-flip-card gallery-flip-empty"></div>';
+    }
+    html += '</div>';
+    grid.innerHTML = html;
+  },
+
+  _photoPrev() {
+    if (this._photoPage <= 0) return;
+    this._photoPage--;
+    this._renderPhotoPage();
+  },
+
+  _photoNext() {
+    if (this._photoPage >= this._photoTotalPages - 1) return;
+    this._photoPage++;
+    this._renderPhotoPage();
   },
 
   _escAttr(s) {

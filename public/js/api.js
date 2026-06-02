@@ -243,6 +243,16 @@ const API = {
     markAnnouncementRead(id) { return API.put('/student/announcements/' + id + '/read'); },
   },
 
+  gallery: {
+    getApproved(params) { return API.get('/gallery/approved' + API._qs(params)); },
+    upload(formData) { return API.upload('/gallery/upload', formData); },
+    // 管理员
+    adminList(params) { return API.get('/admin/gallery' + API._qs(params)); },
+    approve(id) { return API.put('/admin/gallery/' + id + '/approve'); },
+    reject(id) { return API.put('/admin/gallery/' + id + '/reject'); },
+    delete(id) { return API.delete('/admin/gallery/' + id); },
+  },
+
   forum: {
     getMeta() { return API.get('/forum/meta'); },
     getPosts(params) { return API.get('/forum/posts' + API._qs(params)); },
