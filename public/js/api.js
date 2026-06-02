@@ -188,6 +188,8 @@ const API = {
     getRegistrationDetail(id) { return API.get('/admin/registrations/' + id); },
     approveRegistration(id) { return API.put('/admin/registrations/' + id + '/approve'); },
     rejectRegistration(id) { return API.put('/admin/registrations/' + id + '/reject'); },
+    approveCancel(id) { return API.put('/admin/registrations/' + id + '/approve-cancel'); },
+    rejectCancel(id) { return API.put('/admin/registrations/' + id + '/reject-cancel'); },
 
     // 数据导出
     exportResults(params) { return API.get('/admin/exports/results' + API._qs(params)); },

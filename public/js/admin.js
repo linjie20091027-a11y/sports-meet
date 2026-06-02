@@ -955,7 +955,7 @@ const Admin = {
     if (f.grade.length) labels.push('年级：' + f.grade.join('、'));
     if (f.class_name.length) labels.push('班级：' + f.class_name.join('、'));
     if (f.gender) labels.push('性别：' + (f.gender === 'male' ? '男' : '女'));
-    if (f.status) labels.push('状态：' + ({pending:'待审核',approved:'已通过',rejected:'已驳回'}[f.status] || f.status));
+    if (f.status) labels.push('状态：' + ({pending:'待审核',approved:'已通过',rejected:'已驳回',cancelling:'取消审核中'}[f.status] || f.status));
     if (f.event_id && this._regFilterData) {
       const evt = this._regFilterData.events.find(e => e.id == f.event_id);
       if (evt) labels.push('项目：' + evt.name);
@@ -1087,7 +1087,7 @@ const Admin = {
       if (list.length > 0) {
         html = '<table class="table table--striped"><thead><tr><th><input type="checkbox" id="reg-select-all"></th><th>学号</th><th>姓名</th><th>班级</th><th>年级</th><th>项目</th><th>状态</th><th>操作</th></tr></thead><tbody>';
         list.forEach(r => {
-          const statusMap = { pending: '<span class="badge badge--pending">待审核</span>', approved: '<span class="badge badge--approved">已通过</span>', rejected: '<span class="badge badge--rejected">已驳回</span>' };
+          const statusMap = { pending: '<span class="badge badge--pending">待审核</span>', approved: '<span class="badge badge--approved">已通过</span>', rejected: '<span class="badge badge--rejected">已驳回</span>', cancelling: '<span class="badge badge--warning">取消审核中</span>' };
           html += '<tr><td><input type="checkbox" class="reg-checkbox" data-id="' + r.id + '" data-status="' + r.status + '"></td>';
           html += '<td>' + (r.student_id || '-') + '</td>';
           html += '<td>' + (r.user_name || '-') + '</td>';
@@ -1100,6 +1100,10 @@ const Admin = {
           if (r.status === 'pending') {
             html += '<button class="btn btn--success btn--xs btn-approve-reg" data-id="' + r.id + '"><i class="fas fa-check"></i> 通过</button>';
             html += '<button class="btn btn--warning btn--xs btn-reject-reg" data-id="' + r.id + '"><i class="fas fa-times"></i> 驳回</button>';
+          }
+          if (r.status === 'cancelling') {
+            html += '<button class="btn btn--success btn--xs btn-approve-cancel" data-id="' + r.id + '"><i class="fas fa-check"></i> 批准取消</button>';
+            html += '<button class="btn btn--warning btn--xs btn-reject-cancel" data-id="' + r.id + '"><i class="fas fa-times"></i> 驳回取消</button>';
           }
           html += '</div></td></tr>';
         });
@@ -1135,6 +1139,24 @@ const Admin = {
       container.querySelectorAll('.btn-detail-reg').forEach(btn => {
         btn.addEventListener('click', () => this._showRegDetail(btn.dataset.id, container));
       });
+      container.querySelectorAll('.btn-approve-cancel').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          try {
+            await API.admin.approveCancel(btn.dataset.id);
+            App.showToast('已批准取消', 'success');
+            this._loadRegistrations(container);
+          } catch (e) { App.showToast(e.message, 'error'); }
+        });
+      });
+      container.querySelectorAll('.btn-reject-cancel').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          try {
+            await API.admin.rejectCancel(btn.dataset.id);
+            App.showToast('已驳回取消申请', 'success');
+            this._loadRegistrations(container);
+          } catch (e) { App.showToast(e.message, 'error'); }
+        });
+      });
     } catch (e) {
       App.hideLoading();
       App.showToast(e.message, 'error');
@@ -1169,7 +1191,7 @@ const Admin = {
       App.hideLoading();
       const r = res.data;
       if (!r) return App.showToast('报名记录不存在', 'error');
-      const statusMap = { pending: '待审核', approved: '已通过', rejected: '已驳回' };
+      const statusMap = { pending: '待审核', approved: '已通过', rejected: '已驳回', cancelling: '取消审核中' };
       const categoryMap = { track: '径赛', field: '田赛', relay: '接力', team: '集体' };
       const typeMap = { individual: '个人', team: '团体' };
       const genderMap = { male: '男子', female: '女子', mixed: '混合' };
