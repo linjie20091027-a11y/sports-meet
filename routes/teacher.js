@@ -56,17 +56,13 @@ function assertEventTeacher(profile) {
 }
 
 function getManagedStudentWhere(profile) {
-  const conditions = [];
-  const params = [];
-  if (profile.managed_grade) {
-    conditions.push('u.grade = ?');
-    params.push(profile.managed_grade);
+  const managedGrade = String(profile?.managed_grade || '').trim();
+  const managedClassName = String(profile?.managed_class_name || '').trim();
+  if (!managedGrade || !managedClassName) {
+    throw new Error('班主任必须同时配置负责年级和班级');
   }
-  if (profile.managed_class_name) {
-    conditions.push('u.class_name = ?');
-    params.push(profile.managed_class_name);
-  }
-  if (!conditions.length) throw new Error('班主任尚未配置管理班级');
+  const conditions = ['u.grade = ?', 'u.class_name = ?'];
+  const params = [managedGrade, managedClassName];
   return {
     where: conditions.join(' AND '),
     params

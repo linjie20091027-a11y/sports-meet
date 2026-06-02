@@ -859,9 +859,20 @@ async function runAllTests() {
       console.log(` (学生${summary.student_count}人, 待审${summary.pending_registration_count || 0}条)`);
       return true;
     });
+
+    await test('教师', 'GET /api/teacher/homeroom/overview 仅返回本班学生', async () => {
+      const res = await request('GET', '/api/teacher/homeroom/overview', { token: homeroomTeacherToken });
+      if (res.status !== 200) return `状态码 ${res.status}: ${JSON.stringify(res.body).slice(0, 120)}`;
+      const profile = res.body?.data?.profile || {};
+      const students = res.body?.data?.students || [];
+      const outOfScope = students.find((item) => item.grade !== profile.managed_grade || item.class_name !== profile.managed_class_name);
+      if (outOfScope) return `发现越权学生: ${JSON.stringify(outOfScope).slice(0, 120)}`;
+      return true;
+    });
   } else {
     await testSkip('教师', 'GET /api/teacher/me 班主任', '无可用token');
     await testSkip('教师', 'GET /api/teacher/homeroom/overview', '无可用token');
+    await testSkip('教师', 'GET /api/teacher/homeroom/overview 仅返回本班学生', '无可用token');
   }
 
   if (eventTeacherToken) {
@@ -892,10 +903,17 @@ async function runAllTests() {
       console.log(` (项目${firstEventId}, ${res.body.data.participants.length}条待录入)`);
       return true;
     });
+
+    await test('教师', 'GET /api/teacher/homeroom/overview 拒绝任课教师访问', async () => {
+      const res = await request('GET', '/api/teacher/homeroom/overview', { token: eventTeacherToken });
+      if (![400, 403].includes(res.status)) return `预期400/403，实际${res.status}`;
+      return true;
+    });
   } else {
     await testSkip('教师', 'GET /api/teacher/me 任课教师', '无可用token');
     await testSkip('教师', 'GET /api/teacher/event/assignments', '无可用token');
     await testSkip('教师', 'GET /api/teacher/event/results-entry', '无可用token');
+    await testSkip('教师', 'GET /api/teacher/homeroom/overview 拒绝任课教师访问', '无可用token');
   }
 
   // =====================================================
