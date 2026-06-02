@@ -2,8 +2,10 @@ const initSqlJs = require('sql.js');
 const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
+const { backupFile } = require('./backupManager');
 
 const DB_PATH = path.join(__dirname, 'sports_meet.db');
+const DB_BACKUP_DIR = path.join(__dirname, 'backups');
 
 let _db = null;
 let _sql = null;
@@ -147,6 +149,22 @@ async function initDatabase() {
   if (_db) return _db;
 
   _sql = await initSqlJs();
+
+  if (fs.existsSync(DB_PATH)) {
+    try {
+      const backupPath = backupFile(DB_PATH, {
+        backupDir: DB_BACKUP_DIR,
+        prefix: 'sports_meet',
+        extension: 'db',
+        maxCount: Number(process.env.DB_BACKUP_RETENTION || 10)
+      });
+      if (backupPath) {
+        console.log('数据库备份已创建:', backupPath);
+      }
+    } catch (e) {
+      console.error('数据库备份失败:', e.message);
+    }
+  }
 
   if (fs.existsSync(DB_PATH)) {
     const buffer = fs.readFileSync(DB_PATH);

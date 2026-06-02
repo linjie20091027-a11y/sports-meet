@@ -3,6 +3,8 @@ const url = require('url');
 const fs = require('fs');
 const path = require('path');
 const { sortSportGroups, BUSINESS_ORDER } = require('./utils/sportGroupOrder');
+const { buildCloudDbConfig, maskDatabaseUrl } = require('./config/cloudDatabase');
+const { buildBackupFileName, pruneBackupList } = require('./database/backupManager');
 
 const BASE = process.env.BASE_URL || 'http://localhost:3000';
 const DB_PATH = path.join(__dirname, 'database', 'sports_meet.db');
@@ -284,6 +286,41 @@ async function runAllTests() {
       return `排序结果异常: ${JSON.stringify(sorted)}`;
     }
     console.log(` (${sorted.join(' -> ')})`);
+    return true;
+  });
+
+  await test('公开', '云数据库配置脱敏', async () => {
+    const masked = maskDatabaseUrl('postgresql://sports:secret123@example.com:5432/meet');
+    if (!masked.includes('sports:***@')) return `脱敏失败: ${masked}`;
+    if (masked.includes('secret123')) return `密码泄漏: ${masked}`;
+    return true;
+  });
+
+  await test('公开', '云数据库配置构建', async () => {
+    const config = buildCloudDbConfig({
+      DATABASE_URL: 'postgresql://sports:secret123@example.com:5432/meet?sslmode=require',
+      CLOUD_DB_SSL: 'true',
+      CLOUD_DB_SCHEMA: 'public',
+      LOCAL_DB_PATH: 'database/sports_meet.db'
+    });
+    if (!config.enabled) return '应识别为已启用云数据库';
+    if (!config.sslEnabled) return 'SSL 标记解析失败';
+    if (config.schema !== 'public') return `schema 异常: ${config.schema}`;
+    if (!/sports:\*\*\*@/.test(config.maskedUrl)) return `脱敏 URL 异常: ${config.maskedUrl}`;
+    return true;
+  });
+
+  await test('公开', '数据库备份命名与轮转', async () => {
+    const backupName = buildBackupFileName('sports_meet', 'db', new Date('2026-06-02T10:11:12Z'));
+    if (!/^sports_meet-\d{8}-\d{6}\.db$/.test(backupName)) return `备份文件名异常: ${backupName}`;
+    const obsolete = pruneBackupList([
+      { name: 'sports_meet-20260602-101112.db' },
+      { name: 'sports_meet-20260602-101212.db' },
+      { name: 'sports_meet-20260602-101312.db' }
+    ], 2);
+    if (obsolete.length !== 1 || obsolete[0].name !== 'sports_meet-20260602-101112.db') {
+      return `备份轮转异常: ${JSON.stringify(obsolete)}`;
+    }
     return true;
   });
 

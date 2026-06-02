@@ -1,5 +1,6 @@
 node_modules/
 database/sports_meet.db
+database/backups/
 prisma/dev.db
 prisma/migrations/*.sql
 uploads/*
