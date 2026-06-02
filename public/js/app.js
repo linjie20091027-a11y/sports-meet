@@ -1343,7 +1343,7 @@ const App = {
       ]);
 
       const m = meet.value?.data || {};
-      this._updateSchoolLogo(m.logo_url || '/images/school-emblem-default.svg');
+      this._updateSchoolLogo(m.logo_url || '/images/school-logo.png');
       document.getElementById('hero-title').textContent = m.name || '学校运动会';
       var sub = document.getElementById('hero-subtitle');
       if (sub) sub.textContent = m.theme || '';
