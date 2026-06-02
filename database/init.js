@@ -322,6 +322,8 @@ function migrateSchema() {
       FOREIGN KEY (uploaded_by) REFERENCES users(id)
     )
   `);
+  _db.run(`
+    CREATE TABLE IF NOT EXISTS forum_moderation_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       post_id INTEGER,
       reply_id INTEGER,
