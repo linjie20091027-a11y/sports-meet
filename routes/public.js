@@ -1,11 +1,34 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const multer = require('multer');
 const router = express.Router();
 const { getDb } = require('../database/init');
 
 const SEARCH_TYPES = ['all', 'users', 'events', 'news', 'announcements', 'results', 'highlights'];
 const HIGHLIGHT_DIR = path.join(__dirname, '..', 'public', 'images');
+
+// 精彩瞬间图片上传配置
+const hlStorage = multer.diskStorage({
+  destination: HIGHLIGHT_DIR,
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const name = 'hl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6) + ext;
+    cb(null, name);
+  }
+});
+const hlUpload = multer({
+  storage: hlStorage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('仅支持 JPG / PNG / GIF / WebP 格式'));
+    }
+  }
+});
 
 let highlightCache = {
   key: '',
@@ -813,6 +836,62 @@ router.get('/stats/overview', (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: '获取统计概览失败' });
+  }
+});
+
+// GET /highlights — 精彩瞬间列表（DB + 文件系统合并）
+router.get('/highlights', (req, res) => {
+  try {
+    const db = getDb();
+    let dbItems = [];
+    try {
+      dbItems = db.prepare('SELECT id, filename, original_name, created_at FROM highlights ORDER BY created_at DESC').all();
+    } catch(e) {}
+    // 从 DB 记录的图片
+    const items = dbItems.map(r => ({
+      id: 'db-' + r.id,
+      title: r.original_name || r.filename,
+      description: '',
+      file_name: r.filename,
+      url: '/images/' + r.filename,
+      created_at: r.created_at || ''
+    }));
+    // 合并文件系统中未被 DB 记录的老图片
+    const getDirItems = () => {
+      try {
+        return fs.readdirSync(HIGHLIGHT_DIR)
+          .filter(name => /\.(png|jpe?g|gif|webp)$/i.test(name))
+          .filter(name => !dbItems.some(r => r.filename === name))
+          .map(name => ({
+            id: 'fs-' + name,
+            title: name,
+            description: '',
+            file_name: name,
+            url: '/images/' + name,
+            created_at: ''
+          }));
+      } catch(_) { return []; }
+    };
+    const fsItems = getDirItems();
+    res.json({ success: true, data: items.concat(fsItems) });
+  } catch(e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// POST /highlights — 上传精彩瞬间（任何人可上传）
+router.post('/highlights', hlUpload.single('image'), (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, error: '请选择图片' });
+    const db = getDb();
+    db.prepare('INSERT INTO highlights (filename, original_name, uploaded_by) VALUES (?, ?, ?)').run(
+      req.file.filename,
+      req.file.originalname || '',
+      null
+    );
+    res.json({ success: true, message: '上传成功', data: { url: '/images/' + req.file.filename } });
+  } catch(e) {
+    res.status(500).json({ success: false, error: e.message });
   }
 });
 

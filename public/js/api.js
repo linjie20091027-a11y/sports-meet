@@ -134,6 +134,8 @@ const API = {
     searchSuggest(q) {
       return API.get('/public/search/suggest' + API._qs({ q }));
     },
+    getHighlights() { return API.get('/public/highlights'); },
+    uploadHighlight(formData) { return API.upload('/public/highlights', formData); },
   },
 
   // ==================== 管理员接口 ====================

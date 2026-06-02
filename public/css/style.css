@@ -397,6 +397,17 @@ h1{font-family:var(--title-font);font-size:2.2rem}h2{font-size:1.4rem}h3{font-si
 .forum-image-preview{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:.5rem;margin-top:.75rem}
 .forum-image-preview-item{position:relative;border-radius:var(--radius);overflow:hidden;border:1px solid var(--border);aspect-ratio:1}.forum-image-preview-item img{width:100%;height:100%;object-fit:cover;display:block}
 .forum-image-preview-item .forum-preview-remove{position:absolute;top:2px;right:2px;width:20px;height:20px;border-radius:50%;border:none;background:rgba(0,0,0,.55);color:#fff;font-size:12px;line-height:1;cursor:pointer}
+/* 首页精彩瞬间 */
+.photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:.75rem;margin-top:1rem}
+.photo-item{position:relative;border-radius:var(--radius);overflow:hidden;aspect-ratio:4/3;cursor:pointer;border:1px solid var(--border);transition:transform .2s,box-shadow .2s}.photo-item:hover{transform:translateY(-2px);box-shadow:var(--shadow-md)}
+.photo-item img{width:100%;height:100%;object-fit:cover;display:block}
+.photo-upload-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg);color:var(--text2);gap:.35rem;font-size:.75rem}.photo-upload-btn i{font-size:1.5rem;color:var(--gold)}.photo-upload-btn:hover{background:#fef9e7;border-color:var(--gold)}
+.photo-upload-prompt{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2.5rem 1rem;background:var(--bg);border:2px dashed var(--border);border-radius:var(--radius);cursor:pointer;color:var(--text2);gap:.5rem;transition:all .2s}.photo-upload-prompt:hover{border-color:var(--gold);background:#fef9e7}.photo-upload-prompt i{font-size:2rem;color:var(--gold)}
+/* 通用全屏灯箱 */
+.app-lightbox{position:fixed;inset:0;z-index:5000;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .25s}.app-lightbox.show{opacity:1;pointer-events:auto}
+.app-lightbox__bg{position:absolute;inset:0;background:rgba(0,0,0,.9)}
+.app-lightbox__img{position:relative;z-index:1;max-width:92vw;max-height:92vh;object-fit:contain;border-radius:6px;box-shadow:0 8px 48px rgba(0,0,0,.5)}
+.app-lightbox__close{position:absolute;top:20px;right:24px;z-index:2;width:40px;height:40px;border:none;border-radius:50%;background:rgba(255,255,255,.15);color:#fff;font-size:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s}.app-lightbox__close:hover{background:rgba(255,255,255,.3)}
 
 /* Toast */
 #toast-container{position:fixed;bottom:1.25rem;left:50%;transform:translateX(-50%);z-index:3000;display:flex;flex-direction:column;gap:5px;align-items:center;pointer-events:none}

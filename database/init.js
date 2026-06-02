@@ -313,7 +313,15 @@ function migrateSchema() {
     )
   `);
   _db.run(`
-    CREATE TABLE IF NOT EXISTS forum_moderation_logs (
+    CREATE TABLE IF NOT EXISTS highlights (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      filename TEXT NOT NULL,
+      original_name TEXT,
+      uploaded_by INTEGER,
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (uploaded_by) REFERENCES users(id)
+    )
+  `);
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       post_id INTEGER,
       reply_id INTEGER,
@@ -659,6 +667,16 @@ function initTables() {
       created_at TEXT DEFAULT (datetime('now','localtime')),
       FOREIGN KEY (post_id) REFERENCES forum_posts(id),
       FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `);
+  _db.run(`
+    CREATE TABLE IF NOT EXISTS highlights (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      filename TEXT NOT NULL,
+      original_name TEXT,
+      uploaded_by INTEGER,
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (uploaded_by) REFERENCES users(id)
     )
   `);
 

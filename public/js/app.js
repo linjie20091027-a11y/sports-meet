@@ -1440,10 +1440,72 @@ const App = {
       } else {
         document.getElementById('home-results').innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无更多信息</p>';
       }
+      // ── 精彩瞬间 ──
+      this.renderHighlights();
+
     } catch (e) {
       console.error('renderHome error:', e);
       this.showToast('首页加载异常，请刷新重试', 'error');
     }
+  },
+
+  async renderHighlights() {
+    const grid = document.getElementById('photo-grid');
+    if (!grid) return;
+    try {
+      const res = await API.public.getHighlights();
+      const items = res.data || [];
+      if (!items.length) {
+        grid.innerHTML = `<div class="photo-upload-prompt" id="photo-upload-prompt" onclick="App.highlightUpload()"><i class="fas fa-camera"></i><p>上传第一张精彩瞬间</p></div>`;
+        return;
+      }
+      let h = items.map(item => `
+        <div class="photo-item" onclick="App.openLightbox('${item.url}')">
+          <img src="${item.url}" alt="${item.title || ''}" loading="lazy">
+        </div>
+      `).join('');
+      h += `<div class="photo-item photo-upload-btn" onclick="App.highlightUpload()"><i class="fas fa-plus"></i><span>上传</span></div>`;
+      grid.innerHTML = h;
+    } catch(e) {
+      grid.innerHTML = '<div class="photo-upload-prompt" onclick="App.highlightUpload()"><i class="fas fa-camera"></i><p>上传精彩瞬间</p></div>';
+    }
+  },
+
+  highlightUpload() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async () => {
+      const file = input.files[0];
+      if (!file) return;
+      if (file.size > 10 * 1024 * 1024) { this.showToast('图片不超过10MB', 'warning'); return; }
+      const fd = new FormData();
+      fd.append('image', file);
+      this.showToast('上传中...', 'info');
+      const r = await API.public.uploadHighlight(fd);
+      if (r.success) {
+        this.showToast('上传成功', 'success');
+        this.renderHighlights();
+      } else {
+        this.showToast(r.error || '上传失败', 'error');
+      }
+    };
+    input.click();
+  },
+
+  openLightbox(url) {
+    if (!this._lightbox) {
+      const el = document.createElement('div');
+      el.className = 'app-lightbox';
+      el.innerHTML = '<div class="app-lightbox__bg"></div><img class="app-lightbox__img"><button class="app-lightbox__close">&times;</button>';
+      document.body.appendChild(el);
+      this._lightbox = el;
+      el.querySelector('.app-lightbox__bg').addEventListener('click', () => this._lightbox.classList.remove('show'));
+      el.querySelector('.app-lightbox__close').addEventListener('click', () => this._lightbox.classList.remove('show'));
+      document.addEventListener('keydown', e => { if (e.key === 'Escape') this._lightbox?.classList.remove('show'); });
+    }
+    this._lightbox.querySelector('.app-lightbox__img').src = url;
+    this._lightbox.classList.add('show');
   },
 
   _updateSchoolLogo(src) {
