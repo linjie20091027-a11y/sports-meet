@@ -144,6 +144,61 @@ h1{font-family:var(--title-font);font-size:2.2rem}h2{font-size:1.4rem}h3{font-si
 .event-mini-card h4{font-size:.85rem;font-weight:700;margin-bottom:.2rem;color:var(--text)}.event-mini-card p{font-size:.7rem;color:var(--text2);margin-top:.2rem}
 .event-card .card-body p,.event-card .card__body p{font-size:.75rem;color:var(--text2);margin-bottom:3px}.event-card .card-body i,.event-card .card__body i{width:16px;color:var(--gold)}
 
+/* ═══ 赛事项目网格（7列宫格 + 背景图 + 红色蒙层） ═══ */
+.sport-grid{
+  display:grid;
+  grid-template-columns:repeat(7,1fr);
+  gap:10px;
+  margin-top:.5rem
+}
+.sport-card{
+  position:relative;
+  aspect-ratio:3/4;
+  background-size:cover;
+  background-position:center;
+  border-radius:var(--radius-lg);
+  overflow:hidden;
+  cursor:pointer;
+  text-decoration:none;
+  animation:sportCardIn .5s ease backwards;
+  animation-delay:var(--delay,0s)
+}
+@keyframes sportCardIn{from{opacity:0;transform:scale(.9) translateY(12px)}to{opacity:1;transform:scale(1) translateY(0)}}
+.sport-card-overlay{
+  position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(90,0,0,.75),rgba(50,0,0,.82));
+  transition:opacity .4s ease;
+  z-index:1
+}
+.sport-card-content{
+  position:relative;z-index:2;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  height:100%;gap:.35rem;padding:1rem;
+  color:#fff;text-align:center
+}
+.sport-card-content i{
+  font-size:1.8rem;
+  filter:drop-shadow(0 2px 6px rgba(0,0,0,.4));
+  transition:transform .4s ease
+}
+.sport-card-content span{
+  font-size:.82rem;font-weight:700;
+  letter-spacing:.04em;
+  text-shadow:0 2px 8px rgba(0,0,0,.5)
+}
+.sport-card-content small{
+  font-size:.65rem;opacity:.75;
+  text-shadow:0 1px 4px rgba(0,0,0,.4)
+}
+.sport-card:hover .sport-card-overlay{opacity:0}
+.sport-card:hover .sport-card-content i{transform:scale(1.2)}
+.sport-card:hover .sport-card-content span{text-shadow:0 4px 16px rgba(0,0,0,.7)}
+@media(max-width:1200px){.sport-grid{grid-template-columns:repeat(5,1fr)}}
+@media(max-width:900px){.sport-grid{grid-template-columns:repeat(4,1fr)}}
+@media(max-width:600px){.sport-grid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:400px){.sport-grid{grid-template-columns:repeat(2,1fr)}}
+
 /* ═══ 首页横向赛事卡片 ═══ */
 .events-horiz-row {
   display: flex;

@@ -1743,26 +1743,32 @@ const App = {
         const genderL = g => g==='male'?'男子组':g==='female'?'女子组':'混合组';
         const typeL = t => t==='team'?'集体':'个人';
         const catL = c => ({track:'径赛',field:'田赛',relay:'接力',team:'集体'})[c]||c;
-        list.innerHTML = data.length ? data.map(e => `
-          <div class="card event-card">
-            <div class="card-header">
-              <h3>${e.name}</h3>
-              <span class="badge badge-info">${typeL(e.event_type)}</span>
+        const iconMap = {
+          track:'fa-person-running', field:'fa-arrow-up-right-dots', relay:'fa-people-arrows', team:'fa-people-group',
+          '100米':'fa-person-running','200米':'fa-person-running','400米':'fa-person-running',
+          '800米':'fa-person-running','1500米':'fa-person-running','跳远':'fa-up-long',
+          '跳高':'fa-arrow-up','实心球':'fa-volleyball','4×100米接力':'fa-people-arrows',
+          '拔河比赛':'fa-hand-fist','广播体操':'fa-person-walking'
+        };
+        const bgMap = {
+          track:'https://images.unsplash.com/photo-1461896836934-bd45ba2ae6c7?w=600&q=80',
+          field:'https://images.unsplash.com/photo-1552674605-db6ffd4facb9?w=600&q=80',
+          relay:'https://images.unsplash.com/photo-1530549387789-4c1017266635?w=600&q=80',
+          team:'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=600&q=80'
+        };
+        list.className = 'sport-grid';
+        list.innerHTML = data.length ? data.map((e, i) => {
+          const icon = iconMap[e.name] || iconMap[e.category] || 'fa-person-running';
+          const bg = bgMap[e.category] || bgMap.track;
+          return `<a href="#/events/${e.id}" class="sport-card" style="background-image:url(${bg});--delay:${i*0.04}s">
+            <div class="sport-card-overlay"></div>
+            <div class="sport-card-content">
+              <i class="fas ${icon}"></i>
+              <span>${e.name}</span>
+              <small>${genderL(e.gender_group)}</small>
             </div>
-            <div class="card-body">
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem">
-                <p class="text-sm"><i class="fas fa-venus-mars" style="color:var(--red);width:20px"></i> ${genderL(e.gender_group)}</p>
-                <p class="text-sm"><i class="fas fa-tag" style="color:var(--red);width:20px"></i> ${catL(e.category)}</p>
-                <p class="text-sm"><i class="fas fa-location-dot" style="color:var(--red);width:20px"></i> ${e.venue||'待定'}</p>
-                <p class="text-sm"><i class="fas fa-users" style="color:var(--red);width:20px"></i> 上限 ${e.max_participants||'不限'}</p>
-              </div>
-              ${e.rules?`<div class="mt-2 p-2" style="background:var(--bg);border-radius:4px;font-size:0.8rem;color:var(--text2)">${e.rules}</div>`:''}
-            </div>
-            <div class="card-footer">
-              <span></span>
-              <a href="#/events/${e.id}" class="btn btn-outline btn-sm">查看详情</a>
-            </div>
-          </div>`).join('') : '<div class="empty-state" style="grid-column:1/-1"><p class="text-muted">暂无符合条件的赛事</p></div>';
+          </a>`;
+        }).join('') : '<div class="empty-state" style="grid-column:1/-1"><p class="text-muted">暂无符合条件的赛事</p></div>';
       } catch (e) { }
       finally { this.hideLoading(); }
     };
