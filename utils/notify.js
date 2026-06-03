@@ -13,8 +13,8 @@ function createNotification(db, userId, {
   const safeAttachments = Array.isArray(attachments) ? attachments.slice(0, 6) : [];
   db.prepare(
     `INSERT INTO notifications (
-      user_id, type, title, content, target_url, sender_name, sender_role, attachments, action_label
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      user_id, type, title, content, target_url, sender_name, sender_role, attachments, action_label, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now','+08:00'))`
   ).run(userId, type, title, content, target_url, sender_name, sender_role, JSON.stringify(safeAttachments), action_label);
 }
 
