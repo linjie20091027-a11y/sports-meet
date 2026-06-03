@@ -2034,9 +2034,9 @@ const Admin = {
       `<option value="${e.id}" ${f.event_id==e.id?'selected':''}>${e.name}</option>`
     ).join('');
     const awardOpts = `<option value="" ${!f.award?'selected':''}>全部奖项</option>
-      <option value="一等" ${f.award==='一等'?'selected':''}>一等奖</option>
-      <option value="二等" ${f.award==='二等'?'selected':''}>二等奖</option>
-      <option value="三等" ${f.award==='三等'?'selected':''}>三等奖</option>
+      <option value="第一名" ${f.award==='第一名'?'selected':''}>第一名</option>
+      <option value="第二名" ${f.award==='第二名'?'selected':''}>第二名</option>
+      <option value="第三名" ${f.award==='第三名'?'selected':''}>第三名</option>
       <option value="优秀" ${f.award==='优秀'?'selected':''}>优秀奖</option>`;
     const publishOpts = `<option value="" ${f.is_published===''?'selected':''}>全部</option>
       <option value="1" ${f.is_published==='1'?'selected':''}>已公示</option>
@@ -2608,7 +2608,7 @@ const Admin = {
     html += '<input type="hidden" id="result-user-id" value="' + this._escapeHtml(initialData.user_id) + '">';
     html += '<div class="form__group"><label class="form__label form__label--required">学生姓名</label><input class="form__input" id="result-student-name" placeholder="请先选择年级和班级，再点击选择学生" autocomplete="off" readonly value="' + this._escapeHtml(initialData.student_name) + '"><div class="form__hint" id="result-selected-student" style="display:none;"></div><div class="form__hint">点击学生姓名字段后，只会展示当前年级和班级下的学生</div><div class="form__hint" id="result-student-name-error" style="display:none;color:#dc2626;"></div></div>';
     html += '<div class="form__group"><label class="form__label form__label--required">成绩</label><input class="form__input" id="result-performance" placeholder="如: 12.34、1:23.45、DNS" value="' + this._escapeHtml(initialData.performance) + '"><div class="form__hint">支持纯数字、时间格式，或 DNS / DNF / DQ / NM</div><div class="form__hint" id="result-performance-error" style="display:none;color:#dc2626;"></div></div>';
-    html += '<div class="form__group"><label class="form__label">奖项</label><select class="form__select" id="result-award"><option value="">无</option><option value="一等"' + (initialData.award === '一等' ? ' selected' : '') + '>一等</option><option value="二等"' + (initialData.award === '二等' ? ' selected' : '') + '>二等</option><option value="三等"' + (initialData.award === '三等' ? ' selected' : '') + '>三等</option><option value="优秀"' + (initialData.award === '优秀' ? ' selected' : '') + '>优秀</option><option value="团体"' + (initialData.award === '团体' ? ' selected' : '') + '>团体</option></select></div>';
+    html += '<div class="form__group"><label class="form__label">奖项</label><select class="form__select" id="result-award"><option value="">无</option><option value="第一名"' + (initialData.award === '第一名' ? ' selected' : '') + '>第一名</option><option value="第二名"' + (initialData.award === '第二名' ? ' selected' : '') + '>第二名</option><option value="第三名"' + (initialData.award === '第三名' ? ' selected' : '') + '>第三名</option><option value="优秀"' + (initialData.award === '优秀' ? ' selected' : '') + '>优秀</option><option value="团体"' + (initialData.award === '团体' ? ' selected' : '') + '>团体</option></select></div>';
     html += '<div class="form__group"><label class="form__label form__label--required">输入备注</label><textarea class="form__textarea" id="result-note" rows="4" placeholder="请输入补充说明，最多500字">' + this._escapeHtml(initialData.note) + '</textarea><div style="display:flex;justify-content:space-between;gap:12px;"><div class="form__hint">支持中文、英文、数字及常用标点</div><div class="form__hint" id="result-note-counter">0/500</div></div><div class="form__hint" id="result-note-error" style="display:none;color:#dc2626;"></div></div>';
     html += '<div class="form__group"><label class="form__label form__label--required">是否打破学校记录</label><label style="display:flex;align-items:center;gap:8px;font-weight:500;color:#374151;"><input type="checkbox" id="result-school-record"' + (initialData.is_school_record ? ' checked' : '') + '> 是，已刷新校史记录</label></div>';
     if (!isEdit) {
@@ -2949,7 +2949,7 @@ const Admin = {
       // 年级统计汇总
       html += '<div class="card">';
       html += '<div class="card__header"><h3 class="card__title">年级统计汇总</h3></div>';
-      html += '<div class="card__body"><div class="table-container"><table class="table table--striped"><thead><tr><th>年级</th><th>总人数</th><th>报名人数</th><th>获奖人数</th><th>一等奖</th><th>二等奖</th><th>三等奖</th><th>总分</th></tr></thead><tbody>';
+      html += '<div class="card__body"><div class="table-container"><table class="table table--striped"><thead><tr><th>年级</th><th>总人数</th><th>报名人数</th><th>获奖人数</th><th>第一名</th><th>第二名</th><th>第三名</th><th>总分</th></tr></thead><tbody>';
       if (gradeData.length > 0) {
         gradeData.forEach(g => {
           html += '<tr><td><strong>' + g.grade + '</strong></td><td>' + g.total_students + '</td><td>' + g.registered_count + '</td><td>' + g.awarded_count + '</td><td>' + (g.first_prize || 0) + '</td><td>' + (g.second_prize || 0) + '</td><td>' + (g.third_prize || 0) + '</td><td><strong>' + g.total_score + '</strong></td></tr>';

@@ -607,7 +607,7 @@ function initTables() {
       performance TEXT DEFAULT '',
       rank INTEGER DEFAULT 0,
       score DECIMAL(10,2) DEFAULT 0,
-      award TEXT DEFAULT '' CHECK(award IN ('','一等','二等','三等','优秀','团体')),
+      award TEXT DEFAULT '' CHECK(award IN ('','第一名','第二名','第三名','优秀','团体')),
       is_published INTEGER DEFAULT 0,
       note TEXT DEFAULT '',
       is_school_record INTEGER DEFAULT 0,

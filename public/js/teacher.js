@@ -436,9 +436,9 @@ const Teacher = {
                 <td>
                   <select class="form__select form__select--compact" data-field="award">
                     <option value="">无</option>
-                    <option value="一等"${item.award === '一等' ? ' selected' : ''}>一等</option>
-                    <option value="二等"${item.award === '二等' ? ' selected' : ''}>二等</option>
-                    <option value="三等"${item.award === '三等' ? ' selected' : ''}>三等</option>
+                    <option value="第一名"${item.award === '第一名' ? ' selected' : ''}>第一名</option>
+                    <option value="第二名"${item.award === '第二名' ? ' selected' : ''}>第二名</option>
+                    <option value="第三名"${item.award === '第三名' ? ' selected' : ''}>第三名</option>
                     <option value="优秀"${item.award === '优秀' ? ' selected' : ''}>优秀</option>
                     <option value="团体"${item.award === '团体' ? ' selected' : ''}>团体</option>
                   </select>

@@ -29,7 +29,7 @@ function getIp(req) {
   return req.headers['x-forwarded-for'] || req.connection.remoteAddress || '';
 }
 
-const RESULT_AWARDS = new Set(['', '一等', '二等', '三等', '优秀', '团体']);
+const RESULT_AWARDS = new Set(['', '第一名', '第二名', '第三名', '优秀', '团体']);
 const RESULT_ALLOWED_TEXT_REGEX = /^[A-Za-z0-9\u4e00-\u9fa5\s:.,()\-+/（）]*$/;
 const RESULT_ALLOWED_NOTE_REGEX = /^[A-Za-z0-9\u4e00-\u9fa5\s:.,()\-+/，。！？；：“”‘’、（）【】#&]*$/;
 const RESULT_PERFORMANCE_REGEX = /^(?:\d{1,2}:\d{1,2}(?:\.\d{1,3})?|\d{1,5}(?:\.\d{1,3})?|DNS|DNF|DQ|NM)$/i;
@@ -1381,9 +1381,9 @@ router.get('/stats/grade', (req, res) => {
       COUNT(DISTINCT u.id) as total_students,
       COUNT(DISTINCT r.user_id) as registered_count,
       COUNT(DISTINCT CASE WHEN res.award != '' THEN res.user_id END) as awarded_count,
-      COUNT(DISTINCT CASE WHEN res.award = '一等' THEN res.user_id END) as first_prize,
-      COUNT(DISTINCT CASE WHEN res.award = '二等' THEN res.user_id END) as second_prize,
-      COUNT(DISTINCT CASE WHEN res.award = '三等' THEN res.user_id END) as third_prize,
+      COUNT(DISTINCT CASE WHEN res.award = '第一名' THEN res.user_id END) as first_prize,
+      COUNT(DISTINCT CASE WHEN res.award = '第二名' THEN res.user_id END) as second_prize,
+      COUNT(DISTINCT CASE WHEN res.award = '第三名' THEN res.user_id END) as third_prize,
       COALESCE(SUM(res.score), 0) as total_score
       FROM users u
       LEFT JOIN registrations r ON u.id = r.user_id AND r.status = 'approved'
