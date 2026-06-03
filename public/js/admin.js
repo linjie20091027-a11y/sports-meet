@@ -27,6 +27,7 @@ const Admin = {
             </li>
             <li class="admin-menu-item" data-tab="registrations" style="display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;font-size:0.875rem;color:#6b7280;transition:all 150ms;border-left:3px solid transparent;">
               <i class="fas fa-clipboard-list" style="width:18px;text-align:center;"></i> 报名管理
+              <span class="admin-badge hidden" id="admin-reg-badge" style="margin-left:auto;background:#dc2626;color:#fff;font-size:0.65rem;padding:2px 7px;border-radius:10px;min-width:18px;text-align:center;line-height:1.4">0</span>
             </li>
             <li class="admin-menu-item" data-tab="schedules" style="display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;font-size:0.875rem;color:#6b7280;transition:all 150ms;border-left:3px solid transparent;">
               <i class="fas fa-calendar-alt" style="width:18px;text-align:center;"></i> 赛程编排
@@ -91,6 +92,24 @@ const Admin = {
 
     this.currentTab = 'dashboard';
     this.renderTab();
+    this._startAdminBadgePolling();
+  },
+
+  _adminBadgeTimer: null,
+  _startAdminBadgePolling() {
+    this._updateAdminBadge();
+    if (this._adminBadgeTimer) clearInterval(this._adminBadgeTimer);
+    this._adminBadgeTimer = setInterval(() => this._updateAdminBadge(), 30000);
+  },
+  async _updateAdminBadge() {
+    try {
+      const res = await API.admin.getRegistrations({ status: 'cancelling', limit: 1 });
+      const total = res.data?.total || 0;
+      const badge = document.getElementById('admin-reg-badge');
+      if (!badge) return;
+      badge.textContent = total > 99 ? '99+' : total;
+      badge.classList.toggle('hidden', total === 0);
+    } catch (e) {}
   },
 
   // 销毁所有图表实例
