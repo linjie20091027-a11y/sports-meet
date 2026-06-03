@@ -502,22 +502,26 @@ const Student = {
   },
 
   async _cancelReg(id) {
+    let reason = '';
     const confirmed = await new Promise(resolve => {
       App.showModal(`
-        <div class="modal__header"><h3 class="modal__title">取消报名</h3><button class="modal__close" onclick="App.hideModal(true)"><i class="fas fa-times"></i></button></div>
-        <div class="modal__body"><p style="text-align:center;font-size:.95rem">确认取消该报名？${id > 0 ? '<br><small class="text-muted">已通过的报名需管理员审核</small>' : ''}</p></div>
+        <div class="modal__header"><h3 class="modal__title">取消报名</h3><button class="modal__close" onclick="App.hideModal()"><i class="fas fa-times"></i></button></div>
+        <div class="modal__body">
+          <p style="text-align:center;font-size:.95rem;margin-bottom:1rem">确认取消该报名？<br><small class="text-muted">取消申请将提交管理员审核</small></p>
+          <div class="form__group"><label class="form__label">取消理由</label><textarea class="form__textarea" id="cancel-reason" rows="3" placeholder="请输入取消理由..."></textarea></div>
+        </div>
         <div class="modal__footer" style="justify-content:center;gap:.5rem">
-          <button class="btn btn--outline" id="cancel-reg-btn-no">取消</button>
+          <button class="btn btn--outline" id="cancel-reg-btn-no">暂不取消</button>
           <button class="btn btn--danger" id="cancel-reg-btn-yes">确认取消</button>
         </div>
       `);
-      document.getElementById('cancel-reg-btn-yes').onclick = () => { App.hideModal(true); resolve(true); };
-      document.getElementById('cancel-reg-btn-no').onclick = () => { App.hideModal(true); resolve(false); };
+      document.getElementById('cancel-reg-btn-yes').onclick = () => { reason = document.getElementById('cancel-reason')?.value?.trim() || ''; App.hideModal(); resolve(true); };
+      document.getElementById('cancel-reg-btn-no').onclick = () => { App.hideModal(); resolve(false); };
     });
     if (!confirmed) return;
     try {
       App.showLoading();
-      const res = await API.student.cancelRegistration(id);
+      const res = await API.student.cancelRegistration(id, reason);
       App.hideLoading();
       App.showToast(res.message || '操作成功', 'success');
       this._renderMyRegistrations();

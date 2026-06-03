@@ -576,6 +576,7 @@ router.get('/registrations', (req, res) => {
 router.delete('/registrations/:id', (req, res) => {
   try {
     const db = getDb();
+    const reason = String(req.body?.reason || '').trim().slice(0, 200);
 
     const registration = db.prepare(
       'SELECT r.*, e.name AS event_name FROM registrations r LEFT JOIN events e ON r.event_id = e.id WHERE r.id = ? AND r.user_id = ?'
@@ -585,22 +586,24 @@ router.delete('/registrations/:id', (req, res) => {
       return res.status(404).json({ success: false, error: '报名记录不存在' });
     }
 
-    if (registration.status === 'pending') {
-      db.prepare('DELETE FROM registrations WHERE id = ?').run(req.params.id);
-      res.json({ success: true, message: '已取消报名' });
-      return;
-    }
-
-    if (registration.status === 'approved') {
-      db.prepare("UPDATE registrations SET status = 'cancelling' WHERE id = ?").run(req.params.id);
+    if (registration.status === 'pending' || registration.status === 'approved') {
+      db.prepare("UPDATE registrations SET status = 'cancelling', reject_reason = ? WHERE id = ?").run(reason || '学生申请取消', req.params.id);
+      // 通知管理员审核
       const admins = db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").all();
       admins.forEach(a => {
         createNotification(db, a.id, {
           type: 'warning',
           title: '取消报名申请',
-          content: `学生申请取消「${registration.event_name || ''}」的报名，请审核。`,
+          content: `学生「${req.user.name || req.user.username}」申请取消「${registration.event_name || ''}」的报名。${reason ? '理由：' + reason : ''}`,
           target_url: '#/admin'
         });
+      });
+      // 通知学生已提交
+      createNotification(db, req.user.id, {
+        type: 'info',
+        title: '取消申请已提交',
+        content: `您已申请取消「${registration.event_name || ''}」的报名，请等待管理员审核。`,
+        target_url: '#/student'
       });
       res.json({ success: true, message: '取消申请已提交，等待管理员审核' });
       return;
