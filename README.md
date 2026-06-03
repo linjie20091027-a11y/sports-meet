@@ -456,12 +456,22 @@ node server.js
 ---
 
 ### [**linjie20091027-a11y**](https://github.com/linjie20091027-a11y)  `linjie20091027@gmail.com`
-#### 项目创始人 · 全栈架构师 · 技术负责人 ｜ 89 commits
+#### 项目创始人 · 全栈架构师 · 技术负责人 ｜ 100 commits<sub>（含小号「濠江中学运动会」11 commits）</sub>
 
 **🏗️ 系统架构与基础设施 (Build: 0 → 1)**
 
 | 提交 | 内容 |
 |------|------|
+| `8aabe19` | 🏁 运动会管理系统 v1.0 — 澳门濠江中学（项目起点） |
+| `7b6ca8c` | 📝 新增项目介绍 README |
+| `a7bb713` | 📝 更新项目介绍 README |
+| `240a0ca` | 📝 完善项目介绍文档 |
+| `f6fa414` | 📝 README 优化 — 加入诗句 + 详细介绍 + 1400 字 |
+| `ae16101` | 添加濠江中学信息数据库 + 论坛评论审核 + AI 学校知识库 |
+| `d511cfc` | 升级 AI 助手 — 接入实时数据库上下文 |
+| `1f2bf37` | 修复管理员角色 + 论坛 AI 助手 + UI 优化 |
+| `2455d9a` | 🤖 AI 升级 — 开放全域知识 + 会话记忆 + 无主题限制 |
+| `35a5680` | 修复头像上传 + 通知系统 + 项目详细描述 |
 | `3b5eb57` | 修复管理后台 + 通知系统 + 论坛审核 + AI 赛程编排 |
 | `f94ce46` | 数据库优化：立即写入 + 仅首次种子数据 |
 | `0968ba8` | v4 自然风景 UI + 管理后台重写 + 功能增强 |
@@ -736,7 +746,7 @@ node server.js
 
 ---
 
-> 📊 **统计**：195+ commits · 4 core contributors · 100+ API endpoints · 32 source files · 14 database tables · 3,000+ lines of JavaScript
+> 📊 **统计**：206+ commits · 4 core contributors · 100+ API endpoints · 32 source files · 14 database tables · 3,000+ lines of JavaScript
 
 
 
