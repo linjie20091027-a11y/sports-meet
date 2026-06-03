@@ -603,6 +603,17 @@ const App = {
     bell.classList.add('ring-once');
   },
 
+  _loadLocalReadIds() {
+    try {
+      return new Set(JSON.parse(localStorage.getItem('notify_read_ids') || '[]'));
+    } catch (_) { return new Set(); }
+  },
+  _saveLocalReadId(id) {
+    const ids = this._loadLocalReadIds();
+    ids.add(id);
+    localStorage.setItem('notify_read_ids', JSON.stringify([...ids]));
+  },
+
   async _loadNotifications(options = {}) {
     if (!this.user) return;
     const silent = options.silent === true;
@@ -610,7 +621,13 @@ const App = {
     try {
       const previousIds = this.notificationItems.map((item) => item.id);
       const res = await API.student.getNotifications({ limit: 50 });
-      const list = res.data?.list || [];
+      const localReadIds = this._loadLocalReadIds();
+      const list = (res.data?.list || []).map(item => {
+        if (localReadIds.has(item.id) && !item.is_read) {
+          return { ...item, is_read: 1 };
+        }
+        return item;
+      });
       const unread = res.data?.unread || 0;
       const hasNewNotification = this.notificationReady && list.some((item) => !previousIds.includes(item.id));
 
@@ -744,6 +761,7 @@ const App = {
   async _markAllRead() {
     try {
       await API.student.markAllNotificationsRead();
+      this.notificationItems.forEach(item => this._saveLocalReadId(item.id));
       this.notificationItems = this.notificationItems.map((item) => ({ ...item, is_read: 1 }));
       this.notificationUnread = 0;
       this._updateNotificationBadge(0);
@@ -755,6 +773,7 @@ const App = {
   async _markNotificationRead(id) {
     try {
       await API.student.markNotificationRead(id);
+      this._saveLocalReadId(id);
       this.notificationItems = this.notificationItems.map((item) =>
         item.id === id ? { ...item, is_read: 1 } : item
       );
