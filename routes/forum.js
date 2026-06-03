@@ -791,9 +791,12 @@ async function aiModerateImage(imageUrl) {
           }
           try {
             const json = JSON.parse(data);
-            const text = json.output?.[0]?.content?.[0]?.text
+            // 豆包v3: output[0]=reasoning, output[?]=message(assistant)
+            const msgOut = json.output?.find(o => o.role === 'assistant' || o.type === 'message');
+            const text = msgOut?.content?.[0]?.text
+              || json.output?.[0]?.content?.[0]?.text
               || json.choices?.[0]?.message?.content
-              || json.data || '';
+              || '';
             const match = String(text).match(/\{[\s\S]*\}/);
             if (match) {
               const r = JSON.parse(match[0]);

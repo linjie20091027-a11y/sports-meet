@@ -144,7 +144,9 @@ async function moderateImage(imageUrl) {
       }]
     });
 
-    const content = result.output?.[0]?.content?.[0]?.text || result.choices?.[0]?.message?.content || '';
+    // 豆包v3: output[0]=reasoning, output[?]=message
+    const msgOut = result.output?.find(o => o.role === 'assistant' || o.type === 'message');
+    const content = msgOut?.content?.[0]?.text || result.output?.[0]?.content?.[0]?.text || result.choices?.[0]?.message?.content || '';
     console.log('[豆包审核] 响应:', (content || '').substring(0, 150));
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
