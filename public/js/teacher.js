@@ -3,6 +3,13 @@ const Teacher = {
   currentTab: 'overview',
   selectedEventId: null,
   latestResultsEntry: null,
+  homeroomRegistrationFilters: {
+    status: '',
+    event_id: '',
+    student_keyword: '',
+    match_mode: 'fuzzy'
+  },
+  _homeroomRegistrationFilterTimer: null,
 
   async render() {
     const page = document.getElementById('page-teacher');
@@ -202,9 +209,24 @@ const Teacher = {
     if (!content) return;
     content.innerHTML = '<div class="text-center p-8"><div class="spinner"></div></div>';
     try {
-      const res = await API.teacher.getHomeroomRegistrations();
+      const res = await API.teacher.getHomeroomRegistrations(this.homeroomRegistrationFilters);
       if (!res.success) throw new Error(res.error || '报名列表加载失败');
-      const rows = res.data || [];
+      const payload = res.data || {};
+      const rows = Array.isArray(payload.list) ? payload.list : [];
+      const filterState = payload.filters || this.homeroomRegistrationFilters;
+      const events = Array.isArray(payload.events) ? payload.events : [];
+      this.homeroomRegistrationFilters = {
+        status: filterState.status || '',
+        event_id: filterState.event_id ? String(filterState.event_id) : '',
+        student_keyword: filterState.student_keyword || '',
+        match_mode: filterState.match_mode === 'exact' ? 'exact' : 'fuzzy'
+      };
+      const selectedIds = rows
+        .filter((item) => item.status === 'pending' || item.status === 'cancelling')
+        .map((item) => Number(item.id))
+        .filter(Boolean);
+      const pendingCount = rows.filter((item) => item.status === 'pending').length;
+      const cancellingCount = rows.filter((item) => item.status === 'cancelling').length;
       content.innerHTML = `
         <div class="teacher-shell">
           <div class="card">
@@ -213,20 +235,68 @@ const Teacher = {
                 <h3 class="card__title">班级报名审核</h3>
                 <p class="teacher-hero__meta">仅展示当前班主任负责班级的报名记录与取消申请</p>
               </div>
-              <button type="button" class="btn btn-outline btn-sm" id="teacher-refresh-registrations">刷新</button>
+              <div class="teacher-toolbar">
+                <button type="button" class="btn btn-outline btn-sm" id="teacher-clear-registration-filters">重置筛选</button>
+                <button type="button" class="btn btn-outline btn-sm" id="teacher-refresh-registrations">刷新</button>
+              </div>
             </div>
             <div class="card__body">
+              <div class="teacher-filter-grid">
+                <div class="form__group">
+                  <label class="form__label">审核状态</label>
+                  <select class="form__select" id="teacher-registration-status-filter">
+                    <option value="">全部状态</option>
+                    <option value="pending"${this.homeroomRegistrationFilters.status === 'pending' ? ' selected' : ''}>待审核</option>
+                    <option value="cancelling"${this.homeroomRegistrationFilters.status === 'cancelling' ? ' selected' : ''}>取消申请中</option>
+                    <option value="approved"${this.homeroomRegistrationFilters.status === 'approved' ? ' selected' : ''}>已通过</option>
+                    <option value="rejected"${this.homeroomRegistrationFilters.status === 'rejected' ? ' selected' : ''}>已驳回</option>
+                  </select>
+                </div>
+                <div class="form__group">
+                  <label class="form__label">项目筛选</label>
+                  <select class="form__select" id="teacher-registration-event-filter">
+                    <option value="">全部项目</option>
+                    ${events.map((event) => `<option value="${event.id}"${String(event.id) === this.homeroomRegistrationFilters.event_id ? ' selected' : ''}>${App._escHtml(event.name || '-')}</option>`).join('')}
+                  </select>
+                </div>
+                <div class="form__group">
+                  <label class="form__label">学生检索</label>
+                  <input class="form__input" id="teacher-registration-keyword-filter" value="${App._escAttr(this.homeroomRegistrationFilters.student_keyword)}" placeholder="输入学号、姓名或项目名">
+                </div>
+                <div class="form__group">
+                  <label class="form__label">查询模式</label>
+                  <select class="form__select" id="teacher-registration-match-filter">
+                    <option value="fuzzy"${this.homeroomRegistrationFilters.match_mode === 'fuzzy' ? ' selected' : ''}>模糊匹配</option>
+                    <option value="exact"${this.homeroomRegistrationFilters.match_mode === 'exact' ? ' selected' : ''}>精确查询</option>
+                  </select>
+                </div>
+              </div>
+              <div class="teacher-batch-toolbar">
+                <div class="teacher-batch-toolbar__meta">
+                  <strong>当前结果 ${rows.length} 条</strong>
+                  <span>待报名审核 ${pendingCount} 条，取消申请 ${cancellingCount} 条</span>
+                </div>
+                <div class="teacher-table-actions">
+                  <button type="button" class="btn btn-outline btn-sm" id="teacher-select-all-registrations"${selectedIds.length ? '' : ' disabled'}>全选当前可处理项</button>
+                  <button type="button" class="btn btn-primary btn-sm" id="teacher-batch-approve-registrations"${selectedIds.length ? '' : ' disabled'}>批量通过报名</button>
+                  <button type="button" class="btn btn-outline btn-sm" id="teacher-batch-reject-registrations"${selectedIds.length ? '' : ' disabled'}>批量驳回报名</button>
+                  <button type="button" class="btn btn-primary btn-sm" id="teacher-batch-approve-cancel"${cancellingCount ? '' : ' disabled'}>批量批准取消</button>
+                  <button type="button" class="btn btn-outline btn-sm" id="teacher-batch-reject-cancel"${cancellingCount ? '' : ' disabled'}>批量驳回取消</button>
+                </div>
+              </div>
               ${rows.length ? `
                 <div class="table-container">
                   <table class="table table--striped">
-                    <thead><tr><th>学生</th><th>项目</th><th>状态</th><th>时间</th><th>操作</th></tr></thead>
+                    <thead><tr><th><input type="checkbox" id="teacher-registration-check-all"></th><th>学生</th><th>项目</th><th>状态</th><th>时间</th><th>操作</th></tr></thead>
                     <tbody>
                       ${rows.map((item) => {
                         const isCancel = item.status === 'cancelling';
+                        const canReview = item.status === 'pending' || item.status === 'cancelling';
                         return `
                           <tr>
+                            <td><input type="checkbox" class="teacher-registration-checkbox" data-registration-id="${item.id}" data-registration-status="${App._escAttr(item.status)}"${canReview ? '' : ' disabled'}></td>
                             <td>${App._escHtml(item.user_name || '-')}<br><small class="text-muted">${App._escHtml(item.grade || '-')} ${App._escHtml(item.class_name || '-')}</small></td>
-                            <td>${App._escHtml(item.event_name || '-')}</td>
+                            <td>${App._escHtml(item.event_name || '-')}<br><small class="text-muted">${App._escHtml(item.student_id || '-')}</small></td>
                             <td><span class="badge ${isCancel ? 'badge-warning' : item.status === 'approved' ? 'badge-approved' : item.status === 'rejected' ? 'badge-rejected' : 'badge-pending'}">${App._escHtml(this._statusLabel(item.status))}</span></td>
                             <td>${App.formatDate(item.reviewed_at || item.created_at)}</td>
                             <td>
@@ -244,10 +314,73 @@ const Teacher = {
         </div>
       `;
       document.getElementById('teacher-refresh-registrations')?.addEventListener('click', () => this._renderHomeroomRegistrations());
+      document.getElementById('teacher-clear-registration-filters')?.addEventListener('click', async () => {
+        this.homeroomRegistrationFilters = { status: '', event_id: '', student_keyword: '', match_mode: 'fuzzy' };
+        await this._renderHomeroomRegistrations();
+      });
+      this._bindHomeroomRegistrationFilters();
+      this._bindHomeroomRegistrationBatchActions();
       this._bindReviewButtons(true);
     } catch (e) {
       content.innerHTML = `<div class="empty-state"><p class="empty-state__desc">${App._escHtml(e.message || '报名列表加载失败')}</p></div>`;
     }
+  },
+
+  _bindHomeroomRegistrationFilters() {
+    const syncAndReload = async (partial = {}, useDebounce = false) => {
+      this.homeroomRegistrationFilters = {
+        ...this.homeroomRegistrationFilters,
+        ...partial
+      };
+      if (!useDebounce) {
+        await this._renderHomeroomRegistrations();
+        return;
+      }
+      clearTimeout(this._homeroomRegistrationFilterTimer);
+      this._homeroomRegistrationFilterTimer = setTimeout(() => {
+        this._renderHomeroomRegistrations();
+      }, 220);
+    };
+    document.getElementById('teacher-registration-status-filter')?.addEventListener('change', (e) => {
+      syncAndReload({ status: e.target.value || '' });
+    });
+    document.getElementById('teacher-registration-event-filter')?.addEventListener('change', (e) => {
+      syncAndReload({ event_id: e.target.value || '' });
+    });
+    document.getElementById('teacher-registration-match-filter')?.addEventListener('change', (e) => {
+      syncAndReload({ match_mode: e.target.value === 'exact' ? 'exact' : 'fuzzy' });
+    });
+    document.getElementById('teacher-registration-keyword-filter')?.addEventListener('input', (e) => {
+      syncAndReload({ student_keyword: e.target.value.trim() }, true);
+    });
+  },
+
+  _bindHomeroomRegistrationBatchActions() {
+    document.getElementById('teacher-registration-check-all')?.addEventListener('change', (e) => {
+      const checked = e.target.checked;
+      document.querySelectorAll('.teacher-registration-checkbox:not(:disabled)').forEach((checkbox) => {
+        checkbox.checked = checked;
+      });
+    });
+    document.getElementById('teacher-select-all-registrations')?.addEventListener('click', () => {
+      document.querySelectorAll('.teacher-registration-checkbox:not(:disabled)').forEach((checkbox) => {
+        checkbox.checked = true;
+      });
+      const checkAll = document.getElementById('teacher-registration-check-all');
+      if (checkAll) checkAll.checked = true;
+    });
+    document.getElementById('teacher-batch-approve-registrations')?.addEventListener('click', async () => {
+      await this._submitBatchRegistrationReview('approve', 'registration');
+    });
+    document.getElementById('teacher-batch-reject-registrations')?.addEventListener('click', async () => {
+      await this._submitBatchRegistrationReview('reject', 'registration');
+    });
+    document.getElementById('teacher-batch-approve-cancel')?.addEventListener('click', async () => {
+      await this._submitBatchRegistrationReview('approve', 'cancel');
+    });
+    document.getElementById('teacher-batch-reject-cancel')?.addEventListener('click', async () => {
+      await this._submitBatchRegistrationReview('reject', 'cancel');
+    });
   },
 
   _renderRegistrationActions(item) {
@@ -303,6 +436,43 @@ const Teacher = {
     } catch (e) {
       App.hideLoading();
       App.showToast(e.message || '提交审核失败', 'error');
+    }
+  },
+
+  async _submitBatchRegistrationReview(action, reviewType) {
+    const targetStatus = reviewType === 'cancel' ? 'cancelling' : 'pending';
+    const ids = Array.from(document.querySelectorAll(`.teacher-registration-checkbox[data-registration-status="${targetStatus}"]:checked`))
+      .map((checkbox) => Number(checkbox.dataset.registrationId || 0))
+      .filter(Boolean);
+    if (!ids.length) {
+      App.showToast(reviewType === 'cancel' ? '请先选择取消申请记录' : '请先选择待审核报名记录', 'warning');
+      return;
+    }
+    let reason = '';
+    if (action === 'reject') {
+      reason = window.prompt(reviewType === 'cancel' ? '请输入批量驳回取消申请的原因（可选）' : '请输入批量驳回报名的原因（可选）', '') || '';
+    }
+    const confirmed = await App.confirmDialog(
+      reviewType === 'cancel'
+        ? (action === 'approve' ? `确认批量批准 ${ids.length} 条取消申请吗？` : `确认批量驳回 ${ids.length} 条取消申请吗？`)
+        : (action === 'approve' ? `确认批量通过 ${ids.length} 条报名吗？` : `确认批量驳回 ${ids.length} 条报名吗？`)
+    );
+    if (!confirmed) return;
+    try {
+      App.showLoading();
+      const res = await API.teacher.batchReviewRegistrations({
+        ids,
+        action,
+        review_type: reviewType,
+        reason
+      });
+      App.hideLoading();
+      if (!res.success) throw new Error(res.error || '批量审核失败');
+      App.showToast(res.message || '批量审核成功', 'success');
+      await this._renderHomeroomRegistrations();
+    } catch (e) {
+      App.hideLoading();
+      App.showToast(e.message || '批量审核失败', 'error');
     }
   },
 

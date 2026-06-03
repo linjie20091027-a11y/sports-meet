@@ -74,6 +74,136 @@ function buildManagedStudentIds(db, profile) {
   return db.prepare(`SELECT u.id FROM users u WHERE u.role = 'student' AND ${scope.where}`).all(...scope.params).map((item) => item.id);
 }
 
+function normalizeRegistrationReviewAction(action) {
+  const normalized = String(action || '').trim();
+  if (!['approve', 'reject'].includes(normalized)) {
+    throw new Error('无效的审核操作');
+  }
+  return normalized;
+}
+
+function normalizeRegistrationKeyword(value) {
+  return String(value || '').trim().slice(0, 50);
+}
+
+function normalizeRegistrationMatchMode(value) {
+  return String(value || '').trim() === 'exact' ? 'exact' : 'fuzzy';
+}
+
+function appendRegistrationKeywordFilter(sqlParts, params, keyword, matchMode) {
+  if (!keyword) return;
+  if (matchMode === 'exact') {
+    sqlParts.push('AND (u.student_id = ? OR u.name = ? OR e.name = ?)');
+    params.push(keyword, keyword, keyword);
+    return;
+  }
+  const likeKeyword = `%${keyword}%`;
+  sqlParts.push('AND (u.student_id LIKE ? OR u.name LIKE ? OR e.name LIKE ?)');
+  params.push(likeKeyword, likeKeyword, likeKeyword);
+}
+
+function listHomeroomRegistrations(db, profile, query = {}) {
+  const scope = getManagedStudentWhere(profile);
+  const status = String(query.status || '').trim();
+  const eventId = parseInt(query.event_id, 10) || 0;
+  const studentKeyword = normalizeRegistrationKeyword(query.student_keyword);
+  const matchMode = normalizeRegistrationMatchMode(query.match_mode);
+  const params = [...scope.params];
+  const sqlParts = [
+    `SELECT r.id, r.status, r.reject_reason, r.created_at, r.reviewed_at,
+      u.id AS user_id, u.name AS user_name, u.student_id, u.grade, u.class_name,
+      e.id AS event_id, e.name AS event_name, e.category
+    FROM registrations r
+    JOIN users u ON u.id = r.user_id
+    JOIN events e ON e.id = r.event_id
+    WHERE ${scope.where}`
+  ];
+  if (status) {
+    sqlParts.push('AND r.status = ?');
+    params.push(status);
+  }
+  if (eventId) {
+    sqlParts.push('AND e.id = ?');
+    params.push(eventId);
+  }
+  appendRegistrationKeywordFilter(sqlParts, params, studentKeyword, matchMode);
+  sqlParts.push("ORDER BY CASE r.status WHEN 'pending' THEN 0 WHEN 'cancelling' THEN 1 ELSE 2 END, r.created_at DESC");
+  const list = db.prepare(sqlParts.join('\n')).all(...params);
+  const eventOptions = db.prepare(`
+    SELECT DISTINCT e.id, e.name
+    FROM registrations r
+    JOIN users u ON u.id = r.user_id
+    JOIN events e ON e.id = r.event_id
+    WHERE ${scope.where}
+    ORDER BY e.name, e.id
+  `).all(...scope.params);
+  return {
+    list,
+    filters: {
+      status,
+      event_id: eventId || '',
+      student_keyword: studentKeyword,
+      match_mode: matchMode
+    },
+    events: eventOptions
+  };
+}
+
+function processRegistrationReview(db, registration, reviewer, action, reason, isCancel) {
+  if (isCancel) {
+    if (registration.status !== 'cancelling') {
+      throw new Error('该取消申请已处理');
+    }
+    if (action === 'approve') {
+      db.prepare('DELETE FROM registrations WHERE id = ?').run(registration.id);
+      createNotification(db, registration.user_id, {
+        type: 'success',
+        title: '取消报名已批准',
+        content: `班主任已批准您取消「${registration.event_name}」报名`,
+        target_url: '#/student?tab=registrations',
+        action_label: '查看报名状态'
+      });
+    } else {
+      db.prepare("UPDATE registrations SET status = 'approved', reviewed_by = ?, reviewed_at = datetime('now','localtime') WHERE id = ?")
+        .run(reviewer.id, registration.id);
+      createNotification(db, registration.user_id, {
+        type: 'warning',
+        title: '取消报名已驳回',
+        content: `班主任驳回了您取消「${registration.event_name}」报名的申请${reason ? '，原因：' + reason : ''}`,
+        target_url: '#/student?tab=registrations',
+        action_label: '查看报名状态'
+      });
+    }
+    return action === 'approve' ? '已批准取消申请' : '已驳回取消申请';
+  }
+
+  if (registration.status !== 'pending') {
+    throw new Error('该报名记录已处理');
+  }
+  if (action === 'approve') {
+    db.prepare("UPDATE registrations SET status = 'approved', reject_reason = '', reviewed_by = ?, reviewed_at = datetime('now','localtime') WHERE id = ?")
+      .run(reviewer.id, registration.id);
+    createNotification(db, registration.user_id, {
+      type: 'success',
+      title: '报名已通过',
+      content: `班主任已通过您报名的「${registration.event_name}」`,
+      target_url: '#/student?tab=registrations',
+      action_label: '查看报名状态'
+    });
+  } else {
+    db.prepare("UPDATE registrations SET status = 'rejected', reject_reason = ?, reviewed_by = ?, reviewed_at = datetime('now','localtime') WHERE id = ?")
+      .run(reason, reviewer.id, registration.id);
+    createNotification(db, registration.user_id, {
+      type: 'warning',
+      title: '报名已驳回',
+      content: `班主任驳回了您报名的「${registration.event_name}」${reason ? '，原因：' + reason : ''}`,
+      target_url: '#/student?tab=registrations',
+      action_label: '查看报名状态'
+    });
+  }
+  return action === 'approve' ? '已通过报名' : '已驳回报名';
+}
+
 router.get('/me', (req, res) => {
   try {
     const db = getDb();
@@ -152,24 +282,7 @@ router.get('/homeroom/registrations', (req, res) => {
     const db = getDb();
     const profile = getTeacherProfile(db, req.user.id);
     assertHomeroomTeacher(profile);
-    const scope = getManagedStudentWhere(profile);
-    const status = String(req.query.status || '').trim();
-    const params = [...scope.params];
-    let sql = `
-      SELECT r.id, r.status, r.reject_reason, r.created_at, r.reviewed_at,
-        u.id AS user_id, u.name AS user_name, u.student_id, u.grade, u.class_name,
-        e.id AS event_id, e.name AS event_name, e.category
-      FROM registrations r
-      JOIN users u ON u.id = r.user_id
-      JOIN events e ON e.id = r.event_id
-      WHERE ${scope.where}
-    `;
-    if (status) {
-      sql += ' AND r.status = ?';
-      params.push(status);
-    }
-    sql += ' ORDER BY CASE r.status WHEN \'pending\' THEN 0 WHEN \'cancelling\' THEN 1 ELSE 2 END, r.created_at DESC';
-    res.json({ success: true, data: db.prepare(sql).all(...params) });
+    res.json({ success: true, data: listHomeroomRegistrations(db, profile, req.query) });
   } catch (e) {
     res.status(400).json({ success: false, error: e.message });
   }
@@ -180,11 +293,8 @@ router.put('/registrations/:id/review', (req, res) => {
     const db = getDb();
     const profile = getTeacherProfile(db, req.user.id);
     assertHomeroomTeacher(profile);
-    const action = String(req.body.action || '').trim();
+    const action = normalizeRegistrationReviewAction(req.body.action);
     const reason = String(req.body.reason || '').trim().slice(0, 200);
-    if (!['approve', 'reject'].includes(action)) {
-      return res.status(400).json({ success: false, error: '无效的审核操作' });
-    }
     const scope = getManagedStudentWhere(profile);
     const registration = db.prepare(`
       SELECT r.*, u.name AS user_name, u.grade, u.class_name, e.name AS event_name
@@ -194,30 +304,9 @@ router.put('/registrations/:id/review', (req, res) => {
       WHERE r.id = ? AND ${scope.where}
     `).get(req.params.id, ...scope.params);
     if (!registration) return res.status(404).json({ success: false, error: '报名记录不存在或不属于当前班级' });
-    if (registration.status !== 'pending') {
-      return res.status(400).json({ success: false, error: '该报名记录已处理' });
-    }
-    if (action === 'approve') {
-      db.prepare("UPDATE registrations SET status = 'approved', reject_reason = '', reviewed_by = ?, reviewed_at = datetime('now','localtime') WHERE id = ?")
-        .run(req.user.id, req.params.id);
-      createNotification(db, registration.user_id, {
-        type: 'success',
-        title: '报名已通过',
-        content: `班主任已通过您报名的「${registration.event_name}」`,
-        target_url: '#/student'
-      });
-    } else {
-      db.prepare("UPDATE registrations SET status = 'rejected', reject_reason = ?, reviewed_by = ?, reviewed_at = datetime('now','localtime') WHERE id = ?")
-        .run(reason, req.user.id, req.params.id);
-      createNotification(db, registration.user_id, {
-        type: 'warning',
-        title: '报名已驳回',
-        content: `班主任驳回了您报名的「${registration.event_name}」${reason ? '，原因：' + reason : ''}`,
-        target_url: '#/student'
-      });
-    }
+    const message = processRegistrationReview(db, registration, req.user, action, reason, false);
     logOperation(req.user.id, req.user.username, action === 'approve' ? '班主任通过报名' : '班主任驳回报名', `报名ID:${req.params.id}`, getIp(req));
-    res.json({ success: true, message: action === 'approve' ? '已通过报名' : '已驳回报名' });
+    res.json({ success: true, message });
   } catch (e) {
     res.status(400).json({ success: false, error: e.message });
   }
@@ -228,10 +317,8 @@ router.put('/registrations/:id/cancel-review', (req, res) => {
     const db = getDb();
     const profile = getTeacherProfile(db, req.user.id);
     assertHomeroomTeacher(profile);
-    const action = String(req.body.action || '').trim();
-    if (!['approve', 'reject'].includes(action)) {
-      return res.status(400).json({ success: false, error: '无效的审核操作' });
-    }
+    const action = normalizeRegistrationReviewAction(req.body.action);
+    const reason = String(req.body.reason || '').trim().slice(0, 200);
     const scope = getManagedStudentWhere(profile);
     const registration = db.prepare(`
       SELECT r.*, u.name AS user_name, u.grade, u.class_name, e.name AS event_name
@@ -241,26 +328,69 @@ router.put('/registrations/:id/cancel-review', (req, res) => {
       WHERE r.id = ? AND r.status = 'cancelling' AND ${scope.where}
     `).get(req.params.id, ...scope.params);
     if (!registration) return res.status(404).json({ success: false, error: '取消申请不存在或不属于当前班级' });
-    if (action === 'approve') {
-      db.prepare('DELETE FROM registrations WHERE id = ?').run(req.params.id);
-      createNotification(db, registration.user_id, {
-        type: 'success',
-        title: '取消报名已批准',
-        content: `班主任已批准您取消「${registration.event_name}」报名`,
-        target_url: '#/student'
-      });
-    } else {
-      db.prepare("UPDATE registrations SET status = 'approved', reviewed_by = ?, reviewed_at = datetime('now','localtime') WHERE id = ?")
-        .run(req.user.id, req.params.id);
-      createNotification(db, registration.user_id, {
-        type: 'warning',
-        title: '取消报名已驳回',
-        content: `班主任驳回了您取消「${registration.event_name}」报名的申请`,
-        target_url: '#/student'
-      });
-    }
+    const message = processRegistrationReview(db, registration, req.user, action, reason, true);
     logOperation(req.user.id, req.user.username, action === 'approve' ? '班主任批准取消报名' : '班主任驳回取消报名', `报名ID:${req.params.id}`, getIp(req));
-    res.json({ success: true, message: action === 'approve' ? '已批准取消申请' : '已驳回取消申请' });
+    res.json({ success: true, message });
+  } catch (e) {
+    res.status(400).json({ success: false, error: e.message });
+  }
+});
+
+router.post('/registrations/batch-review', (req, res) => {
+  try {
+    const db = getDb();
+    const profile = getTeacherProfile(db, req.user.id);
+    assertHomeroomTeacher(profile);
+    const action = normalizeRegistrationReviewAction(req.body.action);
+    const reviewType = String(req.body.review_type || 'registration').trim() === 'cancel' ? 'cancel' : 'registration';
+    const reason = String(req.body.reason || '').trim().slice(0, 200);
+    const ids = [...new Set((Array.isArray(req.body.ids) ? req.body.ids : [])
+      .map((item) => parseInt(item, 10))
+      .filter((item) => Number.isInteger(item) && item > 0))];
+    if (!ids.length) {
+      return res.status(400).json({ success: false, error: '请先选择需要处理的报名记录' });
+    }
+    const scope = getManagedStudentWhere(profile);
+    const placeholders = ids.map(() => '?').join(',');
+    const params = [...ids, ...scope.params];
+    let sql = `
+      SELECT r.*, u.name AS user_name, u.grade, u.class_name, e.name AS event_name
+      FROM registrations r
+      JOIN users u ON u.id = r.user_id
+      JOIN events e ON e.id = r.event_id
+      WHERE r.id IN (${placeholders}) AND ${scope.where}
+    `;
+    sql += reviewType === 'cancel'
+      ? " AND r.status = 'cancelling'"
+      : " AND r.status = 'pending'";
+    const rows = db.prepare(sql).all(...params);
+    if (!rows.length) {
+      return res.status(404).json({ success: false, error: '未找到可处理的班级报名记录' });
+    }
+    let processed = 0;
+    const tx = db.transaction((records) => {
+      records.forEach((record) => {
+        processRegistrationReview(db, record, req.user, action, reason, reviewType === 'cancel');
+        processed++;
+      });
+    });
+    tx(rows);
+    logOperation(
+      req.user.id,
+      req.user.username,
+      reviewType === 'cancel'
+        ? (action === 'approve' ? '班主任批量批准取消报名' : '班主任批量驳回取消报名')
+        : (action === 'approve' ? '班主任批量通过报名' : '班主任批量驳回报名'),
+      `批量处理${processed}条记录`,
+      getIp(req)
+    );
+    res.json({
+      success: true,
+      message: action === 'approve'
+        ? `已批量处理${processed}条记录`
+        : `已批量驳回${processed}条记录`,
+      data: { processed }
+    });
   } catch (e) {
     res.status(400).json({ success: false, error: e.message });
   }

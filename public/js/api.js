@@ -258,6 +258,7 @@ const API = {
     getHomeroomRegistrations(params) { return API.get('/teacher/homeroom/registrations' + API._qs(params)); },
     reviewRegistration(id, data) { return API.put('/teacher/registrations/' + id + '/review', data); },
     reviewCancelRegistration(id, data) { return API.put('/teacher/registrations/' + id + '/cancel-review', data); },
+    batchReviewRegistrations(data) { return API.post('/teacher/registrations/batch-review', data); },
     getAssignments() { return API.get('/teacher/event/assignments'); },
     getResultsEntry(params) { return API.get('/teacher/event/results-entry' + API._qs(params)); },
     batchSaveResults(data) { return API.post('/teacher/event/results/batch-save', data); },

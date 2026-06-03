@@ -352,7 +352,7 @@ router.get('/users', (req, res) => {
 
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
     const query = `SELECT
-      u.id, u.username, u.email, u.role, u.student_id, u.name, u.class_name, u.grade, u.status, u.created_at,
+      u.id, u.username, u.email, u.role, u.student_id, u.name, u.class_name, u.grade, COALESCE(u.gender, '') AS gender, u.status, u.created_at,
       COALESCE(u.permission_role, CASE WHEN u.role = 'admin' AND COALESCE(u.staff_type, '') != '' THEN 'teacher' WHEN u.role = 'admin' THEN 'global_admin' ELSE 'student' END) AS permission_role,
       COALESCE(u.staff_type, '') AS staff_type,
       COALESCE(u.managed_grade, '') AS managed_grade,
@@ -372,7 +372,7 @@ router.get('/users/:id', (req, res) => {
     const db = getDb();
     const user = db.prepare(`
       SELECT
-        id, username, email, role, student_id, name, class_name, grade, status, created_at,
+        id, username, email, role, student_id, name, class_name, grade, COALESCE(gender, '') AS gender, status, created_at,
         COALESCE(permission_role, CASE WHEN role = 'admin' AND COALESCE(staff_type, '') != '' THEN 'teacher' WHEN role = 'admin' THEN 'global_admin' ELSE 'student' END) AS permission_role,
         COALESCE(staff_type, '') AS staff_type,
         COALESCE(managed_grade, '') AS managed_grade,
@@ -400,6 +400,7 @@ router.post('/users', (req, res) => {
       student_id,
       class_name,
       grade,
+      gender,
       role,
       permission_role,
       staff_type,
@@ -426,9 +427,9 @@ router.post('/users', (req, res) => {
       return res.status(400).json({ success: false, error: '任课教师必须分配至少一个录入项目' });
     }
     const hash = bcrypt.hashSync(password, 10);
-    db.prepare(`INSERT INTO users (
-      username, email, password, role, permission_role, staff_type, student_id, name, class_name, grade, managed_grade, managed_class_name, assigned_event_ids
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    const result = db.prepare(`INSERT INTO users (
+      username, email, password, role, permission_role, staff_type, student_id, name, class_name, grade, gender, managed_grade, managed_class_name, assigned_event_ids
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
       username,
       email,
       hash,
@@ -439,12 +440,13 @@ router.post('/users', (req, res) => {
       name,
       class_name || '',
       grade || '',
+      String(gender || '').trim(),
       normalizedStaffType === 'homeroom_teacher' ? String(managed_grade || grade || '').trim() : '',
       normalizedStaffType === 'homeroom_teacher' ? String(managed_class_name || class_name || '').trim() : '',
       JSON.stringify(normalizedStaffType === 'event_teacher' ? normalizeAssignedEventIds(assigned_event_ids) : [])
     );
     logOperation(req.user.id, req.user.username, '添加用户', `添加用户: ${name}(${normalizedPermissionRole}${normalizedStaffType ? ':' + normalizedStaffType : ''})`, getIp(req));
-    res.json({ success: true, message: '添加成功' });
+    res.json({ success: true, message: '添加成功', data: { id: Number(result.lastInsertRowid || 0) } });
   } catch (e) {
     if (e.message.includes('UNIQUE')) return res.status(400).json({ success: false, error: '用户名/邮箱/学号已存在' });
     res.status(500).json({ success: false, error: e.message });
@@ -497,6 +499,7 @@ router.put('/users/:id', (req, res) => {
       student_id,
       class_name,
       grade,
+      gender,
       email,
       username,
       role,
@@ -514,6 +517,7 @@ router.put('/users/:id', (req, res) => {
     if (student_id !== undefined) fields.student_id = student_id;
     if (class_name !== undefined) fields.class_name = class_name;
     if (grade !== undefined) fields.grade = grade;
+    if (gender !== undefined) fields.gender = String(gender || '').trim();
     if (email !== undefined) fields.email = email;
     if (username !== undefined) fields.username = username;
     const normalizedPermissionRole = role !== undefined || permission_role !== undefined || staff_type !== undefined

@@ -342,6 +342,11 @@ h1{font-family:var(--title-font);font-size:2.2rem}h2{font-size:1.4rem}h3{font-si
 .teacher-summary-card strong{display:block;font-size:1.6rem;line-height:1.1;color:var(--red);font-family:var(--title-font)}
 .teacher-summary-card span{display:block;margin-top:.35rem;font-size:.75rem;color:var(--text2)}
 .teacher-table-actions{display:flex;flex-wrap:wrap;gap:.5rem}
+.teacher-filter-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.75rem;margin-bottom:1rem}
+.teacher-batch-toolbar{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;padding:.9rem 1rem;border:1px solid var(--border);border-radius:14px;background:#fffaf2}
+.teacher-batch-toolbar__meta{display:flex;flex-direction:column;gap:.15rem}
+.teacher-batch-toolbar__meta strong{font-size:.82rem;color:var(--text)}
+.teacher-batch-toolbar__meta span{font-size:.72rem;color:var(--text3)}
 .teacher-card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.85rem}
 .teacher-event-card{padding:1rem;border:1px solid var(--border);border-radius:16px;background:#fffdf9;box-shadow:var(--shadow)}
 .teacher-event-card h4{font-size:.88rem;color:var(--text);margin-bottom:.35rem}
@@ -757,6 +762,7 @@ h1{font-family:var(--title-font);font-size:2.2rem}h2{font-size:1.4rem}h3{font-si
   .teacher-sidebar__menu{flex-direction:row;flex-wrap:wrap}
   .teacher-menu-item{flex:1 1 180px;justify-content:center}
   .teacher-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .teacher-filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 
 @media (max-width: 640px) {
@@ -767,6 +773,8 @@ h1{font-family:var(--title-font);font-size:2.2rem}h2{font-size:1.4rem}h3{font-si
   .teacher-summary-grid{grid-template-columns:1fr}
   .teacher-results-meta{flex-direction:column;align-items:flex-start;gap:.35rem}
   .teacher-card-grid{grid-template-columns:1fr}
+  .teacher-filter-grid{grid-template-columns:1fr}
+  .teacher-batch-toolbar{padding:.85rem}
 }
 
 @keyframes spin{to{transform:rotate(360deg)}}@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes fadeInUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}@keyframes slideUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}@keyframes toast-in{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}@keyframes toast-out{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(5px)}}
