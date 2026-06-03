@@ -736,12 +736,26 @@ async function aiModerateImage(imageUrl) {
   try {
     const db = getDb();
     const row = db.prepare("SELECT value FROM settings WHERE key='ai_moderation_enabled'").get();
-    if (!row || row.value !== '1') return null;
-  } catch(e) { return null; }
+    if (!row || row.value !== '1') { console.log('[图片审核] 开关未开'); return null; }
+  } catch(e) { console.log('[图片审核] 读取开关失败'); return null; }
   if (!imageUrl) return null;
-  console.log('[AI审核] 图片审核启动, URL:', imageUrl);
+
+  // 读取图片文件为 base64（豆包无法访问 localhost）
+  let imageBase64 = '';
+  try {
+    const urlPath = new URL(imageUrl).pathname;
+    const filePath = path.join(__dirname, '..', 'public', urlPath);
+    if (fs.existsSync(filePath)) {
+      const buf = fs.readFileSync(filePath);
+      const ext = path.extname(filePath).toLowerCase();
+      const mime = ext === '.png' ? 'image/png' : ext === '.gif' ? 'image/gif' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
+      imageBase64 = 'data:' + mime + ';base64,' + buf.toString('base64');
+    }
+  } catch(e) { console.log('[图片审核] 读文件失败:', e.message); }
+  if (!imageBase64) { console.log('[图片审核] 图片无法读取'); return null; }
 
   const https = require('https');
+  console.log('[图片审核] 豆包审核中...');
   return new Promise((resolve) => {
     try {
       const url = new URL(DOUBAO_API_URL);
@@ -750,7 +764,7 @@ async function aiModerateImage(imageUrl) {
         input: [{
           role: 'user',
           content: [
-            { type: 'input_image', image_url: imageUrl },
+            { type: 'input_image', image_url: imageBase64 },
             { type: 'input_text', text: '审核图片是否含：色情低俗、暴力血腥、辱骂文字、广告二维码、违法内容。只回复JSON：{"safe":true,"reason":"通过"} 或 {"safe":false,"reason":"违规原因"}' }
           ]
         }]
@@ -765,31 +779,35 @@ async function aiModerateImage(imageUrl) {
           'Authorization': `Bearer ${DOUBAO_API_KEY}`,
           'Content-Length': Buffer.byteLength(body)
         },
-        timeout: 15000
+        timeout: 30000
       }, (resp) => {
         let data = '';
         resp.on('data', chunk => data += chunk);
         resp.on('end', () => {
+          console.log('[图片审核] HTTP', resp.statusCode, '响应长度:', data.length);
+          if (resp.statusCode !== 200) {
+            console.log('[图片审核] 非200:', data.substring(0, 300));
+            resolve(null); return;
+          }
           try {
             const json = JSON.parse(data);
             const text = json.output?.[0]?.content?.[0]?.text
               || json.choices?.[0]?.message?.content
-              || json.data
-              || '';
+              || json.data || '';
             const match = String(text).match(/\{[\s\S]*\}/);
             if (match) {
               const r = JSON.parse(match[0]);
-              console.log('[AI审核] 图片结果:', r.safe ? '通过' : '违规', r.reason);
+              console.log('[图片审核] 结果:', r.safe ? '通过' : '违规', r.reason);
               resolve(r);
             }
-            else { console.log('[AI审核] 图片解析失败'); resolve(null); }
-          } catch (_) { console.log('[AI审核] 图片响应异常'); resolve(null); }
+            else { console.log('[图片审核] 解析失败, text:', String(text).substring(0,200)); resolve(null); }
+          } catch(e) { console.log('[图片审核] JSON异常:', e.message, data.substring(0,200)); resolve(null); }
         });
       });
-      apiReq.on('error', () => resolve(null));
+      apiReq.on('error', (e) => { console.log('[图片审核] 请求失败:', e.message); resolve(null); });
       apiReq.write(body);
       apiReq.end();
-    } catch (_) { resolve(null); }
+    } catch(e) { console.log('[图片审核] 构建失败:', e.message); resolve(null); }
   });
 }
 

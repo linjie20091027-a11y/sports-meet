@@ -111,8 +111,22 @@ async function moderateImage(imageUrl) {
   if (!isModerationEnabled()) { console.log('[豆包审核] 审核未启用'); return { safe: true, reason: '审核未启用' }; }
   if (!imageUrl) return { safe: true, reason: '无图片' };
 
+  // 读取图片文件为 base64（豆包无法访问 localhost）
+  let imageBase64 = '';
   try {
-    console.log('[豆包审核] 调用豆包 API...');
+    const urlPath = new URL(imageUrl).pathname;
+    const filePath = require('path').join(__dirname, '..', 'public', urlPath);
+    if (require('fs').existsSync(filePath)) {
+      const buf = require('fs').readFileSync(filePath);
+      const ext = require('path').extname(filePath).toLowerCase();
+      const mime = ext === '.png' ? 'image/png' : ext === '.gif' ? 'image/gif' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
+      imageBase64 = 'data:' + mime + ';base64,' + buf.toString('base64');
+    }
+  } catch(e) { console.log('[豆包审核] 读文件失败:', e.message); }
+  if (!imageBase64) { console.log('[豆包审核] 图片无法读取'); return { safe: true, reason: '图片读取失败' }; }
+
+  try {
+    console.log('[豆包审核] 调用豆包 API (base64)...');
     const result = await apiRequest(DOUBAO_API_URL, {
       method: 'POST',
       headers: {
@@ -124,21 +138,24 @@ async function moderateImage(imageUrl) {
       input: [{
         role: 'user',
         content: [
-          { type: 'input_image', image_url: imageUrl },
+          { type: 'input_image', image_url: imageBase64 },
           { type: 'input_text', text: '请审核这张图片是否包含：色情低俗、暴力血腥、辱骂文字、广告二维码、违法内容。只回复JSON：{"safe":true,"reason":"通过"} 或 {"safe":false,"reason":"违规原因"}。不要回复其他内容。' }
         ]
       }]
     });
 
     const content = result.output?.[0]?.content?.[0]?.text || result.choices?.[0]?.message?.content || '';
+    console.log('[豆包审核] 响应:', (content || '').substring(0, 150));
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
+      console.log('[豆包审核] 结果:', parsed.safe ? '通过' : '违规', parsed.reason);
       return { safe: parsed.safe !== false, reason: parsed.reason || '' };
     }
+    console.log('[豆包审核] 解析失败，默认通过');
     return { safe: true, reason: '图片审核结果解析异常，默认通过' };
   } catch(e) {
-    console.error('豆包图片审核失败:', e.message);
+    console.error('[豆包审核] 失败:', e.message);
     return { safe: true, reason: '图片审核服务异常，默认通过' };
   }
 }
