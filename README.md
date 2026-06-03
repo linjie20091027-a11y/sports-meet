@@ -451,12 +451,14 @@ node server.js
 
 ## 👥 贡献者
 
-| 姓名 | 角色 | 主要贡献 |
-|------|------|----------|
-| **林杰** | 项目负责人 & 全栈开发 | 系统架构设计、前后端全栈开发、AI 审核系统集成 |
-| **LINKIT** | 管理员 & 技术顾问 | 系统运维部署、数据库优化、云端迁移方案 |
-| **曾剑辉** | 测试 & 产品反馈 | 功能测试、用户场景验证、需求反馈 |
-| **王诗震** | 测试 & 产品反馈 | 功能测试、UI/UX 优化建议、数据校对 |
+| GitHub | 提交数 | 邮箱 | 主要贡献 |
+|--------|-------|------|----------|
+| [**linjie20091027-a11y**](https://github.com/linjie20091027-a11y) | 89 | linjie20091027@gmail.com | 项目负责人 & 全栈开发 — 系统架构、前后端开发、AI 审核集成 |
+| [**whe047319-tech**](https://github.com/whe047319-tech) | 43 | whe047319@gmail.com | 前端开发 & 交互设计 — 论坛模块、3D 效果、UI 组件优化 |
+| [**ljingxi154-code**](https://github.com/ljingxi154-code) | 34 | ljingxi154@gmail.com | 后端开发 & 数据管理 — 赛程编排、成绩统计、数据导入导出 |
+| [**Noah**](https://github.com/noah200910070082) | 25 | noah200910070082@gmail.com | 功能开发 & 测试优化 — 搜索系统、好友模块、通知推送 |
+
+> 📊 共 **195+ 次提交**，4 位核心贡献者，11 个代码仓库贡献者。
 
 ---
 
@@ -484,6 +486,7 @@ node server.js
     Rua do Comandante João Belo, Macau<br>
     第三十届田径运动会 · 2026年10月22日<br><br>
     Made with ❤️ by 濠江中学运动管理开发团队<br>
+    Contributors: linjie20091027-a11y · whe047319-tech · ljingxi154-code · Noah<br>
     Special thanks to FAI 老师
   </sub>
 </p>
