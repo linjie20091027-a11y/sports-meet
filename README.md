@@ -10,15 +10,17 @@
   <img src="https://img.shields.io/badge/前端-HTML5/CSS3/JS-blue?style=flat-square">
   <img src="https://img.shields.io/badge/后端-Node.js+Express-green?style=flat-square">
   <img src="https://img.shields.io/badge/数据库-SQL.js(SQLite)-lightgrey?style=flat-square">
-  <img src="https://img.shields.io/badge/AI-DeepSeek_V4_Flash-purple?style=flat-square">
+  <img src="https://img.shields.io/badge/AI审核-DeepSeek_V4_Pro+豆包-purple?style=flat-square">
   <img src="https://img.shields.io/badge/安全-7层防护-red?style=flat-square">
+  <img src="https://img.shields.io/badge/版本-v4.0.0-orange?style=flat-square">
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/论坛-图片上传+审核-brightgreen?style=flat-square">
+  <img src="https://img.shields.io/badge/论坛-文字+图片AI审核-brightgreen?style=flat-square">
   <img src="https://img.shields.io/badge/交互-8项典藏效果-gold?style=flat-square">
   <img src="https://img.shields.io/badge/搜索-全场景-yellow?style=flat-square">
   <img src="https://img.shields.io/badge/社交-好友系统-pink?style=flat-square">
+  <img src="https://img.shields.io/badge/审核-DeepSeek+豆包双引擎-ff69b4?style=flat-square">
 </p>
 
 ---
@@ -431,6 +433,43 @@ node server.js
 - ✅ Excel 导入导出
 - ✅ 安全防护（7层）
 
+### v4.x（最新开发版）
+- ✅ **🤖 AI 智能内容审核系统** — 双重引擎护航
+  - **DeepSeek V4 Pro**：论坛文字自动审核，检测辱骂、色情、广告、霸凌、隐私泄露
+  - **豆包 (Volcengine Ark)**：精彩瞬间 + 论坛图片自动审核，识别低俗/暴力/广告二维码
+  - 管理端开关控制，审核结果实时推送到 AI 审核日志页面
+  - 违规内容自动标记待审核/已驳回，AI 通过则自动过审
+- ✅ **📸 精彩瞬间 6 格轮播**：前 5 格 4 秒自动轮播，第 6 格一键多图上传（最多 9 张）
+- ✅ **🔐 权限修复**：误设 admin 的学生账号已恢复 student 角色，API Key 仅限管理员设置
+- ✅ **📋 AI 审核日志页面**：管理端新增独立标签页，按时间线展示所有审核记录
+  - 文字审核：发帖人姓名 + 帖子内容 + AI 判定 + 违规原因
+  - 图片审核：上传者姓名 + 图片预览 + 豆包审核结果
+- ✅ **📄 赛程 PDF 导出**：AI 智能编排后一键生成 A4 横向 PDF（pdfkit）
+- ✅ **🎨 顶部导航栏优化**：标题永不换行 + 三级响应式 + Admin 权限修复
+
+---
+
+## 👥 贡献者
+
+| 姓名 | 角色 | 主要贡献 |
+|------|------|----------|
+| **林杰** | 项目负责人 & 全栈开发 | 系统架构设计、前后端全栈开发、AI 审核系统集成 |
+| **LINKIT** | 管理员 & 技术顾问 | 系统运维部署、数据库优化、云端迁移方案 |
+| **曾剑辉** | 测试 & 产品反馈 | 功能测试、用户场景验证、需求反馈 |
+| **王诗震** | 测试 & 产品反馈 | 功能测试、UI/UX 优化建议、数据校对 |
+
+---
+
+## 🙏 特别致谢
+
+> **感谢 FAI 老师的悉心指导与鼎力支持！**
+>
+> 在本项目的开发过程中，FAI 老师以深厚的专业素养和丰富的教学经验，为整个团队提供了关键性的技术指导和项目管理建议。从系统架构的顶层设计到每一个交互细节的打磨，从数据库规范化到 AI 审核模型的选型与调优，FAI 老师的每一次点拨都让我们茅塞顿开、受益匪浅。
+>
+> FAI 老师不仅教会了我们如何写出健壮的代码，更重要的是教会了我们如何以工程师的思维去分析问题、拆解需求、迭代优化。正是这种严谨治学的态度和精益求精的精神，让一个最初仅有基础报名功能的原型，一步步成长为如今覆盖 635 名用户、20 个比赛项目、集成 AI 智能审核、支持云端部署的全流程数位化运动会管理系统。
+>
+> **饮水思源，不忘师恩。谨以此项目的每一行代码，向 FAI 老师致以最诚挚的敬意！**
+
 ---
 
 ## 📄 开源协议
@@ -443,6 +482,8 @@ node server.js
   <sub>
     「忠诚、勤奋、求实、创新」—— 澳门濠江中学校训<br>
     Rua do Comandante João Belo, Macau<br>
-    第三十届田径运动会 · 2026年10月22日
+    第三十届田径运动会 · 2026年10月22日<br><br>
+    Made with ❤️ by 濠江中学运动管理开发团队<br>
+    Special thanks to FAI 老师
   </sub>
 </p>
