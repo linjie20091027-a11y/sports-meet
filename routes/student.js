@@ -491,7 +491,7 @@ router.post('/registrations', (req, res) => {
     }
 
     // 性别检查
-    const user = db.prepare('SELECT gender FROM users WHERE id = ?').get(req.user.id);
+    const user = db.prepare('SELECT gender, class_name FROM users WHERE id = ?').get(req.user.id);
     if (event.gender_group !== 'mixed' && user?.gender && event.gender_group !== user.gender) {
       return res.status(400).json({ success: false, error: '该项目性别组别与您不符，请选择匹配的项目' });
     }
@@ -501,6 +501,16 @@ router.post('/registrations', (req, res) => {
     ).get(req.user.id, event_id);
     if (existing) {
       return res.status(400).json({ success: false, error: '您已报名该项目，请勿重复报名' });
+    }
+
+    // 每班每项目限报2人
+    const classRegCount = db.prepare(`
+      SELECT COUNT(*) as cnt FROM registrations r
+      JOIN users u ON r.user_id = u.id
+      WHERE r.event_id = ? AND u.class_name = ? AND r.status != 'rejected'
+    `).get(event_id, user?.class_name || '');
+    if (classRegCount.cnt >= 2) {
+      return res.status(400).json({ success: false, error: `该班在「${event.name}」项目中报名人数已达上限（2人），无法继续报名` });
     }
 
     const maxEventsSetting = db.prepare(
