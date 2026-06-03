@@ -897,6 +897,16 @@ function seedDefaultData() {
     });
   }
 
+  // AI 配置（豆包）
+  const aiRows = [
+    ['ai_provider', 'doubao'],
+    ['ai_api_key', '11d46d11-ac59-4369-842e-f0b929320344'],
+    ['ai_model', 'doubao-seed-2.0-pro']
+  ];
+  aiRows.forEach(([k, v]) => {
+    _db.run("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", [k, v]);
+  });
+
   // 年级
   const gradeStmt = _db.prepare("SELECT COUNT(*) as cnt FROM grades");
   gradeStmt.step();
