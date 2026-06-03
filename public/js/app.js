@@ -680,7 +680,7 @@ const App = {
               <div class="notify-item__body">${this._escHtml(item.content || '暂无内容')}</div>
               <div class="notify-item__tools">
                 ${item.is_read ? '' : '<button type="button" class="notify-item__read" data-action="read">标记已读</button>'}
-                <button type="button" class="notify-item__link" data-action="open">查看</button>
+                <button type="button" class="notify-item__link" data-action="open">${this._escHtml(item.target_url ? (item.action_label || '前往相关业务') : '查看详情')}</button>
               </div>
             </div>
           </div>
@@ -804,6 +804,17 @@ const App = {
     }
   },
 
+  _resolveNotificationTarget(id, targetUrl) {
+    const normalized = String(targetUrl || '').trim();
+    if (!normalized) return '#/notifications/' + id;
+    if (normalized.startsWith('#/')) return normalized;
+    if (normalized.startsWith('/')) return '#' + normalized;
+    if (normalized.startsWith('#')) {
+      return normalized.startsWith('#/') ? normalized : '#/' + normalized.replace(/^#+/, '');
+    }
+    return '#/' + normalized.replace(/^\/+/, '');
+  },
+
   async _openNotification(id, targetUrl) {
     const current = this.notificationItems.find((item) => item.id === id);
     if (current && !current.is_read) {
@@ -811,7 +822,12 @@ const App = {
     }
     this._toggleNotificationPanel(false);
     this._closeSwipedNotifications();
-    window.location.hash = '#/notifications/' + id;
+    const nextTarget = this._resolveNotificationTarget(id, targetUrl);
+    if (window.location.hash === nextTarget) {
+      this.route();
+      return;
+    }
+    window.location.hash = nextTarget;
   },
 
   async logout() {
