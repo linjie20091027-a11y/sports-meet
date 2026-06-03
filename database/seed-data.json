@@ -1,0 +1,51 @@
+{
+  "meet_info": {
+    "name": "学校运动会",
+    "theme": "活力校园·运动青春",
+    "start_date": "2026-06-01",
+    "end_date": "2026-06-03",
+    "registration_open": true
+  },
+  "settings": [
+    { "key": "site_name", "value": "学校运动会管理系统" },
+    { "key": "password_min_length", "value": "6" },
+    { "key": "session_hours", "value": "24" },
+    { "key": "max_events_per_student", "value": "3" },
+    { "key": "timezone", "value": "Asia/Shanghai" }
+  ],
+  "grades": ["初一", "初二", "初三", "高一", "高二", "高三"],
+  "class_count_per_grade": 5,
+  "admin_accounts": [
+    { "username": "admin", "email": "admin@hkms.hktedu.com", "name": "系统管理员", "student_id": "ADMIN001" },
+    { "username": "2100", "email": "2100@hkms.hktedu.com", "name": "曾剑辉", "student_id": "2100" },
+    { "username": "0037", "email": "0037@hkms.hktedu.com", "name": "王诗震", "student_id": "0037" }
+  ],
+  "default_password": "admin123",
+  "events": [
+    { "name": "100米", "category": "track", "event_type": "individual", "gender_group": "male", "max_participants": 8 },
+    { "name": "100米", "category": "track", "event_type": "individual", "gender_group": "female", "max_participants": 8 },
+    { "name": "200米", "category": "track", "event_type": "individual", "gender_group": "male", "max_participants": 8 },
+    { "name": "200米", "category": "track", "event_type": "individual", "gender_group": "female", "max_participants": 8 },
+    { "name": "400米", "category": "track", "event_type": "individual", "gender_group": "male", "max_participants": 8 },
+    { "name": "400米", "category": "track", "event_type": "individual", "gender_group": "female", "max_participants": 8 },
+    { "name": "800米", "category": "track", "event_type": "individual", "gender_group": "male", "max_participants": 8 },
+    { "name": "800米", "category": "track", "event_type": "individual", "gender_group": "female", "max_participants": 8 },
+    { "name": "1500米", "category": "track", "event_type": "individual", "gender_group": "male", "max_participants": 12 },
+    { "name": "1500米", "category": "track", "event_type": "individual", "gender_group": "female", "max_participants": 12 },
+    { "name": "跳远", "category": "field", "event_type": "individual", "gender_group": "male", "max_participants": 12 },
+    { "name": "跳远", "category": "field", "event_type": "individual", "gender_group": "female", "max_participants": 12 },
+    { "name": "跳高", "category": "field", "event_type": "individual", "gender_group": "male", "max_participants": 12 },
+    { "name": "跳高", "category": "field", "event_type": "individual", "gender_group": "female", "max_participants": 12 },
+    { "name": "实心球", "category": "field", "event_type": "individual", "gender_group": "male", "max_participants": 12 },
+    { "name": "实心球", "category": "field", "event_type": "individual", "gender_group": "female", "max_participants": 12 },
+    { "name": "4×100米接力", "category": "relay", "event_type": "team", "gender_group": "male", "max_participants": 8 },
+    { "name": "4×100米接力", "category": "relay", "event_type": "team", "gender_group": "female", "max_participants": 8 },
+    { "name": "拔河比赛", "category": "team", "event_type": "team", "gender_group": "mixed", "max_participants": 16 },
+    { "name": "广播体操", "category": "team", "event_type": "team", "gender_group": "mixed", "max_participants": 50 }
+  ],
+  "registration_rules": [
+    { "rule_key": "max_events_per_student", "rule_value": "3", "description": "每位学生最多报名项目数" },
+    { "rule_key": "team_min_members", "rule_value": "4", "description": "集体项目最少人数" },
+    { "rule_key": "allow_cross_grade", "rule_value": "0", "description": "是否允许跨年级报名" }
+  ]
+}

@@ -11,3 +11,5 @@ dist/
 *.tar.gz
 data/
 logs/
+ngrok.exe
+*.exe
