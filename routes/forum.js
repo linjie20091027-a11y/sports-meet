@@ -429,24 +429,22 @@ router.post('/posts', authMiddleware, ensureNotMuted, forumUpload.array('images'
       return res.status(400).json({ success: false, error: '帖子内容含违规词，已自动拦截' });
     }
 
-    // AI 自动审核（非管理员）
+    // AI 自动审核
     let aiResult = null;
     let imageModerationResult = null;
-    if (user.role !== 'admin') {
-      try { aiResult = await aiModeratePost(title, summary, hasFiles); }
-      catch (_) { aiResult = null; }
-      // 豆包图片审核
-      if (imageFiles.length > 0) {
-        try {
-          const imgMods = await Promise.all(imageFiles.map(f =>
-            aiModerateImage(req.protocol + '://' + req.get('host') + '/' + f)
-          ));
-          const flagged = imgMods.filter(r => r && !r.safe);
-          if (flagged.length > 0) {
-            imageModerationResult = { flagged, reasons: flagged.map(f => f.reason).join('；') };
-          }
-        } catch(_) {}
-      }
+    try { aiResult = await aiModeratePost(title, summary, hasFiles); }
+    catch (e) { console.error('AI文字审核异常:', e.message); aiResult = null; }
+    // 豆包图片审核
+    if (imageFiles.length > 0) {
+      try {
+        const imgMods = await Promise.all(imageFiles.map(f =>
+          aiModerateImage(req.protocol + '://' + req.get('host') + '/' + f)
+        ));
+        const flagged = imgMods.filter(r => r && !r.safe);
+        if (flagged.length > 0) {
+          imageModerationResult = { flagged, reasons: flagged.map(f => f.reason).join('；') };
+        }
+      } catch(e) { console.error('AI图片审核异常:', e.message); }
     }
 
     assertPostingRate(db, req.user.id, 'forum_posts', 'title', title);
@@ -666,13 +664,15 @@ const AI_ROUTER = express.Router();
 // AI 内容审核
 async function aiModeratePost(title, content, hasFiles) {
   loadApiKey();
+  console.log('[AI审核] 文字审核启动, API Key:', DEEPSEEK_API_KEY ? '已配置' : '未配置');
   if (!DEEPSEEK_API_KEY) return null;
   // 检查管理端是否启用了 AI 审核
   try {
     const db = getDb();
     const row = db.prepare("SELECT value FROM settings WHERE key='ai_moderation_enabled'").get();
+    console.log('[AI审核] 开关状态:', row ? row.value : '未设置');
     if (!row || row.value !== '1') return null;
-  } catch(e) { return null; }
+  } catch(e) { console.error('[AI审核] 读取开关失败:', e.message); return null; }
   const text = [title, content].filter(Boolean).join('\n');
   if (!text || text.length < 4) return null;
   const prompt = `你是校园论坛内容审核员。请审核以下帖子内容是否违规。
@@ -684,6 +684,7 @@ async function aiModeratePost(title, content, hasFiles) {
 待审核内容：
 ${text.slice(0, 2000)}`;
   const https = require('https');
+  console.log('[AI审核] 调用 DeepSeek V4 Pro 文字审核...');
   return new Promise((resolve) => {
     try {
       const url = new URL(DEEPSEEK_BASE_URL);
@@ -702,15 +703,19 @@ ${text.slice(0, 2000)}`;
             const json = JSON.parse(body);
             const reply = json.choices?.[0]?.message?.content || '';
             const match = reply.match(/\{[\s\S]*\}/);
-            if (match) resolve(JSON.parse(match[0]));
-            else resolve(null);
-          } catch (_) { resolve(null); }
+            if (match) {
+              const r = JSON.parse(match[0]);
+              console.log('[AI审核] 文字结果:', r.action, r.reason);
+              resolve(r);
+            }
+            else { console.log('[AI审核] 文字解析失败'); resolve(null); }
+          } catch (_) { console.log('[AI审核] 文字响应异常'); resolve(null); }
         });
       });
-      apiReq.on('error', () => resolve(null));
+      apiReq.on('error', (e) => { console.log('[AI审核] 文字请求失败:', e.message); resolve(null); });
       apiReq.write(JSON.stringify({ model: 'deepseek-v4-pro', messages: [{ role: 'user', content: prompt }], max_tokens: 256, temperature: 0 }));
       apiReq.end();
-    } catch (_) { resolve(null); }
+    } catch (_) { console.log('[AI审核] 文字请求构建失败'); resolve(null); }
   });
 }
 
@@ -732,6 +737,7 @@ async function aiModerateImage(imageUrl) {
     if (!row || row.value !== '1') return null;
   } catch(e) { return null; }
   if (!imageUrl) return null;
+  console.log('[AI审核] 图片审核启动, URL:', imageUrl);
 
   const https = require('https');
   return new Promise((resolve) => {
@@ -769,9 +775,13 @@ async function aiModerateImage(imageUrl) {
               || json.data
               || '';
             const match = String(text).match(/\{[\s\S]*\}/);
-            if (match) resolve(JSON.parse(match[0]));
-            else resolve(null);
-          } catch (_) { resolve(null); }
+            if (match) {
+              const r = JSON.parse(match[0]);
+              console.log('[AI审核] 图片结果:', r.safe ? '通过' : '违规', r.reason);
+              resolve(r);
+            }
+            else { console.log('[AI审核] 图片解析失败'); resolve(null); }
+          } catch (_) { console.log('[AI审核] 图片响应异常'); resolve(null); }
         });
       });
       apiReq.on('error', () => resolve(null));
@@ -788,7 +798,8 @@ function loadApiKey() {
     const row = db.prepare("SELECT value FROM settings WHERE key='deepseek_api_key'").get();
     if (row?.value) DEEPSEEK_API_KEY = row.value;
     DEEPSEEK_API_KEY_LOADED = true;
-  } catch(e) {}
+    console.log('[AI审核] DeepSeek API Key:', DEEPSEEK_API_KEY ? '已加载(' + DEEPSEEK_API_KEY.substring(0,8) + '...)' : '未配置');
+  } catch(e) { console.error('[AI审核] 加载API Key失败:', e.message); }
 }
 
 // 设置 API Key 的路由

@@ -107,10 +107,12 @@ ${text.substring(0, 2000)}`;
  * @returns {{ safe: boolean, reason: string }}
  */
 async function moderateImage(imageUrl) {
-  if (!isModerationEnabled()) return { safe: true, reason: '审核未启用' };
+  console.log('[豆包审核] 检查精彩瞬间图片:', imageUrl);
+  if (!isModerationEnabled()) { console.log('[豆包审核] 审核未启用'); return { safe: true, reason: '审核未启用' }; }
   if (!imageUrl) return { safe: true, reason: '无图片' };
 
   try {
+    console.log('[豆包审核] 调用豆包 API...');
     const result = await apiRequest(DOUBAO_API_URL, {
       method: 'POST',
       headers: {
