@@ -32,6 +32,8 @@ h1{font-family:var(--title-font);font-size:2.2rem}h2{font-size:1.4rem}h3{font-si
 .nav-logo__text{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2}
 .nav-logo small{font-size:.6rem;font-family:var(--body-font);color:rgba(255,255,255,.7);display:block;line-height:1;font-weight:400;letter-spacing:.05em}
 .nav-logo__media:not(.is-loading) .nav-logo__placeholder{display:none}
+.nav-back{display:flex;align-items:center;gap:5px;color:rgba(255,255,255,.7);font-size:.78rem;text-decoration:none;padding:6px 10px;margin-left:-4px;border-radius:6px;transition:all .2s;white-space:nowrap;flex-shrink:0}
+.nav-back:hover{color:#fff;background:rgba(255,255,255,.1)}
 @keyframes nav-logo-loading{0%{background-position:200% 0}100%{background-position:-200% 0}}
 .nav-links{display:flex;align-items:center;gap:0}
 .nav-link{
