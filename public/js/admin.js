@@ -3221,6 +3221,7 @@ const Admin = {
       html += '<div class="card"><div class="card__header"><h3 class="card__title">功能开关</h3></div><div class="card__body"><div class="form">';
       html += '<div class="form__group form__group--row"><label class="form__label">报名开关</label><input type="checkbox" id="set-reg-open"' + (settings.registration_open ? ' checked' : '') + ' style="width:18px;height:18px;"></div>';
       html += '<div class="form__group form__group--row"><label class="form__label">网站维护模式</label><input type="checkbox" id="set-maintenance"' + (settings.site_maintenance ? ' checked' : '') + ' style="width:18px;height:18px;"></div>';
+      html += '<div class="form__group form__group--row"><label class="form__label">AI 审核 (DeepSeek+豆包)</label><input type="checkbox" id="set-ai-moderation"' + (settings.ai_moderation_enabled === '1' ? ' checked' : '') + ' style="width:18px;height:18px;"><span style="font-size:.65rem;color:var(--text3);margin-left:6px">自动审核论坛文字和图片内容</span></div>';
       html += '</div><div class="card__header"><h3 class="card__title">报名规则</h3></div><div class="card__body"><div class="form">';
       html += '<div class="form__group"><label class="form__label">每人限报项目数</label><input class="form__input" id="set-max-events" type="number" value="' + (rules.max_events_per_person || 3) + '"></div>';
       html += '<div class="form__group"><label class="form__label">每项目人数上限</label><input class="form__input" id="set-max-per-event" type="number" value="' + (rules.max_participants_per_event || 0) + '" placeholder="0=不限"></div>';
@@ -3267,7 +3268,8 @@ const Admin = {
           start_date: document.getElementById('set-start-date').value,
           end_date: document.getElementById('set-end-date').value,
           registration_open: document.getElementById('set-reg-open').checked,
-          site_maintenance: document.getElementById('set-maintenance').checked
+          site_maintenance: document.getElementById('set-maintenance').checked,
+          ai_moderation_enabled: document.getElementById('set-ai-moderation')?.checked ? '1' : '0'
         };
         const rulesData = {
           max_events_per_person: document.getElementById('set-max-events').value,

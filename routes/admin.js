@@ -254,9 +254,9 @@ function paginate(query, params, page, limit) {
 router.put('/settings', (req, res) => {
   try {
     const db = getDb();
-    const { site_name, theme, start_date, end_date, registration_open, site_maintenance, logo_url, ...rest } = req.body;
+    const { site_name, theme, start_date, end_date, registration_open, site_maintenance, logo_url, ai_moderation_enabled, ...rest } = req.body;
 
-    const settingsMap = { site_name, theme, timezone: rest.timezone };
+    const settingsMap = { site_name, theme, timezone: rest.timezone, ai_moderation_enabled };
     const updateSetting = db.prepare(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now','localtime')`);
     for (const [k, v] of Object.entries(settingsMap)) {
       if (v !== undefined) updateSetting.run(k, String(v));

@@ -431,9 +431,22 @@ router.post('/posts', authMiddleware, ensureNotMuted, forumUpload.array('images'
 
     // AI 自动审核（非管理员）
     let aiResult = null;
+    let imageModerationResult = null;
     if (user.role !== 'admin') {
       try { aiResult = await aiModeratePost(title, summary, hasFiles); }
       catch (_) { aiResult = null; }
+      // 豆包图片审核
+      if (imageFiles.length > 0) {
+        try {
+          const imgMods = await Promise.all(imageFiles.map(f =>
+            aiModerateImage(req.protocol + '://' + req.get('host') + '/' + f)
+          ));
+          const flagged = imgMods.filter(r => r && !r.safe);
+          if (flagged.length > 0) {
+            imageModerationResult = { flagged, reasons: flagged.map(f => f.reason).join('；') };
+          }
+        } catch(_) {}
+      }
     }
 
     assertPostingRate(db, req.user.id, 'forum_posts', 'title', title);
@@ -451,7 +464,7 @@ router.post('/posts', authMiddleware, ensureNotMuted, forumUpload.array('images'
       status = 'pending';
       stage = 1;
     }
-    const imageStatus = user.role === 'admin' ? 'approved' : (status === 'approved' ? 'approved' : 'pending');
+    const imageStatus = user.role === 'admin' ? 'approved' : (status === 'approved' && !imageModerationResult ? 'approved' : 'pending');
     const imagesJson = JSON.stringify(imageFiles);
     const inserted = db.prepare(`
       INSERT INTO forum_posts (
@@ -650,68 +663,37 @@ router.delete('/replies/:id', authMiddleware, (req, res) => {
 // ==================== AI 助手 ====================
 const AI_ROUTER = express.Router();
 
-// AI 审核：兼容 DeepSeek / 豆包
-let AI_PROVIDER = 'deepseek';
-let AI_API_KEY = '';
-let AI_MODEL = '';
-let AI_CONFIG_LOADED = false;
-
-const AI_PROVIDERS = {
-  deepseek: { baseURL: 'https://api.deepseek.com/chat/completions', defaultModel: 'deepseek-chat' },
-  doubao: { baseURL: 'https://ark.cn-beijing.volces.com/api/v3/chat/completions', defaultModel: 'doubao-seed-2.0-pro' }
-};
-
-function loadAiConfig() {
-  if (AI_CONFIG_LOADED) return;
+// AI 内容审核
+async function aiModeratePost(title, content, hasFiles) {
+  loadApiKey();
+  if (!DEEPSEEK_API_KEY) return null;
+  // 检查管理端是否启用了 AI 审核
   try {
     const db = getDb();
-    const providerRow = db.prepare("SELECT value FROM settings WHERE key='ai_provider'").get();
-    const keyRow = db.prepare("SELECT value FROM settings WHERE key='ai_api_key'").get();
-    const modelRow = db.prepare("SELECT value FROM settings WHERE key='ai_model'").get();
-    if (providerRow?.value) AI_PROVIDER = providerRow.value;
-    if (keyRow?.value) AI_API_KEY = keyRow.value;
-    if (modelRow?.value) AI_MODEL = modelRow.value;
-    AI_CONFIG_LOADED = true;
-  } catch(e) {}
-}
-
-function getAiConfig() {
-  loadAiConfig();
-  const provider = AI_PROVIDERS[AI_PROVIDER] || AI_PROVIDERS.deepseek;
-  return {
-    baseURL: provider.baseURL,
-    apiKey: AI_API_KEY,
-    model: AI_MODEL || provider.defaultModel
-  };
-}
-
-async function aiModeratePost(title, content, hasFiles) {
-  const config = getAiConfig();
-  if (!config.apiKey) return null;
+    const row = db.prepare("SELECT value FROM settings WHERE key='ai_moderation_enabled'").get();
+    if (!row || row.value !== '1') return null;
+  } catch(e) { return null; }
   const text = [title, content].filter(Boolean).join('\n');
-  if (!text) return null;
-  const prompt = `你是一个校园论坛内容审核助手。请审核以下帖子内容是否适合在学校运动会论坛发布。
+  if (!text || text.length < 4) return null;
+  const prompt = `你是校园论坛内容审核员。请审核以下帖子内容是否违规。
 
-审核规则：
-1. 允许：运动会相关讨论、加油鼓励、比赛建议、正常交流
-2. 拒绝：脏话辱骂、人身攻击、广告推广、色情暴力、政治敏感内容
+违规类型：辱骂/人身攻击、色情低俗、广告/引流、校园霸凌、违法暴力、隐私泄露
 
-请以JSON格式回复（不要包含其他文字）：
-{"action":"approved 或 rejected","reason":"审核理由（20字以内）"}
+请只回复JSON：{"action":"approved","reason":"通过"} 或 {"action":"rejected","reason":"违规原因"}
 
 待审核内容：
 ${text.slice(0, 2000)}`;
   const https = require('https');
   return new Promise((resolve) => {
     try {
-      const url = new URL(config.baseURL);
+      const url = new URL(DEEPSEEK_BASE_URL);
       const apiReq = https.request({
         hostname: url.hostname,
         port: 443,
         path: url.pathname,
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.apiKey}` },
-        timeout: 10000
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${DEEPSEEK_API_KEY}` },
+        timeout: 12000
       }, (resp) => {
         let body = '';
         resp.on('data', chunk => body += chunk);
@@ -726,35 +708,98 @@ ${text.slice(0, 2000)}`;
         });
       });
       apiReq.on('error', () => resolve(null));
-      apiReq.write(JSON.stringify({ model: config.model, messages: [{ role: 'user', content: prompt }], max_tokens: 200, temperature: 0.1 }));
+      apiReq.write(JSON.stringify({ model: 'deepseek-v4-pro', messages: [{ role: 'user', content: prompt }], max_tokens: 256, temperature: 0 }));
       apiReq.end();
     } catch (_) { resolve(null); }
   });
 }
 
-// 兼容旧代码
-function loadApiKey() { loadAiConfig(); }
+// DeepSeek API 配置
+let DEEPSEEK_API_KEY = '';
+let DEEPSEEK_API_KEY_LOADED = false;
+let DEEPSEEK_BASE_URL = 'https://api.deepseek.com/chat/completions';
 
-// 设置 AI 配置的路由
+// 豆包(Doubao) 图片审核
+const DOUBAO_API_URL = 'https://ark.cn-beijing.volces.com/api/v3/responses';
+const DOUBAO_API_KEY = '11d46d11-ac59-4369-842e-f0b929320344';
+const DOUBAO_MODEL = 'doubao-seed-2-0-pro-260215';
+
+async function aiModerateImage(imageUrl) {
+  // 检查管理端是否启用了 AI 审核
+  try {
+    const db = getDb();
+    const row = db.prepare("SELECT value FROM settings WHERE key='ai_moderation_enabled'").get();
+    if (!row || row.value !== '1') return null;
+  } catch(e) { return null; }
+  if (!imageUrl) return null;
+
+  const https = require('https');
+  return new Promise((resolve) => {
+    try {
+      const url = new URL(DOUBAO_API_URL);
+      const body = JSON.stringify({
+        model: DOUBAO_MODEL,
+        input: [{
+          role: 'user',
+          content: [
+            { type: 'input_image', image_url: imageUrl },
+            { type: 'input_text', text: '审核图片是否含：色情低俗、暴力血腥、辱骂文字、广告二维码、违法内容。只回复JSON：{"safe":true,"reason":"通过"} 或 {"safe":false,"reason":"违规原因"}' }
+          ]
+        }]
+      });
+      const apiReq = https.request({
+        hostname: url.hostname,
+        port: 443,
+        path: url.pathname,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${DOUBAO_API_KEY}`,
+          'Content-Length': Buffer.byteLength(body)
+        },
+        timeout: 15000
+      }, (resp) => {
+        let data = '';
+        resp.on('data', chunk => data += chunk);
+        resp.on('end', () => {
+          try {
+            const json = JSON.parse(data);
+            const text = json.output?.[0]?.content?.[0]?.text
+              || json.choices?.[0]?.message?.content
+              || json.data
+              || '';
+            const match = String(text).match(/\{[\s\S]*\}/);
+            if (match) resolve(JSON.parse(match[0]));
+            else resolve(null);
+          } catch (_) { resolve(null); }
+        });
+      });
+      apiReq.on('error', () => resolve(null));
+      apiReq.write(body);
+      apiReq.end();
+    } catch (_) { resolve(null); }
+  });
+}
+
+function loadApiKey() {
+  if (DEEPSEEK_API_KEY_LOADED) return;
+  try {
+    const db = getDb();
+    const row = db.prepare("SELECT value FROM settings WHERE key='deepseek_api_key'").get();
+    if (row?.value) DEEPSEEK_API_KEY = row.value;
+    DEEPSEEK_API_KEY_LOADED = true;
+  } catch(e) {}
+}
+
+// 设置 API Key 的路由
 AI_ROUTER.post('/ai-key', authMiddleware, adminOnly, (req, res) => {
   try {
-    const { key, provider, model } = req.body;
+    const { key } = req.body;
     if (!key) return res.json({ success: false, error: '请提供 API Key' });
+    DEEPSEEK_API_KEY = key;
     const db = getDb();
-    if (provider) {
-      AI_PROVIDER = provider;
-      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('ai_provider', ?)").run(provider);
-    }
-    if (key) {
-      AI_API_KEY = key;
-      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('ai_api_key', ?)").run(key);
-    }
-    if (model) {
-      AI_MODEL = model;
-      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('ai_model', ?)").run(model);
-    }
-    AI_CONFIG_LOADED = true;
-    res.json({ success: true, message: 'AI 配置已保存' });
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('deepseek_api_key', ?)").run(key);
+    res.json({ success: true, message: 'API Key 已保存' });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
@@ -763,10 +808,10 @@ AI_ROUTER.post('/ai-key', authMiddleware, adminOnly, (req, res) => {
 // AI 对话路由（支持会话记忆）
 AI_ROUTER.post('/ai-chat', optionalAuth, async (req, res) => {
   try {
-    const config = getAiConfig();
+    loadApiKey();
     const { message, history } = req.body;
     if (!message?.trim()) return res.json({ success: false, error: '请输入問题' });
-    if (!config.apiKey) return res.json({ success: false, error: 'AI 助手尚未配置，请管理员设置 API Key' });
+    if (!DEEPSEEK_API_KEY) return res.json({ success: false, error: 'AI 助手尚未配置，请管理员设置 API Key' });
 
     const https = require('https');
     const db = getDb();
@@ -814,11 +859,11 @@ AI_ROUTER.post('/ai-chat', optionalAuth, async (req, res) => {
 
     messages.push({ role: 'user', content: message });
 
-    const apiReq = https.request(config.baseURL, {
+    const apiReq = https.request(DEEPSEEK_BASE_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.apiKey}`
+        'Authorization': `Bearer ${DEEPSEEK_API_KEY}`
       }
     }, (apiRes) => {
       let body = '';
@@ -853,11 +898,11 @@ AI_ROUTER.post('/ai-chat', optionalAuth, async (req, res) => {
   }
 });
 
-// AI 自动生成赛程
+// AI 自动生成赛程（DeepSeek V4 Pro）
 AI_ROUTER.get('/generate-schedule', authMiddleware, adminOnly, async (req, res) => {
   try {
-    const config = getAiConfig();
-    if (!config.apiKey) return res.json({ success: false, error: 'AI 尚未配置 API Key，请在系统设置中配置' });
+    loadApiKey();
+    if (!DEEPSEEK_API_KEY) return res.json({ success: false, error: 'AI 尚未配置 API Key，请在系统设置中配置' });
 
     const db = getDb();
     const https = require('https');
@@ -916,9 +961,9 @@ AI_ROUTER.get('/generate-schedule', authMiddleware, adminOnly, async (req, res) 
 【报名数据】
 ${eventSummary}`;
 
-    const apiReq = https.request(config.baseURL, {
+    const apiReq = https.request(DEEPSEEK_BASE_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.apiKey}` }
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${DEEPSEEK_API_KEY}` }
     }, (apiRes) => {
       let body = '';
       apiRes.on('data', c => body += c);
@@ -941,7 +986,7 @@ ${eventSummary}`;
     });
 
     apiReq.on('error', (e) => res.json({ success: false, error: 'AI 服务暂不可用' }));
-    apiReq.write(JSON.stringify({ model: config.model, messages: [{ role: 'user', content: prompt }], max_tokens: 8000, temperature: 0.2 }));
+    apiReq.write(JSON.stringify({ model: 'deepseek-v4-pro', messages: [{ role: 'user', content: prompt }], max_tokens: 8000, temperature: 0.2 }));
     apiReq.end();
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
@@ -950,8 +995,7 @@ ${eventSummary}`;
 
 // 检查 API Key 状态
 AI_ROUTER.get('/ai-status', (req, res) => {
-  const config = getAiConfig();
-  res.json({ success: true, data: { configured: !!config.apiKey, provider: AI_PROVIDER, model: config.model } });
+  res.json({ success: true, data: { configured: !!DEEPSEEK_API_KEY } });
 });
 
 // 导出赛程 PDF

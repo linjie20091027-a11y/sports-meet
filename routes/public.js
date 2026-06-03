@@ -871,8 +871,8 @@ router.get('/highlights', (req, res) => {
   }
 });
 
-// POST /highlights — 上传精彩瞬间（记录上传者，默认待审核）
-router.post('/highlights', hlUpload.single('image'), (req, res) => {
+// POST /highlights — 上传精彩瞬间（记录上传者 + 豆包图片审核）
+router.post('/highlights', hlUpload.single('image'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, error: '请选择图片' });
     const db = getDb();
@@ -885,12 +885,28 @@ router.post('/highlights', hlUpload.single('image'), (req, res) => {
         uploadedBy = decoded?.id || null;
       } catch(e) {}
     }
-    db.prepare("INSERT INTO highlights (filename, original_name, status, uploaded_by) VALUES (?, ?, 'pending', ?)").run(
+    // 豆包图片审核
+    let status = 'pending';
+    let moderationNote = '';
+    try {
+      const imgUrl = req.protocol + '://' + req.get('host') + '/images/' + req.file.filename;
+      const { moderateImage, isModerationEnabled } = require('../utils/contentModeration');
+      if (isModerationEnabled()) {
+        const result = await moderateImage(imgUrl);
+        if (result && !result.safe) {
+          status = 'rejected';
+          moderationNote = result.reason || '图片审核不通过';
+        }
+      }
+    } catch(e) {}
+    db.prepare("INSERT INTO highlights (filename, original_name, status, uploaded_by) VALUES (?, ?, ?, ?)").run(
       req.file.filename,
       req.file.originalname || '',
+      status,
       uploadedBy
     );
-    res.json({ success: true, message: '上传成功，等待审核', data: { url: '/images/' + req.file.filename } });
+    const msg = status === 'rejected' ? '图片审核未通过：' + moderationNote : '上传成功，等待审核';
+    res.json({ success: true, message: msg, data: { url: '/images/' + req.file.filename, status } });
   } catch(e) {
     res.status(500).json({ success: false, error: e.message });
   }
