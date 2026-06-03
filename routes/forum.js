@@ -664,8 +664,8 @@ const AI_ROUTER = express.Router();
 // AI 内容审核
 async function aiModeratePost(title, content, hasFiles) {
   loadApiKey();
-  console.log('[AI审核] 文字审核启动, API Key:', DEEPSEEK_API_KEY ? '已配置' : '未配置');
-  if (!DEEPSEEK_API_KEY) return null;
+  console.log('[AI审核] 文字审核, Key:', DEEPSEEK_API_KEY ? '有' : '无');
+  if (!DEEPSEEK_API_KEY) { console.log('[AI审核] 跳过: 无APIKey'); return null; }
   // 检查管理端是否启用了 AI 审核
   try {
     const db = getDb();
@@ -696,11 +696,13 @@ ${text.slice(0, 2000)}`;
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${DEEPSEEK_API_KEY}` },
         timeout: 12000
       }, (resp) => {
+        console.log('[AI审核] DeepSeek HTTP', resp.statusCode);
         let body = '';
         resp.on('data', chunk => body += chunk);
         resp.on('end', () => {
           try {
             const json = JSON.parse(body);
+            if (json.error) { console.log('[AI审核] API错误:', json.error.message || json.error); resolve(null); return; }
             const reply = json.choices?.[0]?.message?.content || '';
             const match = reply.match(/\{[\s\S]*\}/);
             if (match) {
@@ -792,13 +794,16 @@ async function aiModerateImage(imageUrl) {
 }
 
 function loadApiKey() {
-  if (DEEPSEEK_API_KEY_LOADED) return;
   try {
     const db = getDb();
     const row = db.prepare("SELECT value FROM settings WHERE key='deepseek_api_key'").get();
-    if (row?.value) DEEPSEEK_API_KEY = row.value;
-    DEEPSEEK_API_KEY_LOADED = true;
-    console.log('[AI审核] DeepSeek API Key:', DEEPSEEK_API_KEY ? '已加载(' + DEEPSEEK_API_KEY.substring(0,8) + '...)' : '未配置');
+    if (row?.value) {
+      DEEPSEEK_API_KEY = row.value;
+      DEEPSEEK_API_KEY_LOADED = true;
+      console.log('[AI审核] DeepSeek API Key 已加载');
+    } else {
+      console.log('[AI审核] DeepSeek API Key 未配置');
+    }
   } catch(e) { console.error('[AI审核] 加载API Key失败:', e.message); }
 }
 
@@ -1007,6 +1012,35 @@ ${eventSummary}`;
 // 检查 API Key 状态
 AI_ROUTER.get('/ai-status', (req, res) => {
   res.json({ success: true, data: { configured: !!DEEPSEEK_API_KEY } });
+});
+
+// AI 审核诊断端点
+AI_ROUTER.get('/ai-moderation-test', authMiddleware, adminOnly, async (req, res) => {
+  const db = getDb();
+  const diag = {};
+  try {
+    // 1. 检查开关
+    const enabled = db.prepare("SELECT value FROM settings WHERE key='ai_moderation_enabled'").get();
+    diag.moderation_enabled = enabled ? enabled.value : '未设置';
+
+    // 2. 检查 API Key
+    loadApiKey();
+    diag.deepseek_configured = !!DEEPSEEK_API_KEY;
+
+    // 3. 测试调用 DeepSeek
+    if (DEEPSEEK_API_KEY && enabled?.value === '1') {
+      const testResult = await aiModeratePost('测试帖子标题', '这是测试内容用于验证AI审核功能是否正常工作', false);
+      diag.test_result = testResult;
+      diag.test_status = testResult ? (testResult.action === 'approved' ? 'AI正常_通过' : 'AI正常_拦截') : 'AI返回空';
+    } else {
+      diag.skipped_reason = !DEEPSEEK_API_KEY ? 'APIKey未配置' : '审核开关未开启';
+    }
+
+    res.json({ success: true, data: diag });
+  } catch(e) {
+    diag.error = e.message;
+    res.json({ success: false, error: e.message, data: diag });
+  }
 });
 
 // 导出赛程 PDF
