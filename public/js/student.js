@@ -321,7 +321,7 @@ const Student = {
               <h2 class="student-section-title">我的好友</h2>
               <p class="text-sm text-muted">从搜索结果直接发起申请，在这里统一查看好友和申请进度。</p>
             </div>
-            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('nav-search-input')?.focus()">去搜索同学</button>
+            <button type="button" class="btn btn-outline btn-sm" id="btn-search-friends">去搜索同学</button>
           </div>
           <div class="friend-summary-grid">
             <div class="friend-summary-card"><strong>${friends.length}</strong><span>好友总数</span></div>
@@ -335,6 +335,10 @@ const Student = {
           <section class="card mt-3"><div class="card-header"><h3>发出的申请</h3></div><div class="card-body friend-card-list">${outgoingCards}</div></section>
         </div>
       `;
+      document.getElementById('btn-search-friends')?.addEventListener('click', () => {
+        const input = document.getElementById('nav-search-input');
+        if (input) { input.focus(); input.click(); }
+      });
     } catch (e) {
       this._renderFriendsError(e.message || '好友资料加载失败');
     }
