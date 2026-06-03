@@ -699,12 +699,12 @@ const App = {
 
     const handlePointerDown = (e) => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (e.target.closest('[data-action]')) return;
       startX = e.clientX;
       deltaX = item.classList.contains('is-swiped') ? -maxSwipe : 0;
       dragging = true;
       surface.style.transition = 'none';
       this._closeSwipedNotifications(item.dataset.id);
-      if (surface.setPointerCapture) surface.setPointerCapture(e.pointerId);
     };
 
     const handlePointerMove = (e) => {
