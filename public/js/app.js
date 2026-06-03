@@ -47,6 +47,7 @@ const App = {
     this.bindSearch();
     this.updateNav();
     this.handleRoute();
+    this._initBackButton();
     this._initMusic();
     // 倒计时独立启动，不依赖API
     this._startCountdownSafe();
@@ -373,6 +374,17 @@ const App = {
       document.querySelector('#nav-register-link')?.classList.add('active');
       document.querySelector('[href="#/student"]')?.classList.add('active');
       Student.render();
+    }
+    this._updateBackButton(hash);
+  },
+
+  _updateBackButton(hash) {
+    const btn = document.getElementById('nav-back-btn');
+    if (!btn) return;
+    if (hash === '/' || hash === '' || hash === '/login' || hash === '/register') {
+      btn.classList.add('hidden');
+    } else {
+      btn.classList.remove('hidden');
     }
   },
 
@@ -2230,6 +2242,13 @@ const App = {
       }).catch(function(){});
       this.musicPlaying = true;
     }
+  },
+
+  _initBackButton() {
+    document.getElementById('nav-back-btn')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      window.history.back();
+    });
   },
 
   _initMusic() {
