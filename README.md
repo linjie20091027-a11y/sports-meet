@@ -458,7 +458,7 @@ node server.js
 | [**ljingxi154-code**](https://github.com/ljingxi154-code) | 34 | ljingxi154@gmail.com | 后端开发 & 数据管理 — 赛程编排、成绩统计、数据导入导出 |
 | [**Noah**](https://github.com/noah200910070082) | 25 | noah200910070082@gmail.com | 功能开发 & 测试优化 — 搜索系统、好友模块、通知推送 |
 
-> 📊 共 **195+ 次提交**，4 位核心贡献者，11 个代码仓库贡献者。
+> 📊 共 **195+ 次提交**，4 位核心开发者贡献代码。
 
 ---
 
