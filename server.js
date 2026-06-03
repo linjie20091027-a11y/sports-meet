@@ -11,13 +11,15 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // 安全中间件
+// FIXME: unsafe-inline/unsafe-eval 因前端大量内联样式+Chart.js 暂保留
+// 后续迁移到 React/Vue + CSS-in-JS 后可启用严格 CSP
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "cdn.jsdelivr.net", "cdnjs.cloudflare.com"],
-      styleSrc: ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net", "cdnjs.cloudflare.com"],
-      imgSrc: ["'self'", "data:", "blob:", "www.houkong.edu.mo", "images.unsplash.com", "upload.wikimedia.org"],
+      scriptSrc: ["'self'", "cdn.jsdelivr.net", "cdnjs.cloudflare.com", "'unsafe-inline'", "'unsafe-eval'"],
+      styleSrc: ["'self'", "cdn.jsdelivr.net", "cdnjs.cloudflare.com", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "blob:", "www.houkong.edu.mo"],
       fontSrc: ["'self'", "cdn.jsdelivr.net", "cdnjs.cloudflare.com", "fonts.gstatic.com"],
     },
   },

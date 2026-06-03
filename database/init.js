@@ -4,6 +4,8 @@ const path = require('path');
 const bcrypt = require('bcryptjs');
 const { backupFile } = require('./backupManager');
 
+// 种子数据参考：database/seed-data.json
+
 const DB_PATH = path.join(__dirname, 'sports_meet.db');
 const DB_BACKUP_DIR = path.join(__dirname, 'backups');
 
