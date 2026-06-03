@@ -479,8 +479,16 @@ window.Student = Student;
     try {
       const res = await API.student.getMyRegistrations();
       const regs = res.data || [];
-      const statusLabel = s => ({pending:'待审核',approved:'已通过',rejected:'已驳回',cancelling:'取消审核中'})[s]||s;
-      const statusBadge = s => ({pending:'badge-pending',approved:'badge-approved',rejected:'badge-rejected',cancelling:'badge-warning'})[s]||'';
+      const statusLabel = (s, reason) => {
+        if (s === 'cancelling') return '取消审核中';
+        if (s === 'rejected' && reason && reason.includes('取消')) return '已取消';
+        return ({pending:'待审核',approved:'已通过',rejected:'已驳回'})[s]||s;
+      };
+      const statusBadge = (s, reason) => {
+        if (s === 'cancelling') return 'badge-warning';
+        if (s === 'rejected' && reason && reason.includes('取消')) return 'badge-rejected';
+        return ({pending:'badge-pending',approved:'badge-approved',rejected:'badge-rejected'})[s]||'';
+      };
       const genderLabel = g => g==='male'?'男子组':g==='female'?'女子组':'混合组';
 
       if (regs.length === 0) {
@@ -496,7 +504,7 @@ window.Student = Student;
           <td>${r.event_type==='team'?'集体':'个人'}</td>
           <td>${genderLabel(r.gender_group)}</td>
           <td>${App.formatDate(r.created_at)}</td>
-          <td><span class="badge ${statusBadge(r.status)}">${statusLabel(r.status)}</span></td>
+          <td><span class="badge ${statusBadge(r.status, r.reject_reason)}">${statusLabel(r.status, r.reject_reason)}</span></td>
           <td class="text-sm text-muted">${r.reject_reason||''}</td>
           <td>${r.status==='pending'||r.status==='approved'?`<button class="btn btn-danger btn-xs btn-cancel-reg" data-id="${r.id}">取消报名</button>`:''}</td>
         </tr>`;
