@@ -43,3 +43,18 @@
   - 代码核对 `routes/teacher.js`、`routes/student.js`、`routes/forum.js` 的 `target_url` 输出，确认班主任报名、好友、论坛等通知均已携带明确业务路由。
   - `GetDiagnostics(file:///c:/Users/LENOVO/sports-meet/public/js/app.js)`：前端脚本诊断通过，无新增语法错误。
 - 结果：通过。
+
+## 第 4 次迭代
+
+- 目标：修复页面下滑与悬浮叠加时的卡顿，优化滚动进度条和高频鼠标交互的渲染成本。
+- 本次变更：
+  - `public/js/interactions.js` 将视差与滚动进度条更新改为 `requestAnimationFrame` 驱动，避免全局高频 `mousemove` 与同步滚动计算。
+  - `public/js/3d-cards.js` 去除对 `parallax-section` 的重复 3D 跟踪，并移除持续 `setInterval` 扫描。
+  - `public/css/style.css` 移除重复表格行 hover 放大规则，将缩放改为轻量位移反馈，同时为滚动进度条补充 `will-change`。
+  - `public/index.html` 补入顶部滚动进度条挂载节点。
+- 测试记录：
+  - `GetDiagnostics(file:///c:/Users/LENOVO/sports-meet/public/js/interactions.js)`：通过。
+  - `GetDiagnostics(file:///c:/Users/LENOVO/sports-meet/public/js/3d-cards.js)`：通过。
+  - `GetDiagnostics(file:///c:/Users/LENOVO/sports-meet/public/css/style.css)`：通过。
+  - `GetDiagnostics(file:///c:/Users/LENOVO/sports-meet/public/index.html)`：通过。
+- 结果：通过。
