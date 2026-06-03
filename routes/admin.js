@@ -870,6 +870,15 @@ router.put('/registrations/:id/reject-cancel', (req, res) => {
     res.status(500).json({ success: false, error: e.message });
   }
 });
+router.get('/registrations/pending-count', (req, res) => {
+  try {
+    const db = getDb();
+    const count = db.prepare("SELECT COUNT(*) as cnt FROM registrations WHERE status = 'cancelling'").get()?.cnt || 0;
+    res.json({ success: true, data: { count } });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
 router.get('/registrations/stats', (req, res) => {
   try {
     const db = getDb();

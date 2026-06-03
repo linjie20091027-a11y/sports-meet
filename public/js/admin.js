@@ -103,12 +103,12 @@ const Admin = {
   },
   async _updateAdminBadge() {
     try {
-      const res = await API.admin.getRegistrations({ status: 'cancelling', limit: 1 });
-      const total = res.data?.total || 0;
+      const res = await API.get('/admin/registrations/pending-count');
+      const count = res.data?.count || 0;
       const badge = document.getElementById('admin-reg-badge');
       if (!badge) return;
-      badge.textContent = total > 99 ? '99+' : total;
-      badge.classList.toggle('hidden', total === 0);
+      badge.textContent = count > 99 ? '99+' : count;
+      badge.classList.toggle('hidden', count === 0);
     } catch (e) {}
   },
 
