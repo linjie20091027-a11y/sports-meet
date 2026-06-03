@@ -9,7 +9,13 @@ const Teacher = {
     student_keyword: '',
     match_mode: 'fuzzy'
   },
+  homeroomOverviewFilters: {
+    event_id: '',
+    student_keyword: '',
+    match_mode: 'fuzzy'
+  },
   _homeroomRegistrationFilterTimer: null,
+  _homeroomOverviewFilterTimer: null,
 
   async render() {
     const page = document.getElementById('page-teacher');
@@ -109,12 +115,25 @@ const Teacher = {
     if (!content) return;
     content.innerHTML = '<div class="text-center p-8"><div class="spinner"></div></div>';
     try {
-      const res = await API.teacher.getHomeroomOverview();
+      const res = await API.teacher.getHomeroomOverview(this.homeroomOverviewFilters);
       if (!res.success) throw new Error(res.error || '班级总览加载失败');
       const data = res.data || {};
       const summary = data.summary || {};
       const students = data.students || [];
       const pending = data.pending_registrations || [];
+      const resultRows = Array.isArray(data.result_rows) ? data.result_rows : [];
+      const resultFilters = data.result_filters || this.homeroomOverviewFilters;
+      const resultEvents = Array.isArray(data.result_events) ? data.result_events : [];
+      const resultStats = Array.isArray(data.result_event_stats) ? data.result_event_stats : [];
+      const resultSummary = data.result_summary || {};
+      this.homeroomOverviewFilters = {
+        event_id: resultFilters.event_id ? String(resultFilters.event_id) : '',
+        student_keyword: resultFilters.student_keyword || '',
+        match_mode: resultFilters.match_mode === 'exact' ? 'exact' : 'fuzzy'
+      };
+      const averageScoreText = resultSummary.average_score !== null && resultSummary.average_score !== undefined
+        ? Number(resultSummary.average_score).toFixed(2)
+        : '-';
       content.innerHTML = `
         <div class="teacher-shell">
           <div class="teacher-hero card">
@@ -195,9 +214,123 @@ const Teacher = {
               ` : '<div class="empty-state"><p class="empty-state__desc">当前班级暂无学生数据</p></div>'}
             </div>
           </div>
+
+          <div class="card mt-2">
+            <div class="card__header">
+              <div>
+                <h3 class="card__title">班级项目成绩</h3>
+                <p class="teacher-hero__meta">支持按项目、学生姓名或学号进行精确/模糊筛选，并导出当前结果</p>
+              </div>
+              <div class="teacher-table-actions">
+                <button type="button" class="btn btn-outline btn-sm" id="teacher-refresh-overview-results">刷新成绩</button>
+                <button type="button" class="btn btn-primary btn-sm" id="teacher-export-overview-results">导出 Excel</button>
+              </div>
+            </div>
+            <div class="card__body">
+              <div class="teacher-filter-grid">
+                <div class="form__group">
+                  <label class="form__label">项目筛选</label>
+                  <select class="form__select" id="teacher-overview-event-filter">
+                    <option value="">全部项目</option>
+                    ${resultEvents.map((item) => `
+                      <option value="${item.id}" ${String(item.id) === String(this.homeroomOverviewFilters.event_id || '') ? 'selected' : ''}>${App._escHtml(item.name || '-')}</option>
+                    `).join('')}
+                  </select>
+                </div>
+                <div class="form__group">
+                  <label class="form__label">学生检索</label>
+                  <input class="form__input" id="teacher-overview-keyword-filter" placeholder="输入学生姓名或学号" value="${App._escAttr(this.homeroomOverviewFilters.student_keyword || '')}">
+                </div>
+                <div class="form__group">
+                  <label class="form__label">查询模式</label>
+                  <select class="form__select" id="teacher-overview-match-filter">
+                    <option value="fuzzy" ${this.homeroomOverviewFilters.match_mode !== 'exact' ? 'selected' : ''}>模糊匹配</option>
+                    <option value="exact" ${this.homeroomOverviewFilters.match_mode === 'exact' ? 'selected' : ''}>精确匹配</option>
+                  </select>
+                </div>
+                <div class="form__group">
+                  <label class="form__label">结果概览</label>
+                  <div class="teacher-inline-meta">
+                    <span>成绩 ${resultSummary.total_results || 0} 条</span>
+                    <span>项目 ${resultSummary.event_count || 0} 个</span>
+                    <span>均分 ${App._escHtml(averageScoreText)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="teacher-summary-grid">
+                <div class="teacher-summary-card"><strong>${resultSummary.total_results || 0}</strong><span>成绩条数</span></div>
+                <div class="teacher-summary-card"><strong>${resultSummary.student_count || 0}</strong><span>涉及学生</span></div>
+                <div class="teacher-summary-card"><strong>${averageScoreText}</strong><span>平均分</span></div>
+                <div class="teacher-summary-card"><strong>${resultSummary.ranking_count || 0}</strong><span>有排名成绩</span></div>
+              </div>
+
+              <div class="card mt-2 teacher-subcard">
+                <div class="card__header">
+                  <h4 class="card__title">项目统计</h4>
+                  <span class="text-sm text-muted">${resultStats.length} 项</span>
+                </div>
+                <div class="card__body">
+                  ${resultStats.length ? `
+                    <div class="table-container">
+                      <table class="table table--striped">
+                        <thead><tr><th>项目</th><th>类别</th><th>成绩人数</th><th>有排名人数</th><th>平均分</th><th>最高分</th></tr></thead>
+                        <tbody>
+                          ${resultStats.map((item) => `
+                            <tr>
+                              <td>${App._escHtml(item.event_name || '-')}</td>
+                              <td>${App._escHtml(item.category || '-')}</td>
+                              <td>${item.result_count || 0}</td>
+                              <td>${item.ranking_count || 0}</td>
+                              <td>${item.average_score !== null && item.average_score !== undefined ? App._escHtml(Number(item.average_score).toFixed(2)) : '-'}</td>
+                              <td>${item.best_score !== null && item.best_score !== undefined ? App._escHtml(Number(item.best_score).toFixed(2)) : '-'}</td>
+                            </tr>
+                          `).join('')}
+                        </tbody>
+                      </table>
+                    </div>
+                  ` : '<div class="empty-state"><p class="empty-state__desc">当前筛选条件下暂无项目成绩统计</p></div>'}
+                </div>
+              </div>
+
+              <div class="card mt-2 teacher-subcard">
+                <div class="card__header">
+                  <h4 class="card__title">成绩明细</h4>
+                  <span class="text-sm text-muted">${resultRows.length} 条</span>
+                </div>
+                <div class="card__body">
+                  ${resultRows.length ? `
+                    <div class="table-container">
+                      <table class="table table--striped">
+                        <thead><tr><th>学生</th><th>学号</th><th>项目</th><th>轮次</th><th>成绩</th><th>分数</th><th>项目均分</th><th>班内排名</th><th>项目排名</th><th>奖项</th></tr></thead>
+                        <tbody>
+                          ${resultRows.map((item) => `
+                            <tr>
+                              <td>${App._escHtml(item.user_name || '-')}</td>
+                              <td>${App._escHtml(item.student_id || '-')}</td>
+                              <td>${App._escHtml(item.event_name || '-')}</td>
+                              <td>${App._escHtml(item.round_name || '-')}</td>
+                              <td>${App._escHtml(item.performance || '-')}</td>
+                              <td>${item.score !== null && item.score !== undefined ? App._escHtml(Number(item.score).toFixed(2)) : '-'}</td>
+                              <td>${item.event_avg_score !== null && item.event_avg_score !== undefined ? App._escHtml(Number(item.event_avg_score).toFixed(2)) : '-'}</td>
+                              <td>${item.class_rank || '-'}</td>
+                              <td>${item.rank || '-'}</td>
+                              <td>${App._escHtml(item.award || '-')}</td>
+                            </tr>
+                          `).join('')}
+                        </tbody>
+                      </table>
+                    </div>
+                  ` : '<div class="empty-state"><p class="empty-state__desc">当前筛选条件下暂无成绩数据</p></div>'}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       `;
       document.getElementById('teacher-refresh-overview')?.addEventListener('click', () => this._renderHomeroomOverview());
+      document.getElementById('teacher-refresh-overview-results')?.addEventListener('click', () => this._renderHomeroomOverview());
+      this._bindHomeroomOverviewFilters();
       this._bindReviewButtons(false);
     } catch (e) {
       content.innerHTML = `<div class="empty-state"><p class="empty-state__desc">${App._escHtml(e.message || '班级总览加载失败')}</p></div>`;
@@ -352,6 +485,43 @@ const Teacher = {
     });
     document.getElementById('teacher-registration-keyword-filter')?.addEventListener('input', (e) => {
       syncAndReload({ student_keyword: e.target.value.trim() }, true);
+    });
+  },
+
+  _bindHomeroomOverviewFilters() {
+    const syncAndReload = async (partial = {}, useDebounce = false) => {
+      this.homeroomOverviewFilters = {
+        ...this.homeroomOverviewFilters,
+        ...partial
+      };
+      if (!useDebounce) {
+        await this._renderHomeroomOverview();
+        return;
+      }
+      clearTimeout(this._homeroomOverviewFilterTimer);
+      this._homeroomOverviewFilterTimer = setTimeout(() => {
+        this._renderHomeroomOverview();
+      }, 220);
+    };
+    document.getElementById('teacher-overview-event-filter')?.addEventListener('change', (e) => {
+      syncAndReload({ event_id: e.target.value || '' });
+    });
+    document.getElementById('teacher-overview-match-filter')?.addEventListener('change', (e) => {
+      syncAndReload({ match_mode: e.target.value === 'exact' ? 'exact' : 'fuzzy' });
+    });
+    document.getElementById('teacher-overview-keyword-filter')?.addEventListener('input', (e) => {
+      syncAndReload({ student_keyword: e.target.value.trim() }, true);
+    });
+    document.getElementById('teacher-export-overview-results')?.addEventListener('click', async () => {
+      try {
+        App.showLoading();
+        await API.teacher.exportHomeroomOverview(this.homeroomOverviewFilters);
+        App.hideLoading();
+        App.showToast('班级成绩报表已开始下载', 'success');
+      } catch (e) {
+        App.hideLoading();
+        App.showToast(e.message || '导出失败', 'error');
+      }
     });
   },
 

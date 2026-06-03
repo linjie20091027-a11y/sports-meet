@@ -16,3 +16,18 @@
   - 在隔离实例 `BASE_URL=http://localhost:3011 npm run test:all` 下，班主任报名筛选与批量审核链路已通过。
   - 当前全量回归仍存在论坛发帖限流导致的非本次改动噪音，未纳入本轮功能阻塞项。
 - 结果：通过。
+
+## 第 2 次迭代
+
+- 目标：补齐班主任班级总览中的项目成绩筛选、统计与 Excel 导出能力。
+- 本次变更：
+  - `routes/teacher.js` 为 `GET /api/teacher/homeroom/overview` 增加成绩筛选参数：`event_id`、`student_keyword`、`match_mode`。
+  - `routes/teacher.js` 新增 `GET /api/teacher/homeroom/overview/export`，导出当前筛选条件下的班级成绩摘要、项目统计与成绩明细。
+  - `public/js/teacher.js` 在班级总览页新增项目筛选、学生检索、精确/模糊匹配、项目统计表、成绩明细表和 Excel 导出按钮。
+  - `public/js/api.js` 新增带鉴权的下载能力，支持教师端直接下载班级成绩报表。
+- 测试记录：
+  - `BASE_URL=http://localhost:3012 npm run test:all`：新增“班级总览成绩筛选与导出”用例通过。
+  - 同一轮隔离实例回归中，“班主任报名筛选与批量审核链路”继续通过，确认未被本次改动回退。
+- 补充说明：
+  - 当前全量回归剩余失败仍集中在论坛发帖限流链路，与本次班主任总览改动无直接关联。
+- 结果：通过。

@@ -919,6 +919,38 @@ async function runAllTests() {
       return true;
     });
 
+    await test('教师', '班级总览成绩筛选与导出', async () => {
+      const baseRes = await request('GET', '/api/teacher/homeroom/overview', { token: homeroomTeacherToken });
+      if (baseRes.status !== 200) return `获取班级总览失败: ${baseRes.status}`;
+      const resultRows = baseRes.body?.data?.result_rows || [];
+      const resultEvents = baseRes.body?.data?.result_events || [];
+      const resultSummary = baseRes.body?.data?.result_summary || {};
+      if (!Array.isArray(resultRows) || !Array.isArray(resultEvents)) {
+        return `成绩总览结构异常: ${JSON.stringify(baseRes.body).slice(0, 120)}`;
+      }
+      if (resultRows.length) {
+        const firstRow = resultRows[0];
+        const filteredRes = await request(
+          'GET',
+          `/api/teacher/homeroom/overview?event_id=${firstRow.event_id}&student_keyword=${encodeURIComponent(firstRow.student_id || firstRow.user_name || '')}&match_mode=exact`,
+          { token: homeroomTeacherToken }
+        );
+        if (filteredRes.status !== 200) return `筛选班级成绩失败: ${filteredRes.status}`;
+        const filteredRows = filteredRes.body?.data?.result_rows || [];
+        const invalidRow = filteredRows.find((item) => Number(item.event_id) !== Number(firstRow.event_id));
+        if (invalidRow) return `成绩筛选返回了错误项目: ${JSON.stringify(invalidRow).slice(0, 120)}`;
+      }
+      const exportQuery = resultEvents[0]?.id ? `?event_id=${resultEvents[0].id}` : '';
+      const exportRes = await request('GET', `/api/teacher/homeroom/overview/export${exportQuery}`, { token: homeroomTeacherToken });
+      const contentType = String(exportRes.headers?.['content-type'] || '');
+      if (exportRes.status !== 200) return `导出接口失败: ${exportRes.status}`;
+      if (!contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
+        return `导出响应类型异常: ${contentType}`;
+      }
+      console.log(` (成绩${resultSummary.total_results || 0}条, 项目${resultSummary.event_count || 0}个)`);
+      return true;
+    });
+
     await test('教师', '班主任报名筛选与批量审核链路', async () => {
       const candidateTokens = [studentPrimaryToken, studentSecondaryToken, studentTertiaryToken].filter(Boolean);
       if (!candidateTokens.length) return '缺少学生token';
@@ -1112,6 +1144,7 @@ async function runAllTests() {
     await testSkip('教师', 'GET /api/teacher/me 班主任', '无可用token');
     await testSkip('教师', 'GET /api/teacher/homeroom/overview', '无可用token');
     await testSkip('教师', 'GET /api/teacher/homeroom/overview 仅返回本班学生', '无可用token');
+    await testSkip('教师', '班级总览成绩筛选与导出', '无可用token');
     await testSkip('教师', '班主任报名筛选与批量审核链路', '无可用token');
   }
 

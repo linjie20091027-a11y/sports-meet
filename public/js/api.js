@@ -103,6 +103,41 @@ const API = {
     return result;
   },
 
+  async download(path, filename = '') {
+    const url = this.baseURL + path;
+    const headers = {};
+    if (this.token) headers.Authorization = 'Bearer ' + this.token;
+    const res = await fetch(url, { method: 'GET', headers });
+    if (res.status === 401) {
+      this.clearToken();
+      window.location.hash = '#/login';
+      throw new Error('请重新登录');
+    }
+    if (!res.ok) {
+      let errorMessage = '下载失败';
+      try {
+        const payload = await res.json();
+        errorMessage = payload.error || errorMessage;
+      } catch (_) {
+        // ignore
+      }
+      throw new Error(errorMessage);
+    }
+    const blob = await res.blob();
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const matched = disposition.match(/filename="?([^"]+)"?/i);
+    const finalName = filename || (matched && matched[1]) || 'download.xlsx';
+    const objectUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = finalName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(objectUrl);
+    return { success: true, filename: finalName };
+  },
+
   exportExcel(data, filename) {
   },
 
@@ -254,7 +289,8 @@ const API = {
 
   teacher: {
     getProfile() { return API.get('/teacher/me'); },
-    getHomeroomOverview() { return API.get('/teacher/homeroom/overview'); },
+    getHomeroomOverview(params) { return API.get('/teacher/homeroom/overview' + API._qs(params)); },
+    exportHomeroomOverview(params) { return API.download('/teacher/homeroom/overview/export' + API._qs(params), 'homeroom-overview.xlsx'); },
     getHomeroomRegistrations(params) { return API.get('/teacher/homeroom/registrations' + API._qs(params)); },
     reviewRegistration(id, data) { return API.put('/teacher/registrations/' + id + '/review', data); },
     reviewCancelRegistration(id, data) { return API.put('/teacher/registrations/' + id + '/cancel-review', data); },

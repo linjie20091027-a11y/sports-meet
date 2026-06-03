@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const XLSX = require('xlsx');
 const { getDb } = require('../database/init');
 const { authMiddleware, teacherOnly, logOperation } = require('../middleware/auth');
 const { createNotification } = require('../utils/notify');
@@ -149,6 +150,181 @@ function listHomeroomRegistrations(db, profile, query = {}) {
   };
 }
 
+function toFiniteNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function roundTo(value, digits = 2) {
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
+}
+
+function listHomeroomOverviewResults(db, profile, query = {}) {
+  const scope = getManagedStudentWhere(profile);
+  const eventId = parseInt(query.event_id, 10) || 0;
+  const studentKeyword = normalizeRegistrationKeyword(query.student_keyword);
+  const matchMode = normalizeRegistrationMatchMode(query.match_mode);
+  const params = [...scope.params];
+  const sqlParts = [
+    `SELECT
+      rs.id,
+      rs.performance,
+      rs.rank,
+      rs.score,
+      rs.award,
+      rs.note,
+      rs.is_published,
+      rs.updated_at,
+      u.id AS user_id,
+      u.name AS user_name,
+      u.student_id,
+      u.grade,
+      u.class_name,
+      s.id AS schedule_id,
+      COALESCE(s.round_name, '') AS round_name,
+      e.id AS event_id,
+      e.name AS event_name,
+      e.category
+    FROM results rs
+    JOIN users u ON u.id = rs.user_id
+    JOIN schedules s ON s.id = rs.schedule_id
+    JOIN events e ON e.id = s.event_id
+    WHERE ${scope.where}`
+  ];
+  if (eventId) {
+    sqlParts.push('AND e.id = ?');
+    params.push(eventId);
+  }
+  appendRegistrationKeywordFilter(sqlParts, params, studentKeyword, matchMode);
+  sqlParts.push(`ORDER BY e.sort_order, e.id, CASE WHEN rs.rank > 0 THEN rs.rank ELSE 999999 END, u.student_id, u.name, rs.id`);
+  const rows = db.prepare(sqlParts.join('\n')).all(...params);
+
+  const events = db.prepare(`
+    SELECT DISTINCT e.id, e.name
+    FROM results rs
+    JOIN users u ON u.id = rs.user_id
+    JOIN schedules s ON s.id = rs.schedule_id
+    JOIN events e ON e.id = s.event_id
+    WHERE ${scope.where}
+    ORDER BY e.sort_order, e.id
+  `).all(...scope.params);
+
+  const groupedRows = new Map();
+  rows.forEach((row) => {
+    const key = Number(row.event_id);
+    if (!groupedRows.has(key)) groupedRows.set(key, []);
+    groupedRows.get(key).push(row);
+  });
+
+  const classRankMap = new Map();
+  const eventStatsMap = new Map();
+  groupedRows.forEach((eventRows, key) => {
+    const sorted = [...eventRows].sort((a, b) => {
+      const scoreA = toFiniteNumber(a.score);
+      const scoreB = toFiniteNumber(b.score);
+      if (scoreA !== null && scoreB !== null && scoreA !== scoreB) return scoreB - scoreA;
+      if (scoreA !== null && scoreB === null) return -1;
+      if (scoreA === null && scoreB !== null) return 1;
+      const rankA = Number(a.rank) > 0 ? Number(a.rank) : Number.MAX_SAFE_INTEGER;
+      const rankB = Number(b.rank) > 0 ? Number(b.rank) : Number.MAX_SAFE_INTEGER;
+      if (rankA !== rankB) return rankA - rankB;
+      return String(a.student_id || a.user_name || '').localeCompare(String(b.student_id || b.user_name || ''), 'zh-Hans-CN');
+    });
+    sorted.forEach((row, index) => {
+      classRankMap.set(Number(row.id), index + 1);
+    });
+    const scoreList = eventRows
+      .map((item) => toFiniteNumber(item.score))
+      .filter((item) => item !== null);
+    const averageScore = scoreList.length ? roundTo(scoreList.reduce((sum, item) => sum + item, 0) / scoreList.length) : null;
+    const bestScore = scoreList.length ? roundTo(Math.max(...scoreList)) : null;
+    const rankingCount = eventRows.filter((item) => Number(item.rank) > 0).length;
+    eventStatsMap.set(key, {
+      event_id: key,
+      event_name: eventRows[0]?.event_name || '',
+      category: eventRows[0]?.category || '',
+      result_count: eventRows.length,
+      ranking_count: rankingCount,
+      average_score: averageScore,
+      best_score: bestScore
+    });
+  });
+
+  const list = rows.map((row) => ({
+    ...row,
+    score: toFiniteNumber(row.score),
+    class_rank: classRankMap.get(Number(row.id)) || 0,
+    event_avg_score: eventStatsMap.get(Number(row.event_id))?.average_score ?? null
+  }));
+  const eventStats = Array.from(eventStatsMap.values());
+  const scoreRows = list
+    .map((item) => item.score)
+    .filter((item) => item !== null);
+  const resultSummary = {
+    total_results: list.length,
+    student_count: new Set(list.map((item) => Number(item.user_id))).size,
+    event_count: eventStats.length,
+    average_score: scoreRows.length ? roundTo(scoreRows.reduce((sum, item) => sum + item, 0) / scoreRows.length) : null,
+    ranking_count: list.filter((item) => Number(item.rank) > 0).length,
+    published_count: list.filter((item) => Number(item.is_published) === 1).length
+  };
+
+  return {
+    list,
+    filters: {
+      event_id: eventId ? String(eventId) : '',
+      student_keyword: studentKeyword,
+      match_mode: matchMode
+    },
+    events,
+    event_stats: eventStats,
+    summary: resultSummary
+  };
+}
+
+function buildHomeroomOverviewWorkbook(payload, profile) {
+  const workbook = XLSX.utils.book_new();
+  const detailRows = payload.list.map((item) => ({
+    学生姓名: item.user_name || '',
+    学号: item.student_id || '',
+    年级: item.grade || '',
+    班级: item.class_name || '',
+    项目: item.event_name || '',
+    轮次: item.round_name || '',
+    成绩: item.performance || '',
+    分数: item.score ?? '',
+    班内排名: item.class_rank || '',
+    项目排名: item.rank || '',
+    项目平均分: item.event_avg_score ?? '',
+    奖项: item.award || '',
+    发布状态: Number(item.is_published) === 1 ? '已发布' : '未发布',
+    更新时间: item.updated_at || ''
+  }));
+  const statRows = payload.event_stats.map((item) => ({
+    项目: item.event_name || '',
+    类别: item.category || '',
+    成绩人数: item.result_count || 0,
+    有排名人数: item.ranking_count || 0,
+    平均分: item.average_score ?? '',
+    最高分: item.best_score ?? ''
+  }));
+  const summaryRows = [
+    { 指标: '负责年级', 数值: profile?.managed_grade || '' },
+    { 指标: '负责班级', 数值: profile?.managed_class_name || '' },
+    { 指标: '成绩条数', 数值: payload.summary?.total_results || 0 },
+    { 指标: '涉及学生', 数值: payload.summary?.student_count || 0 },
+    { 指标: '涉及项目', 数值: payload.summary?.event_count || 0 },
+    { 指标: '平均分', 数值: payload.summary?.average_score ?? '' },
+    { 指标: '有排名成绩', 数值: payload.summary?.ranking_count || 0 },
+    { 指标: '已发布成绩', 数值: payload.summary?.published_count || 0 }
+  ];
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(summaryRows), '总览摘要');
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(statRows), '项目统计');
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(detailRows), '成绩明细');
+  return workbook;
+}
+
 function processRegistrationReview(db, registration, reviewer, action, reason, isCancel) {
   if (isCancel) {
     if (registration.status !== 'cancelling') {
@@ -263,15 +439,38 @@ router.get('/homeroom/overview', (req, res) => {
       approved_registration_count: students.reduce((sum, item) => sum + Number(item.approved_registration_count || 0), 0),
       result_count: students.reduce((sum, item) => sum + Number(item.result_count || 0), 0)
     };
+    const resultOverview = listHomeroomOverviewResults(db, profile, req.query);
     res.json({
       success: true,
       data: {
         profile,
         summary: classSummary,
         students,
-        pending_registrations: pendingRegistrations
+        pending_registrations: pendingRegistrations,
+        result_rows: resultOverview.list,
+        result_filters: resultOverview.filters,
+        result_events: resultOverview.events,
+        result_event_stats: resultOverview.event_stats,
+        result_summary: resultOverview.summary
       }
     });
+  } catch (e) {
+    res.status(400).json({ success: false, error: e.message });
+  }
+});
+
+router.get('/homeroom/overview/export', (req, res) => {
+  try {
+    const db = getDb();
+    const profile = getTeacherProfile(db, req.user.id);
+    assertHomeroomTeacher(profile);
+    const resultOverview = listHomeroomOverviewResults(db, profile, req.query);
+    const workbook = buildHomeroomOverviewWorkbook(resultOverview, profile);
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    const stamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=\"homeroom-overview-${stamp}.xlsx\"`);
+    res.send(buffer);
   } catch (e) {
     res.status(400).json({ success: false, error: e.message });
   }

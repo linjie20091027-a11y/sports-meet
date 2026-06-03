@@ -347,6 +347,8 @@ h1{font-family:var(--title-font);font-size:2.2rem}h2{font-size:1.4rem}h3{font-si
 .teacher-batch-toolbar__meta{display:flex;flex-direction:column;gap:.15rem}
 .teacher-batch-toolbar__meta strong{font-size:.82rem;color:var(--text)}
 .teacher-batch-toolbar__meta span{font-size:.72rem;color:var(--text3)}
+.teacher-inline-meta{min-height:42px;display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;padding:.7rem .85rem;border:1px solid var(--border);border-radius:12px;background:var(--gold-light);font-size:.74rem;color:var(--text2)}
+.teacher-subcard{border:1px solid var(--border);box-shadow:none}
 .teacher-card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.85rem}
 .teacher-event-card{padding:1rem;border:1px solid var(--border);border-radius:16px;background:#fffdf9;box-shadow:var(--shadow)}
 .teacher-event-card h4{font-size:.88rem;color:var(--text);margin-bottom:.35rem}
