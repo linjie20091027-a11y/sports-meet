@@ -831,12 +831,44 @@ router.put('/registrations/:id/reject', (req, res) => {
 
 // PUT /registrations/:id/approve-cancel - 批准取消报名
 router.put('/registrations/:id/approve-cancel', (req, res) => {
-  return registrationReviewFlowDisabled(res);
+  try {
+    const db = getDb();
+    const reg = db.prepare('SELECT r.*, e.name as event_name, u.name as user_name FROM registrations r JOIN events e ON r.event_id = e.id JOIN users u ON r.user_id = u.id WHERE r.id = ?').get(req.params.id);
+    if (!reg) return res.status(404).json({ success: false, error: '报名记录不存在' });
+    if (reg.status !== 'cancelling') return res.status(400).json({ success: false, error: '当前状态不可操作' });
+    db.prepare("UPDATE registrations SET status = 'rejected', reject_reason = ?, reviewed_by = ?, reviewed_at = datetime('now','+08:00') WHERE id = ?").run(reg.reject_reason || '管理员同意取消', req.user.id, reg.id);
+    createNotification(db, reg.user_id, {
+      type: 'info',
+      title: '取消报名已通过',
+      content: `您申请取消「${reg.event_name}」的报名已通过管理员审核。`,
+      target_url: '#/student'
+    });
+    logOperation(req.user.id, req.user.username, '批准取消报名', `${reg.user_name} - ${reg.event_name}`, getIp(req));
+    res.json({ success: true, message: '已批准取消报名' });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 // PUT /registrations/:id/reject-cancel - 驳回取消报名
 router.put('/registrations/:id/reject-cancel', (req, res) => {
-  return registrationReviewFlowDisabled(res);
+  try {
+    const db = getDb();
+    const reg = db.prepare('SELECT r.*, e.name as event_name, u.name as user_name FROM registrations r JOIN events e ON r.event_id = e.id JOIN users u ON r.user_id = u.id WHERE r.id = ?').get(req.params.id);
+    if (!reg) return res.status(404).json({ success: false, error: '报名记录不存在' });
+    if (reg.status !== 'cancelling') return res.status(400).json({ success: false, error: '当前状态不可操作' });
+    db.prepare("UPDATE registrations SET status = 'approved', reviewed_by = ?, reviewed_at = datetime('now','+08:00') WHERE id = ?").run(req.user.id, reg.id);
+    createNotification(db, reg.user_id, {
+      type: 'info',
+      title: '取消报名被驳回',
+      content: `您申请取消「${reg.event_name}」的报名已被管理员驳回，报名仍有效。`,
+      target_url: '#/student'
+    });
+    logOperation(req.user.id, req.user.username, '驳回取消报名', `${reg.user_name} - ${reg.event_name}`, getIp(req));
+    res.json({ success: true, message: '已驳回取消申请' });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
 });
 router.get('/registrations/stats', (req, res) => {
   try {

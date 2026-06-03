@@ -1038,13 +1038,14 @@ const Admin = {
       <div class="card" style="margin-bottom:24px;">
         <div class="card__header"><h3 class="card__title">报名记录</h3><div class="card__actions"><button class="btn btn--outline btn--sm" id="btn-export-reg"><i class="fas fa-download"></i> 导出报名表</button></div></div>
         <div class="card__body">
-          <div class="empty-state" style="padding:1rem 0 1.25rem;text-align:left">
-            <div class="empty-state__desc">管理员审核流程已下线，当前页面仅保留只读查看与导出能力。报名审核与取消审核统一由班主任在教师端处理。</div>
-          </div>
           <div class="search-filter-bar" id="reg-filter-bar"></div>
           <div class="table-container" id="reg-table-container"></div>
           <div id="reg-pagination"></div>
         </div>
+      </div>
+      <div class="card" style="margin-bottom:24px;" id="cancel-review-card">
+        <div class="card__header"><h3 class="card__title">取消报名审核 <span class="badge badge-warning" id="cancel-review-count">0</span></h3></div>
+        <div class="card__body" id="cancel-review-list"><p class="text-muted">加载中...</p></div>
       </div>
       <div class="card-grid card-grid--2" style="margin-bottom:24px;">
         <div class="card"><div class="card__header"><h3 class="card__title">项目报名热度</h3></div><div class="card__body"><canvas id="chart-reg-heat" style="max-height:280px;"></canvas></div></div>
@@ -1054,6 +1055,7 @@ const Admin = {
     `;
     this._renderRegFilter(container);
     this._loadRegistrations(container);
+    this._loadCancelReviews();
     this._renderRegPieChart(container);
     this._loadRegStats(container);
     this._bindRegEvents(container);
@@ -1397,6 +1399,49 @@ const Admin = {
         }
         container.querySelector('#reg-unregistered').innerHTML = unregHtml;
       } catch (_) {}
+    } catch (e) {}
+  },
+
+  async _loadCancelReviews() {
+    try {
+      const res = await API.admin.getRegistrations({ status: 'cancelling', limit: 99999 });
+      const list = (res.data?.list || res.data || []);
+      const count = list.length;
+      const countEl = document.getElementById('cancel-review-count');
+      if (countEl) countEl.textContent = count;
+      const listEl = document.getElementById('cancel-review-list');
+      if (!listEl) return;
+      if (list.length === 0) {
+        listEl.innerHTML = '<p class="text-muted text-center">暂无取消报名申请</p>';
+        return;
+      }
+      let html = '<table class="table table--striped"><thead><tr><th>学号</th><th>姓名</th><th>班级</th><th>项目</th><th>理由</th><th>申请时间</th><th>操作</th></tr></thead><tbody>';
+      list.forEach(r => {
+        html += `<tr>
+          <td>${r.student_id || '-'}</td>
+          <td>${r.user_name || '-'}</td>
+          <td>${r.class_name || '-'}</td>
+          <td>${r.event_name || '-'}</td>
+          <td>${r.reject_reason || '-'}</td>
+          <td>${App.formatDate(r.created_at)}</td>
+          <td>
+            <button class="btn btn-success btn-xs btn-approve-cancel" data-id="${r.id}">通过</button>
+            <button class="btn btn-warning btn-xs btn-reject-cancel" data-id="${r.id}">驳回</button>
+          </td>
+        </tr>`;
+      });
+      html += '</tbody></table>';
+      listEl.innerHTML = html;
+      listEl.querySelectorAll('.btn-approve-cancel').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          try { App.showLoading(); await API.admin.approveCancel(parseInt(btn.dataset.id)); App.hideLoading(); App.showToast('已批准取消', 'success'); this._loadCancelReviews(); } catch(e) { App.hideLoading(); App.showToast(e.message, 'error'); }
+        });
+      });
+      listEl.querySelectorAll('.btn-reject-cancel').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          try { App.showLoading(); await API.admin.rejectCancel(parseInt(btn.dataset.id)); App.hideLoading(); App.showToast('已驳回取消申请', 'success'); this._loadCancelReviews(); } catch(e) { App.hideLoading(); App.showToast(e.message, 'error'); }
+        });
+      });
     } catch (e) {}
   },
 
