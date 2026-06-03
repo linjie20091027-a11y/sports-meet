@@ -1418,8 +1418,8 @@ const App = {
       if (visibleEvents.length) {
         let evH = '<div class="events-horiz-row">';
         visibleEvents.slice(0, 4).forEach(e => {
-          const iconMap = {track:'fa-person-running',field:'fa-arrow-up-right-dots',relay:'fa-people-arrows',team:'fa-people-group'};
-          const icon = iconMap[e.category] || 'fa-running';
+          const iconMap = {track:'fa-person-running',field:'fa-arrow-up-right-dots',relay:'fa-people-arrows',team:'fa-people-group','110米栏':'fa-person-hiking','400米栏':'fa-person-hiking','3000米':'fa-person-running','三级跳远':'fa-up-long','铅球':'fa-volleyball','铁饼':'fa-circle','标枪':'fa-arrow-up-long'};
+          const icon = iconMap[e.name] || iconMap[e.category] || 'fa-running';
           evH += `<a href="#/events/${e.id}" class="event-horiz-card">
             <div class="event-horiz-icon"><i class="fas ${icon}"></i></div>
             <h4>${e.name}</h4>
@@ -1802,9 +1802,11 @@ const App = {
         const iconMap = {
           track:'fa-person-running', field:'fa-arrow-up-right-dots', relay:'fa-people-arrows', team:'fa-people-group',
           '100米':'fa-person-running','200米':'fa-person-running','400米':'fa-person-running',
-          '800米':'fa-person-running','1500米':'fa-person-running','跳远':'fa-up-long',
-          '跳高':'fa-arrow-up','实心球':'fa-volleyball','4×100米接力':'fa-people-arrows',
-          '拔河比赛':'fa-hand-fist','广播体操':'fa-person-walking'
+          '800米':'fa-person-running','1500米':'fa-person-running','3000米':'fa-person-running',
+          '110米栏':'fa-person-hiking','400米栏':'fa-person-hiking',
+          '4×100米接力':'fa-people-arrows','4×400米接力':'fa-people-arrows',
+          '跳高':'fa-arrow-up','跳远':'fa-up-long','三级跳远':'fa-up-long',
+          '铅球':'fa-volleyball','铁饼':'fa-circle','标枪':'fa-arrow-up-long'
         };
         const bgMap = {
           track:'https://images.unsplash.com/photo-1461896836934-bd45ba2ae6c7?w=600&q=80',
