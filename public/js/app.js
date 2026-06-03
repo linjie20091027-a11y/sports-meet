@@ -2154,8 +2154,13 @@ const App = {
   // ====== 工具 ======
   formatDate(d) {
     if (!d) return '-';
-    try { const t=new Date(d);return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')} ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`; }
-    catch(e) { return d; }
+    try {
+      const t = new Date(d);
+      const opts = { timeZone: 'Asia/Macau', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false };
+      const str = t.toLocaleString('zh-CN', opts);
+      return str.replace(/\//g, '-');
+    }
+    catch(e) { return String(d); }
   },
   _champTimer: null,
   _champData: null,

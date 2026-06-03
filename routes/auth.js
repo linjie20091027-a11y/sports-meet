@@ -41,7 +41,7 @@ function verifyCaptcha(db, token, code) {
 router.post('/register', (req, res) => {
   try {
     const db = getDb();
-    const { username, email, password, name, student_id, class_name, grade, captchaToken, captchaCode } = req.body;
+    const { username, email, password, name, student_id, class_name, grade, gender, captchaToken, captchaCode } = req.body;
 
     if (!username || !email || !password || !name) {
       return res.json({ success: false, error: '用户名、邮箱、密码、姓名为必填项' });
@@ -75,8 +75,8 @@ router.post('/register', (req, res) => {
 
     const hashedPassword = bcrypt.hashSync(password, 10);
     const result = db.prepare(
-      "INSERT INTO users (username, email, password, role, name, student_id, class_name, grade) VALUES (?, ?, ?, 'student', ?, ?, ?, ?)"
-    ).run(username, email, hashedPassword, name, student_id || '', class_name || '', grade || '');
+      "INSERT INTO users (username, email, password, role, name, student_id, class_name, grade, gender) VALUES (?, ?, ?, 'student', ?, ?, ?, ?, ?)"
+    ).run(username, email, hashedPassword, name, student_id || '', class_name || '', grade || '', gender || '');
 
     logOperation(result.lastInsertRowid, username, 'register', `用户注册: ${email}`, getClientIp(req));
 

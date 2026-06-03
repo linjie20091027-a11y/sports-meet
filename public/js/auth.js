@@ -208,6 +208,14 @@ const Auth = {
               </select>
             </div>
             <div class="form-group">
+              <label for="reg-gender">性别 <span class="text-muted">*</span></label>
+              <select id="reg-gender" class="form-select" required>
+                <option value="">请选择</option>
+                <option value="male">男</option>
+                <option value="female">女</option>
+              </select>
+            </div>
+            <div class="form-group">
               <label for="reg-captcha">验证码 <span class="text-muted">*</span></label>
               <div class="captcha-row">
                 <input type="text" id="reg-captcha" class="form-input" placeholder="图中字符" required maxlength="4" autocomplete="off">
@@ -300,7 +308,18 @@ const Auth = {
     const sid = document.getElementById('reg-sid')?.value?.trim();
     const cls = document.getElementById('reg-class')?.value?.trim();
     const grade = document.getElementById('reg-grade')?.value;
+    const gender = document.getElementById('reg-gender')?.value;
     const captchaCode = document.getElementById('reg-captcha')?.value?.trim();
+
+    if (!username) return App.showToast('请输入用户名', 'warning');
+    if (!email) return App.showToast('请输入邮箱', 'warning');
+    if (!/^[a-zA-Z0-9._%+-]+@hkms\.hktedu\.com$/i.test(email)) {
+      return App.showToast('邮箱須為 @hkms.hktedu.com 结尾', 'warning');
+    }
+    if (!password || password.length < 6) return App.showToast('密码至少 6 位', 'warning');
+    if (password !== confirm) return App.showToast('兩次密码不一致', 'warning');
+    if (!name) return App.showToast('请输入姓名', 'warning');
+    if (!gender) return App.showToast('请选择性别', 'warning');
 
     if (!username) return App.showToast('请输入用户名', 'warning');
     if (!email) return App.showToast('请输入邮箱', 'warning');
@@ -319,6 +338,7 @@ const Auth = {
         student_id: sid,
         class_name: cls,
         grade,
+        gender,
         captchaToken: this.captchaToken,
         captchaCode
       });

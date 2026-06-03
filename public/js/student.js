@@ -416,7 +416,7 @@ const Student = {
                 <span><i class="fas fa-venus-mars" style="width:16px;color:var(--text-muted)"></i> ${genderLabel(e.gender_group)}</span>
                 <span><i class="fas fa-tag" style="width:16px;color:var(--text-muted)"></i> ${catLabel(e.category)}</span>
                 <span><i class="fas fa-location-dot" style="width:16px;color:var(--text-muted)"></i> ${esc(e.venue || '待定')}</span>
-                <span><i class="fas fa-users" style="width:16px;color:var(--text-muted)"></i> ${e.registered_count || 0} / ${e.max_participants || '不限'}</span>
+                <span><i class="fas fa-users" style="width:16px;color:var(--text-muted)"></i> 已报${e.registered_count || 0}人 / 上限${e.max_participants || '不限'}</span>
               </div>
               ${e.rules ? `<p class="text-sm mt-2" style="padding:0.75rem;background:var(--surface-2);border-radius:var(--radius);color:var(--text-secondary);line-height:1.6"><strong>规则：</strong>${esc(e.rules)}</p>` : ''}
             </div>
@@ -478,7 +478,8 @@ const Student = {
       const genderLabel = g => g==='male'?'男子组':g==='female'?'女子组':'混合组';
 
       if (regs.length === 0) {
-        c.innerHTML = '<div class="empty-state"><div class="empty-state__icon"><i class="fas fa-clipboard-list"></i></div><p class="empty-state__desc">暂无报名记录</p><a href="#/student" class="btn btn-primary mt-2" onclick="Student.currentTab=\'register\';Student.renderTab()">去报名</a></div>';
+        c.innerHTML = '<div class="empty-state"><div class="empty-state__icon"><i class="fas fa-clipboard-list"></i></div><p class="empty-state__desc">暂无报名记录</p><a href="javascript:void(0)" class="btn btn-primary mt-2" id="btn-go-register">去报名</a></div>';
+        document.getElementById('btn-go-register')?.addEventListener('click', () => { this.currentTab = 'register'; this.renderTab(); document.querySelectorAll('.student-menu-item').forEach(i => i.classList.remove('active')); document.querySelector('[data-tab=register]')?.classList.add('active'); });
         return;
       }
 

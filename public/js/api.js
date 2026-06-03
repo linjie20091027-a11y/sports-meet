@@ -247,7 +247,7 @@ const API = {
     submitRegistration(eventId) { return API.post('/student/registrations', { event_id: eventId }); },
     cancelRegistration(id, reason) { return API.request('DELETE', '/student/registrations/' + id, { reason }); },
     getMyResults() { return API.get('/student/results'); },
-    getMySchedules() { return API.get('/student/schedules'); },
+    getMySchedules() { return API.get('/student/my-schedules'); },
     getUpcomingReminders() { return API.get('/student/upcoming-reminders'); },
     markAnnouncementRead(id) { return API.put('/student/announcements/' + id + '/read'); },
   },
