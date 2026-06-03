@@ -55,9 +55,6 @@ const Admin = {
             <li class="admin-menu-item" data-tab="logs" style="display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;font-size:0.875rem;color:#6b7280;transition:all 150ms;border-left:3px solid transparent;">
               <i class="fas fa-history" style="width:18px;text-align:center;"></i> 操作日志
             </li>
-            <li class="admin-menu-item" data-tab="gallery" style="display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;font-size:0.875rem;color:#6b7280;transition:all 150ms;border-left:3px solid transparent;">
-              <i class="fas fa-images" style="width:18px;text-align:center;"></i> 精彩瞬间审核
-            </li>
           </ul>
         </aside>
         <div class="admin-content" id="admin-content" style="flex:1;padding:24px;overflow-y:auto;"></div>
@@ -118,7 +115,6 @@ const Admin = {
       case 'highlights': this.renderHighlightsAdmin(content); break;
       case 'settings': this.renderSettings(content); break;
       case 'logs': this.renderLogs(content); break;
-      case 'gallery': this.renderGallery(content); break;
       case 'grades': this._renderGrades(content); break;
     }
   },
@@ -3556,90 +3552,6 @@ const Admin = {
     XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
     XLSX.writeFile(wb, filename);
     App.showToast('模板已下载', 'success');
-  },
-
-  _galleryFilter: '',
-
-  async renderGallery(container) {
-    container.innerHTML = `
-      <div class="card">
-        <div class="card__header">
-          <h3 class="card__title">精彩瞬间审核</h3>
-          <div class="card__actions" id="gallery-filter-btns">
-            <button class="btn btn--sm ${!this._galleryFilter ? 'btn--primary' : 'btn--outline'}" data-filter="">全部</button>
-            <button class="btn btn--sm ${this._galleryFilter === 'pending' ? 'btn--primary' : 'btn--outline'}" data-filter="pending">待审核</button>
-            <button class="btn btn--sm ${this._galleryFilter === 'approved' ? 'btn--primary' : 'btn--outline'}" data-filter="approved">已通过</button>
-            <button class="btn btn--sm ${this._galleryFilter === 'rejected' ? 'btn--primary' : 'btn--outline'}" data-filter="rejected">已驳回</button>
-          </div>
-        </div>
-        <div class="card__body" id="gallery-list"></div>
-      </div>
-    `;
-    this._loadGallery(container);
-    container.querySelector('#gallery-filter-btns').addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-filter]');
-      if (!btn) return;
-      this._galleryFilter = btn.dataset.filter;
-      this.renderGallery(container);
-    });
-  },
-
-  async _loadGallery(container) {
-    const list = container.querySelector('#gallery-list');
-    try {
-      App.showLoading();
-      const params = { limit: 100 };
-      if (this._galleryFilter) params.status = this._galleryFilter;
-      const res = await API.gallery.adminList(params);
-      App.hideLoading();
-      const photos = res.data || [];
-      if (!photos.length) {
-        list.innerHTML = '<p class="text-muted text-center" style="padding:2rem">暂无图片</p>';
-        return;
-      }
-      let html = '<div class="gallery-admin-grid">';
-      photos.forEach(p => {
-        const statusLabel = {pending:'待审核',approved:'已通过',rejected:'已驳回'};
-        const statusCls = {pending:'warning',approved:'success',rejected:'danger'};
-        html += `<div class="gallery-admin-card">
-          <div class="gallery-admin-img"><img src="/images/gallery/${p.filename}" alt="${p.original_name||''}" loading="lazy"></div>
-          <div class="gallery-admin-info">
-            <span class="badge badge-${statusCls[p.status]||'general'}">${statusLabel[p.status]||p.status}</span>
-            <span class="text-sm text-muted">${p.uploader_name||'未知'} · ${App.formatDate(p.created_at)}</span>
-            ${p.description ? `<p class="text-sm">${p.description}</p>` : ''}
-            ${p.status === 'pending' ? `
-              <div class="gallery-admin-actions">
-                <button class="btn btn--success btn--sm" onclick="Admin._approvePhoto(${p.id})">通过</button>
-                <button class="btn btn--danger btn--sm" onclick="Admin._rejectPhoto(${p.id})">驳回</button>
-              </div>` : ''}
-            ${p.status === 'approved' ? `<span class="text-xs text-muted">审核人: ${p.approver_name||'-'} · ${App.formatDate(p.approved_at)}</span>` : ''}
-            ${p.status === 'rejected' ? `<span class="text-xs text-muted">驳回人: ${p.approver_name||'-'} · ${App.formatDate(p.approved_at)}</span>` : ''}
-            <button class="btn btn--danger btn--xs" style="margin-top:4px" onclick="Admin._deletePhoto(${p.id})">删除</button>
-          </div>
-        </div>`;
-      });
-      html += '</div>';
-      list.innerHTML = html;
-    } catch (e) {
-      App.hideLoading();
-      list.innerHTML = '<p class="text-muted text-center" style="padding:2rem">加载失败</p>';
-    }
-  },
-
-  async _approvePhoto(id) {
-    try { await API.gallery.approve(id); App.showToast('审核已通过', 'success'); this._loadGallery(document.getElementById('admin-content')); }
-    catch(e) { App.showToast(e.message, 'error'); }
-  },
-
-  async _rejectPhoto(id) {
-    try { await API.gallery.reject(id); App.showToast('已驳回', 'success'); this._loadGallery(document.getElementById('admin-content')); }
-    catch(e) { App.showToast(e.message, 'error'); }
-  },
-
-  async _deletePhoto(id) {
-    if (!await App.confirmDialog('确定删除此图片？删除后不可恢复。')) return;
-    try { await API.gallery.delete(id); App.showToast('已删除', 'success'); this._loadGallery(document.getElementById('admin-content')); }
-    catch(e) { App.showToast(e.message, 'error'); }
   },
 };
 
