@@ -46,6 +46,9 @@ const Admin = {
             <li class="admin-menu-item" data-tab="highlights" style="display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;font-size:0.875rem;color:#6b7280;transition:all 150ms;border-left:3px solid transparent;">
               <i class="fas fa-images" style="width:18px;text-align:center;"></i> 照片管理
             </li>
+            <li class="admin-menu-item" data-tab="ai-logs" style="display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;font-size:0.875rem;color:#6b7280;transition:all 150ms;border-left:3px solid transparent;">
+              <i class="fas fa-shield-haltered" style="width:18px;text-align:center;"></i> AI审核日志
+            </li>
             <li class="admin-menu-item" data-tab="settings" style="display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;font-size:0.875rem;color:#6b7280;transition:all 150ms;border-left:3px solid transparent;">
               <i class="fas fa-cog" style="width:18px;text-align:center;"></i> 系统设置
             </li>
@@ -113,6 +116,7 @@ const Admin = {
       case 'announcements': this.renderAnnouncements(content); break;
       case 'forum': this.renderForumManagement(content); break;
       case 'highlights': this.renderHighlightsAdmin(content); break;
+      case 'ai-logs': this.renderAILogs(content); break;
       case 'settings': this.renderSettings(content); break;
       case 'logs': this.renderLogs(content); break;
       case 'grades': this._renderGrades(content); break;
@@ -1942,6 +1946,78 @@ const Admin = {
     }
   },
 
+  // ==================== AI 审核日志 ====================
+  _aiLogsPage: 1,
+  async renderAILogs(container) {
+    this._aiLogsPage = 1;
+    container.innerHTML = '<h3>AI 审核日志</h3><div id="ai-logs-content"><div class="spinner"></div></div>';
+    this._loadAILogs();
+  },
+
+  async _loadAILogs() {
+    const wrap = document.getElementById('ai-logs-content');
+    try {
+      const res = await API.get('/admin/moderation-logs?page=' + this._aiLogsPage);
+      const d = res.data;
+      const list = d.list || [];
+      const imageLogs = d.imageLogs || [];
+      const total = d.total || 0;
+
+      if (!list.length && !imageLogs.length) {
+        wrap.innerHTML = '<div class="empty-state"><div class="empty-state__icon"><i class="fas fa-shield-check"></i></div><p>暂无AI审核记录</p><p class="text-sm text-muted">开启AI审核后，文字和图片审核结果将显示在此处</p></div>';
+        return;
+      }
+
+      let html = '';
+
+      // 文字审核日志
+      if (list.length) {
+        html += '<div class="card" style="margin-bottom:20px"><div class="card__header"><h3 class="card__title">论坛文字审核记录</h3><span class="text-sm text-muted">共 ' + total + ' 条</span></div><div class="card__body"><div class="table-container"><table class="table"><thead><tr><th>时间</th><th>发帖人</th><th>帖子标题</th><th>帖子内容</th><th>AI判定</th><th>原因</th></tr></thead><tbody>';
+        list.forEach(l => {
+          const actionLabel = l.action === 'ai_approve_post' ? '<span class="badge badge--approved">通过</span>'
+            : l.action === 'ai_reject_post' ? '<span class="badge badge--rejected">拦截</span>'
+            : l.action === 'blocked_post' ? '<span class="badge badge--rejected">敏感词拦截</span>'
+            : '<span class="badge">' + (l.action || '未知') + '</span>';
+          html += '<tr><td style="white-space:nowrap;font-size:.72rem">' + (l.created_at || '') + '</td>';
+          html += '<td><strong>' + (l.post_author || l.operator_name || '未知') + '</strong></td>';
+          html += '<td>' + (l.post_title || '-') + '</td>';
+          html += '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (l.post_content || '-') + '</td>';
+          html += '<td>' + actionLabel + '</td>';
+          html += '<td style="font-size:.72rem;color:var(--red)">' + (l.comment || '-') + '</td></tr>';
+        });
+        html += '</tbody></table></div></div></div>';
+
+        // 分页
+        const totalPages = Math.ceil(total / 20);
+        if (totalPages > 1) {
+          html += '<div style="display:flex;gap:8px;justify-content:center;margin-top:12px">';
+          for (let i = 1; i <= Math.min(totalPages, 10); i++) {
+            html += '<button class="btn ' + (i === this._aiLogsPage ? 'btn--primary' : 'btn--outline') + ' btn-sm" onclick="Admin._aiLogsPage=' + i + ';Admin._loadAILogs()">' + i + '</button>';
+          }
+          html += '</div>';
+        }
+      }
+
+      // 图片审核日志
+      if (imageLogs.length) {
+        html += '<div class="card"><div class="card__header"><h3 class="card__title">图片审核记录</h3></div><div class="card__body"><div class="table-container"><table class="table"><thead><tr><th>时间</th><th>上传者</th><th>预览</th><th>文件名</th><th>状态</th><th>审核结果</th></tr></thead><tbody>';
+        imageLogs.forEach(img => {
+          html += '<tr><td style="white-space:nowrap;font-size:.72rem">' + (img.created_at || '') + '</td>';
+          html += '<td><strong>' + (img.uploader_name || '匿名') + '</strong></td>';
+          html += '<td><img src="/images/' + img.filename + '" style="width:60px;height:45px;object-fit:cover;border-radius:4px;cursor:zoom-in" onclick="App.openLightbox(\'/images/' + img.filename + '\')"></td>';
+          html += '<td>' + (img.original_name || img.filename || '') + '</td>';
+          html += '<td><span class="badge badge--rejected">已拦截</span></td>';
+          html += '<td style="font-size:.72rem;color:var(--red)">' + (img.moderation_note || '违规') + '</td></tr>';
+        });
+        html += '</tbody></table></div></div></div>';
+      }
+
+      wrap.innerHTML = html;
+    } catch(e) {
+      wrap.innerHTML = '<div class="empty-state"><p>加载失败：' + e.message + '</p></div>';
+    }
+  },
+
   async renderHighlightsAdmin(container) {
     container.innerHTML = '<h3>照片管理 · 首页精彩瞬间</h3><div class="admin-table-wrap" id="admin-highlights-table"><div class="text-center p-4"><div class="spinner"></div></div></div>';
     await this._loadHighlightsAdmin();
@@ -3222,6 +3298,7 @@ const Admin = {
       html += '<div class="form__group"><label class="form__label">运动会主题</label><input class="form__input" id="set-theme" value="' + (settings.theme || '') + '"></div>';
       html += '<div class="form__group"><label class="form__label">开始日期</label><input class="form__input" id="set-start-date" type="date" value="' + (settings.start_date || '') + '"></div>';
       html += '<div class="form__group"><label class="form__label">结束日期</label><input class="form__input" id="set-end-date" type="date" value="' + (settings.end_date || '') + '"></div>';
+      html += '<div class="form__group"><label class="form__label">DeepSeek API Key</label><input class="form__input" id="set-deepseek-key" placeholder="sk-..." value="' + (settings.deepseek_api_key ? settings.deepseek_api_key.substring(0,12) + '********' : '') + '"><span class="text-sm text-muted">用于AI文字审核，留空则保持当前Key不变</span></div>';
       html += '</div></div></div>';
 
       // 开关设置
@@ -3278,6 +3355,11 @@ const Admin = {
           site_maintenance: document.getElementById('set-maintenance').checked,
           ai_moderation_enabled: document.getElementById('set-ai-moderation')?.checked ? '1' : '0'
         };
+        // DeepSeek API Key: 仅当用户输入了新值时保存
+        const keyInput = document.getElementById('set-deepseek-key')?.value?.trim();
+        if (keyInput && !keyInput.includes('********')) {
+          settingsData.deepseek_api_key = keyInput;
+        }
         const rulesData = {
           max_events_per_person: document.getElementById('set-max-events').value,
           max_participants_per_event: document.getElementById('set-max-per-event').value

@@ -254,9 +254,9 @@ function paginate(query, params, page, limit) {
 router.put('/settings', (req, res) => {
   try {
     const db = getDb();
-    const { site_name, theme, start_date, end_date, registration_open, site_maintenance, logo_url, ai_moderation_enabled, ...rest } = req.body;
+    const { site_name, theme, start_date, end_date, registration_open, site_maintenance, logo_url, ai_moderation_enabled, deepseek_api_key, ...rest } = req.body;
 
-    const settingsMap = { site_name, theme, timezone: rest.timezone, ai_moderation_enabled };
+    const settingsMap = { site_name, theme, timezone: rest.timezone, ai_moderation_enabled, deepseek_api_key };
     const updateSetting = db.prepare(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now','localtime')`);
     for (const [k, v] of Object.entries(settingsMap)) {
       if (v !== undefined) updateSetting.run(k, String(v));
@@ -1727,6 +1727,50 @@ router.delete('/highlights/:id', (req, res) => {
       db.prepare('DELETE FROM highlights WHERE id = ?').run(id);
     }
     res.json({ success: true, message: '已删除' });
+  } catch(e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// ==================== AI 审核日志 ====================
+
+// GET /moderation-logs — AI 审核报告
+router.get('/moderation-logs', (req, res) => {
+  try {
+    const db = getDb();
+    const { page, limit } = req.query;
+    const p = Math.max(1, parseInt(page) || 1);
+    const l = Math.min(50, Math.max(1, parseInt(limit) || 20));
+    const offset = (p - 1) * l;
+
+    const total = db.prepare(`
+      SELECT COUNT(*) as cnt FROM forum_moderation_logs
+      WHERE action LIKE '%ai_%' OR action = 'blocked_post'
+    `).get().cnt;
+
+    const list = db.prepare(`
+      SELECT ml.*, u.name as operator_name,
+        fp.title as post_title, fp.summary as post_content,
+        fu.name as post_author, fu.username as post_author_username
+      FROM forum_moderation_logs ml
+      LEFT JOIN users u ON ml.operator_id = u.id
+      LEFT JOIN forum_posts fp ON ml.post_id = fp.id
+      LEFT JOIN users fu ON fp.user_id = fu.id
+      WHERE ml.action LIKE '%ai_%' OR ml.action = 'blocked_post'
+      ORDER BY ml.created_at DESC
+      LIMIT ? OFFSET ?
+    `).all(l, offset);
+
+    // 图片审核日志：highlights 中状态为 rejected 的记录
+    const imageLogs = db.prepare(`
+      SELECT h.id, h.filename, h.original_name, h.status, h.moderation_note, h.created_at,
+        u.name as uploader_name, u.username as uploader_username
+      FROM highlights h
+      LEFT JOIN users u ON h.uploaded_by = u.id
+      WHERE h.moderation_note != ''
+      ORDER BY h.created_at DESC
+      LIMIT 10
+    `).all();
+
+    res.json({ success: true, data: { list, total, page: p, limit: l, imageLogs } });
   } catch(e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
