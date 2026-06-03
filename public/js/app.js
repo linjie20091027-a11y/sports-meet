@@ -1526,7 +1526,7 @@ const App = {
         } else {
           // 上传按钮位
           html += `<div class="carousel-slot carousel-slot--upload" id="carousel-upload-btn">
-            <i class="fas fa-plus"></i><span>上传照片</span>
+            <i class="fas fa-plus"></i><span>上传照片</span><small>最多9张</small>
           </div>`;
         }
       }
@@ -1545,7 +1545,7 @@ const App = {
       });
       document.getElementById('carousel-upload-btn')?.addEventListener('click', () => App.highlightUpload());
     } catch(e) {
-      grid.innerHTML = '<div class="photo-upload-prompt" id="photo-upload-prompt"><i class="fas fa-camera"></i><p>上传精彩瞬间</p></div>';
+      grid.innerHTML = '<div class="photo-upload-prompt" id="photo-upload-prompt"><i class="fas fa-camera"></i><p>上传精彩瞬间（最多9张）</p></div>';
       document.getElementById('photo-upload-prompt')?.addEventListener('click', () => App.highlightUpload());
     }
   },
@@ -1583,27 +1583,28 @@ const App = {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
+    input.multiple = true;
     input.style.display = 'none';
     document.body.appendChild(input);
     input.onchange = async () => {
-      const file = input.files[0];
+      const files = Array.from(input.files || []).slice(0, 9);
       document.body.removeChild(input);
-      if (!file) return;
-      if (file.size > 10 * 1024 * 1024) { App.showToast('图片不超过10MB', 'warning'); return; }
-      const fd = new FormData();
-      fd.append('image', file);
-      App.showToast('上传中...', 'info');
-      try {
-        const r = await API.public.uploadHighlight(fd);
-        if (r.success) {
-          App.showToast('上传成功', 'success');
-          App.renderHighlights();
-        } else {
-          App.showToast(r.error || '上传失败', 'error');
-        }
-      } catch(e) {
-        App.showToast('上传失败: ' + (e.message || '未知错误'), 'error');
+      if (!files.length) return;
+      if (files.length > 9) { App.showToast('最多可上传 9 张图片', 'warning'); }
+      let success = 0, fail = 0;
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.size > 10 * 1024 * 1024) { App.showToast(`${file.name} 超过10MB，已跳过`, 'warning'); fail++; continue; }
+        App.showToast(`上传中... (${i + 1}/${files.length})`, 'info');
+        const fd = new FormData();
+        fd.append('image', file);
+        try {
+          const r = await API.public.uploadHighlight(fd);
+          if (r.success) { success++; } else { fail++; App.showToast(r.error || '上传失败', 'error'); }
+        } catch(e) { fail++; App.showToast(file.name + ': ' + (e.message || '失败'), 'error'); }
       }
+      App.showToast(`上传完成：成功 ${success} 张${fail ? '，失败 ' + fail + ' 张' : ''}`, success > 0 ? 'success' : 'error');
+      if (success > 0) App.renderHighlights();
     };
     input.addEventListener('cancel', () => document.body.removeChild(input));
     input.click();
