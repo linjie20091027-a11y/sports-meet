@@ -250,7 +250,9 @@ const Student = {
         pendingReceivedIds: (data.pending_received_ids || []).map(Number),
         pendingSentIds: (data.pending_sent_ids || []).map(Number),
         groups: data.groups || []
-      };
+};
+
+window.Student = Student;
 
       const esc = (v) => this._escape(v);
       const renderUserMeta = (user) => [user.student_id || user.username || '-', user.grade, user.class_name].filter(Boolean).join(' · ');
