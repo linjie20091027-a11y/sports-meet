@@ -1780,7 +1780,7 @@ const Admin = {
       // 统计卡片增加 AI 审核状态
       const aiModerationEnabled = stats.moderator_enabled || stats.overview?.moderation_enabled;
       const aiStats = stats.overview?.ai_reviewed !== undefined ? stats.overview : stats;
-      html += '<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:20px">';
+      let html = '<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:20px">';
       [
         { label: '帖子总数', value: overview.total_posts || 0, icon: 'fa-file-lines' },
         { label: '待审帖子', value: overview.pending_posts || 0, icon: 'fa-hourglass-half' },
