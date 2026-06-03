@@ -899,11 +899,12 @@ router.post('/highlights', hlUpload.single('image'), async (req, res) => {
         }
       }
     } catch(e) {}
-    db.prepare("INSERT INTO highlights (filename, original_name, status, uploaded_by) VALUES (?, ?, ?, ?)").run(
+    db.prepare("INSERT INTO highlights (filename, original_name, status, uploaded_by, moderation_note) VALUES (?, ?, ?, ?, ?)").run(
       req.file.filename,
       req.file.originalname || '',
       status,
-      uploadedBy
+      uploadedBy,
+      moderationNote
     );
     const msg = status === 'rejected' ? '图片审核未通过：' + moderationNote : '上传成功，等待审核';
     res.json({ success: true, message: msg, data: { url: '/images/' + req.file.filename, status } });

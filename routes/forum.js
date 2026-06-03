@@ -1075,7 +1075,10 @@ router.get('/admin/posts', authMiddleware, adminOnly, (req, res) => {
     const whereSql = where.join(' AND ');
     const total = db.prepare(`SELECT COUNT(*) as cnt FROM forum_posts p WHERE ${whereSql}`).get(...params).cnt;
     const list = db.prepare(`
-      SELECT p.*, u.name as author_name, u.class_name, u.role as author_role
+      SELECT p.*, u.name as author_name, u.class_name, u.role as author_role,
+        (SELECT ml.action || '|' || COALESCE(ml.comment,'') FROM forum_moderation_logs ml
+         WHERE ml.post_id = p.id AND ml.action LIKE '%ai_%'
+         ORDER BY ml.created_at DESC LIMIT 1) as ai_moderation
       FROM forum_posts p
       JOIN users u ON p.user_id = u.id
       WHERE ${whereSql}
@@ -1287,7 +1290,10 @@ router.get('/admin/stats', authMiddleware, adminOnly, (req, res) => {
       featured_posts: db.prepare('SELECT COUNT(*) as cnt FROM forum_posts WHERE is_deleted = 0 AND is_featured = 1').get().cnt,
       pending_replies: db.prepare("SELECT COUNT(*) as cnt FROM forum_replies WHERE is_deleted = 0 AND status = 'pending'").get().cnt,
       pending_reports: db.prepare("SELECT COUNT(*) as cnt FROM forum_reports WHERE status = 'pending'").get().cnt,
-      muted_users: db.prepare("SELECT COUNT(*) as cnt FROM users WHERE muted_until != '' AND datetime(muted_until) > datetime('now')").get().cnt
+      muted_users: db.prepare("SELECT COUNT(*) as cnt FROM users WHERE muted_until != '' AND datetime(muted_until) > datetime('now')").get().cnt,
+      ai_reviewed: db.prepare("SELECT COUNT(*) as cnt FROM forum_moderation_logs WHERE action LIKE '%ai_%'").get().cnt,
+      ai_rejected: db.prepare("SELECT COUNT(*) as cnt FROM forum_moderation_logs WHERE action = 'ai_reject_post'").get().cnt,
+      moderation_enabled: db.prepare("SELECT value FROM settings WHERE key = 'ai_moderation_enabled'").get()?.value === '1'
     };
     const category_stats = db.prepare(`
       SELECT category, COUNT(*) as cnt

@@ -1777,26 +1777,36 @@ const Admin = {
       const reports = stats.reports || [];
       const hotPosts = stats.hot_posts || [];
 
-      let html = '<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:20px">';
+      // 统计卡片增加 AI 审核状态
+      const aiModerationEnabled = stats.moderator_enabled || stats.overview?.moderation_enabled;
+      const aiStats = stats.overview?.ai_reviewed !== undefined ? stats.overview : stats;
+      html += '<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:20px">';
       [
         { label: '帖子总数', value: overview.total_posts || 0, icon: 'fa-file-lines' },
         { label: '待审帖子', value: overview.pending_posts || 0, icon: 'fa-hourglass-half' },
         { label: '已审帖子', value: overview.approved_posts || 0, icon: 'fa-circle-check' },
-        { label: '待审评论', value: overview.pending_replies || 0, icon: 'fa-comment-dots' },
-        { label: '待处理举报', value: overview.pending_reports || 0, icon: 'fa-flag' },
-        { label: '当前禁言', value: overview.muted_users || 0, icon: 'fa-user-lock' }
+        { label: 'AI 审核次数', value: aiStats.ai_reviewed || 0, icon: 'fa-robot', color: 'var(--purple)' },
+        { label: 'AI 拦截数', value: aiStats.ai_rejected || 0, icon: 'fa-shield-haltered', color: 'var(--red)' },
+        { label: 'AI 审核', value: aiModerationEnabled ? '已开启' : '未开启', icon: aiModerationEnabled ? 'fa-toggle-on' : 'fa-toggle-off', color: aiModerationEnabled ? 'var(--green)' : 'var(--text3)' }
       ].forEach((item) => {
-        html += `<div class="stat-card"><i class="fas ${item.icon}"></i><div class="stat-num">${item.value}</div><div class="stat-label">${item.label}</div></div>`;
+        html += `<div class="stat-card"><i class="fas ${item.icon}" style="color:${item.color || ''}"></i><div class="stat-num">${item.value}</div><div class="stat-label">${item.label}</div></div>`;
       });
       html += '</div>';
 
       html += '<div class="card-grid card-grid--2" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">';
       html += '<div class="card"><div class="card__header"><h3 class="card__title">待审核帖子</h3></div><div class="card__body">';
       if (pendingPosts.length) {
-        html += pendingPosts.map((post) => `
+        html += pendingPosts.map((post) => {
+          const aiMod = post.ai_moderation || '';
+          const [aiAction, aiReason] = aiMod.split('|');
+          const aiBadge = aiAction === 'ai_approve_post' ? '<span class="badge" style="background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7">AI 通过</span>'
+            : aiAction === 'ai_reject_post' ? '<span class="badge" style="background:#fce4ec;color:#c62828;border:1px solid #ef9a9a">AI 驳回</span>'
+            : '';
+          const aiReasonText = aiReason ? `<span style="font-size:.7rem;color:var(--text3);margin-left:6px">${this._escapeHtml(aiReason)}</span>` : '';
+          return `
           <div class="friend-card" style="margin-bottom:12px;">
             <div class="friend-card__body">
-              <div class="friend-card__top"><strong>${this._escapeHtml(post.title)}</strong><small>${this._escapeHtml(post.author_name || '-')}</small></div>
+              <div class="friend-card__top"><strong>${this._escapeHtml(post.title)}</strong><small>${this._escapeHtml(post.author_name || '-')}</small>${aiBadge}${aiReasonText}</div>
               <p>${this._escapeHtml(post.summary || '')}</p>
               <div class="friend-card__actions">
                 <button class="btn btn--success btn--xs forum-admin-post-action" data-action="approve" data-id="${post.id}">通过</button>
@@ -1807,7 +1817,7 @@ const Admin = {
               </div>
             </div>
           </div>
-        `).join('');
+        `}).join('');
       } else {
         html += this._emptyState('fas fa-check-circle', '暂无待审核帖子');
       }
@@ -1948,12 +1958,13 @@ const Admin = {
         rejected: '<span class="badge badge--rejected">已驳回</span>'
       };
       if (!items.length) { wrap.innerHTML = '<div class="empty-state"><div class="empty-state__icon"><i class="fas fa-images"></i></div><p>暂无照片</p><p class="text-sm text-muted">用户在首页上传后，照片将在此处显示</p></div>'; return; }
-      wrap.innerHTML = '<table class="table"><thead><tr><th>预览</th><th>文件名</th><th>上传者</th><th>状态</th><th>时间</th><th>操作</th></tr></thead><tbody>' +
+      wrap.innerHTML = '<table class="table"><thead><tr><th>预览</th><th>文件名</th><th>上传者</th><th>状态</th><th>AI审核</th><th>时间</th><th>操作</th></tr></thead><tbody>' +
         items.map(item => '<tr>' +
           '<td><img src="' + (item.url || '/images/' + item.filename) + '" class="admin-hl-thumb" data-lightbox="' + (item.url || '/images/' + item.filename) + '" style="width:120px;height:80px;object-fit:cover;border-radius:6px;cursor:zoom-in;border:1px solid var(--border)"></td>' +
           '<td style="font-size:.78rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (item.original_name || item.filename || '') + '">' + (item.original_name || item.filename || '') + '</td>' +
           '<td>' + (item.uploader_name || '匿名') + '</td>' +
           '<td>' + (statusMap[item.status] || item.status) + '</td>' +
+          '<td style="font-size:.7rem;max-width:120px">' + (item.moderation_note ? '<span style="color:#c62828">' + item.moderation_note + '</span>' : '<span style="color:var(--text3)">-</span>') + '</td>' +
           '<td style="font-size:.72rem;white-space:nowrap">' + (item.created_at || '') + '</td>' +
           '<td><div style="display:flex;gap:.3rem;flex-wrap:wrap">' +
           (item.status !== 'approved' ? '<button class="btn btn-success btn-xs admin-hl-approve" data-id="' + item.id + '">通过</button>' : '') +

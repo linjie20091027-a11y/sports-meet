@@ -1682,14 +1682,14 @@ router.get('/dashboard', (req, res) => {
   }
 });
 
-// GET /highlights — 获取所有照片（管理员用，含待审核）
+// GET /highlights — 获取所有照片（管理员用，含审核信息）
 router.get('/highlights', (req, res) => {
   try {
     const db = getDb();
-    const items = db.prepare('SELECT h.id, h.filename, h.original_name, h.status, h.created_at, u.name as uploader_name FROM highlights h LEFT JOIN users u ON h.uploaded_by = u.id ORDER BY h.created_at DESC').all();
+    const items = db.prepare('SELECT h.id, h.filename, h.original_name, h.status, h.moderation_note, h.created_at, u.name as uploader_name FROM highlights h LEFT JOIN users u ON h.uploaded_by = u.id ORDER BY h.created_at DESC').all();
     res.json({ success: true, data: items.map(r => ({
       id: r.id, filename: r.filename, original_name: r.original_name,
-      status: r.status, uploader_name: r.uploader_name,
+      status: r.status, uploader_name: r.uploader_name, moderation_note: r.moderation_note || '',
       url: '/images/' + r.filename, created_at: r.created_at
     })) });
   } catch(e) { res.status(500).json({ success: false, error: e.message }); }
