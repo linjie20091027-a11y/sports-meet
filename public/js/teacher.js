@@ -140,7 +140,7 @@ const Teacher = {
             <div class="card__header">
               <div>
                 <h3 class="card__title">班级总览</h3>
-                <p class="teacher-hero__meta">${App._escHtml(data.profile?.managed_grade || '')} ${App._escHtml(data.profile?.managed_class_name || '')}</p>
+                <p class="teacher-hero__meta">${App._escHtml(data.profile?.managed_class_name || '')}</p>
               </div>
               <button type="button" class="btn btn-outline btn-sm" id="teacher-refresh-overview">刷新</button>
             </div>
