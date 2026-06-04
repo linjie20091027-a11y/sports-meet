@@ -610,7 +610,7 @@ const App = {
   },
   _saveLocalReadId(id) {
     const ids = this._loadLocalReadIds();
-    ids.add(id);
+    ids.add(String(id));
     localStorage.setItem('notify_read_ids', JSON.stringify([...ids]));
   },
 
@@ -623,7 +623,7 @@ const App = {
       const res = await API.student.getNotifications({ limit: 50 });
       const localReadIds = this._loadLocalReadIds();
       const list = (res.data?.list || []).map(item => {
-        if (localReadIds.has(item.id) && !item.is_read) {
+        if (localReadIds.has(String(item.id)) && !item.is_read) {
           return { ...item, is_read: 1 };
         }
         return item;
