@@ -1872,7 +1872,7 @@ const App = {
           // 按项目名合并同类项
           const grouped = {};
           data.forEach(e => {
-            if (!grouped[e.name]) grouped[e.name] = { name: e.name, category: e.category, event_type: e.event_type, genders: [] };
+            if (!grouped[e.name]) grouped[e.name] = { name: e.name, id: e.id, category: e.category, event_type: e.event_type, genders: [] };
             grouped[e.name].genders.push(e.gender_group);
           });
           const groupedList = Object.values(grouped);
@@ -1880,7 +1880,7 @@ const App = {
             const icon = iconMap[g.name] || iconMap[g.category] || 'fa-person-running';
             const bg = getBg(g.name, g.category);
             const genderBadges = g.genders.map(gen => `<span class="badge badge-info">${genderL(gen)}</span>`).join(' ');
-            return `<a href="#/events/${g.name}" class="sport-card" style="background-image:url(${bg});--delay:${i*0.04}s">
+            return `<a href="#/events/${g.id}" class="sport-card" style="background-image:url(${bg});--delay:${i*0.04}s">
               <div class="sport-card-overlay"></div>
               <div class="sport-card-content">
                 <i class="fas ${icon}"></i>
