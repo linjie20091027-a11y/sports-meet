@@ -71,14 +71,20 @@ const Forum = {
     await this._ensureMeta();
     this._renderFilterOptions();
     document.getElementById('forum-new-btn')?.addEventListener('click', () => this._showNewPostForm());
-    document.getElementById('forum-search-btn')?.addEventListener('click', () => {
-      this._filters.keyword = document.getElementById('forum-keyword')?.value?.trim() || '';
-      this._filters.category = document.getElementById('forum-category')?.value || '';
-      this._filters.tag = document.getElementById('forum-tag')?.value || '';
-      this._filters.mine = !!document.getElementById('forum-mine-only')?.checked;
-      this._loadList(1);
-    });
+    document.getElementById('forum-search-btn')?.addEventListener('click', () => this._doSearch());
+    document.getElementById('forum-keyword')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') this._doSearch(); });
+    document.getElementById('forum-mine-only')?.addEventListener('change', () => this._doSearch());
+    document.getElementById('forum-category')?.addEventListener('change', () => this._doSearch());
+    document.getElementById('forum-tag')?.addEventListener('change', () => this._doSearch());
     await this._loadList(1);
+  },
+
+  _doSearch() {
+    this._filters.keyword = document.getElementById('forum-keyword')?.value?.trim() || '';
+    this._filters.category = document.getElementById('forum-category')?.value || '';
+    this._filters.tag = document.getElementById('forum-tag')?.value || '';
+    this._filters.mine = !!document.getElementById('forum-mine-only')?.checked;
+    this._loadList(1);
   },
 
   async _ensureMeta() {
