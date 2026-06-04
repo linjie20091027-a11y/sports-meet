@@ -1854,7 +1854,7 @@ const App = {
           '400米栏':'/images/7eb1254ac7589e9e086c353664323678.png',
           '跳高':'/images/68bf3c19a0195fa6df7f76f4413cffef.jpg',
           '跳远':'/images/474af7a724df995eadcbe06fc896a8fd.jpg',
-          '三级跳远':'/images/474af7a724df995eadcbe06fc896a8fd.jpg',
+          '三级跳远':'/images/9df7ece08e9dacc1f0140d309fe64d78.png',
           '4×100米接力':'/images/f6c6bdac0eadbf783e84760a8506a307.jpg',
           '标枪':'/images/3c7cc9cd1c052d26f93315c0005d38b8.png',
           '铁饼':'/images/ee8312953d8b174f662c058fecddde8f.png',
