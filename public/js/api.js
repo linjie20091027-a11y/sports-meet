@@ -204,6 +204,7 @@ const API = {
     deleteAnnouncement(id) { return API.delete('/admin/announcements/' + id); },
 
     // 用户管理
+    getUserInsights() { return API.get('/admin/users/insights'); },
     getUsers(params) { return API.get('/admin/users' + API._qs(params)); },
     getUser(id) { return API.get('/admin/users/' + id); },
     updateUser(id, data) { return API.put('/admin/users/' + id, data); },

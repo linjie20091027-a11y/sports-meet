@@ -80,6 +80,138 @@ function normalizeAssignedEventIds(input) {
     .filter((item) => Number.isInteger(item) && item > 0))];
 }
 
+function parseAssignedEventIdsForView(input) {
+  try {
+    const parsed = typeof input === 'string' ? JSON.parse(input || '[]') : input;
+    return Array.isArray(parsed) ? parsed.map((item) => Number(item)).filter(Boolean) : [];
+  } catch (_) {
+    return String(input || '')
+      .split(',')
+      .map((item) => Number(item.trim()))
+      .filter(Boolean);
+  }
+}
+
+function buildUserInsights(db) {
+  const summary = db.prepare(`
+    SELECT
+      COUNT(*) AS total_users,
+      COUNT(CASE WHEN COALESCE(permission_role, CASE WHEN role = 'admin' AND COALESCE(staff_type, '') != '' THEN 'teacher' WHEN role = 'admin' THEN 'global_admin' ELSE 'student' END) = 'student' THEN 1 END) AS total_students,
+      COUNT(CASE WHEN COALESCE(permission_role, CASE WHEN role = 'admin' AND COALESCE(staff_type, '') != '' THEN 'teacher' WHEN role = 'admin' THEN 'global_admin' ELSE 'student' END) = 'teacher' THEN 1 END) AS total_teachers,
+      COUNT(CASE WHEN COALESCE(permission_role, CASE WHEN role = 'admin' AND COALESCE(staff_type, '') != '' THEN 'teacher' WHEN role = 'admin' THEN 'global_admin' ELSE 'student' END) = 'global_admin' THEN 1 END) AS total_global_admins,
+      COUNT(CASE WHEN COALESCE(staff_type, '') = 'homeroom_teacher' THEN 1 END) AS total_homeroom_teachers,
+      COUNT(CASE WHEN COALESCE(staff_type, '') = 'event_teacher' THEN 1 END) AS total_event_teachers,
+      COUNT(CASE WHEN status = 'active' THEN 1 END) AS active_users,
+      COUNT(CASE WHEN status = 'disabled' THEN 1 END) AS disabled_users
+    FROM users
+  `).get();
+
+  const studentGrades = db.prepare(`
+    SELECT
+      COALESCE(u.grade, '') AS grade,
+      COUNT(*) AS student_count,
+      COUNT(CASE WHEN u.status = 'active' THEN 1 END) AS active_count,
+      COUNT(DISTINCT CASE WHEN r.status = 'approved' THEN r.id END) AS approved_registration_count,
+      COUNT(DISTINCT rs.id) AS result_count
+    FROM users u
+    LEFT JOIN registrations r ON r.user_id = u.id
+    LEFT JOIN results rs ON rs.user_id = u.id
+    WHERE COALESCE(u.permission_role, 'student') = 'student'
+    GROUP BY COALESCE(u.grade, '')
+    ORDER BY student_count DESC, grade ASC
+  `).all();
+
+  const studentClasses = db.prepare(`
+    SELECT
+      COALESCE(u.grade, '') AS grade,
+      COALESCE(u.class_name, '') AS class_name,
+      COUNT(*) AS student_count,
+      COUNT(CASE WHEN u.status = 'active' THEN 1 END) AS active_count,
+      COUNT(DISTINCT CASE WHEN r.status = 'approved' THEN r.id END) AS approved_registration_count,
+      COUNT(DISTINCT rs.id) AS result_count
+    FROM users u
+    LEFT JOIN registrations r ON r.user_id = u.id
+    LEFT JOIN results rs ON rs.user_id = u.id
+    WHERE COALESCE(u.permission_role, 'student') = 'student'
+    GROUP BY COALESCE(u.grade, ''), COALESCE(u.class_name, '')
+    ORDER BY student_count DESC, grade ASC, class_name ASC
+    LIMIT 12
+  `).all();
+
+  const homeroomTeachers = db.prepare(`
+    SELECT
+      u.id,
+      u.name,
+      u.email,
+      u.status,
+      COALESCE(u.managed_grade, '') AS managed_grade,
+      COALESCE(u.managed_class_name, '') AS managed_class_name,
+      COUNT(DISTINCT stu.id) AS student_count,
+      COUNT(DISTINCT CASE WHEN r.status = 'pending' THEN r.id END) AS pending_registration_count,
+      COUNT(DISTINCT rs.id) AS result_count
+    FROM users u
+    LEFT JOIN users stu
+      ON stu.role = 'student'
+      AND stu.grade = u.managed_grade
+      AND stu.class_name = u.managed_class_name
+    LEFT JOIN registrations r ON r.user_id = stu.id
+    LEFT JOIN results rs ON rs.user_id = stu.id
+    WHERE COALESCE(u.staff_type, '') = 'homeroom_teacher'
+    GROUP BY u.id
+    ORDER BY student_count DESC, u.name ASC
+  `).all();
+
+  const eventTeachersRaw = db.prepare(`
+    SELECT
+      u.id,
+      u.name,
+      u.email,
+      u.status,
+      COALESCE(u.assigned_event_ids, '[]') AS assigned_event_ids,
+      COUNT(DISTINCT rs.id) AS recorded_result_count
+    FROM users u
+    LEFT JOIN results rs ON rs.recorded_by = u.id
+    WHERE COALESCE(u.staff_type, '') = 'event_teacher'
+    GROUP BY u.id
+    ORDER BY recorded_result_count DESC, u.name ASC
+  `).all();
+  const eventNameRows = db.prepare('SELECT id, name FROM events ORDER BY sort_order, id').all();
+  const eventNameMap = new Map(eventNameRows.map((item) => [Number(item.id), item.name]));
+  const eventTeachers = eventTeachersRaw.map((item) => {
+    const assignedIds = parseAssignedEventIdsForView(item.assigned_event_ids);
+    return {
+      ...item,
+      assigned_event_count: assignedIds.length,
+      assigned_event_names: assignedIds.map((id) => eventNameMap.get(Number(id))).filter(Boolean)
+    };
+  });
+
+  const globalAdmins = db.prepare(`
+    SELECT
+      id,
+      name,
+      email,
+      status,
+      created_at
+    FROM users
+    WHERE COALESCE(permission_role, CASE WHEN role = 'admin' AND COALESCE(staff_type, '') != '' THEN 'teacher' WHEN role = 'admin' THEN 'global_admin' ELSE 'student' END) = 'global_admin'
+    ORDER BY created_at ASC, id ASC
+  `).all();
+
+  return {
+    summary,
+    students: {
+      by_grade: studentGrades,
+      top_classes: studentClasses
+    },
+    teachers: {
+      homeroom: homeroomTeachers,
+      event: eventTeachers
+    },
+    global_admins: globalAdmins
+  };
+}
+
 function cleanResultText(value, maxLength, regex) {
   const text = String(value || '').trim().slice(0, maxLength);
   return regex.test(text) ? text : '';
@@ -338,6 +470,15 @@ router.get('/student-directory', (req, res) => {
 });
 
 // GET /users - 用户列表
+router.get('/users/insights', (req, res) => {
+  try {
+    const db = getDb();
+    res.json({ success: true, data: buildUserInsights(db) });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 router.get('/users', (req, res) => {
   try {
     const { role, grade, class_name, status, keyword, page, limit } = req.query;
