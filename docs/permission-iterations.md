@@ -56,3 +56,16 @@
   - 同一脚本验证任课教师访问班主任总览返回 `400`。
   - 同一脚本临时清空班主任 `managed_class_name` 后再次请求，接口返回 `400`，随后已恢复原配置。
 - 结果：通过。
+
+## 第 5 次迭代
+
+- 目标：补齐全局管理员查看全部学生与教师数据的总览能力，支持从一个入口查看学生分布、班主任负责范围、任课教师分配与录入工作量。
+- 本次变更：
+  - `routes/admin.js` 新增 `GET /api/admin/users/insights`，聚合输出学生年级分布、重点班级数据、班主任负责范围、任课教师分配项目与成绩录入量、全局管理员列表。
+  - `public/js/api.js` 新增 `API.admin.getUserInsights()`。
+  - `public/js/admin.js` 在“用户管理”页顶部补充全局用户总览卡片，以及学生/班主任/任课教师/全局管理员明细表。
+  - 该接口继续受 `adminOnly` 保护，仅全局管理员可访问，教师与学生不可见。
+- 测试记录：
+  - `test_all.js`：新增“GET /api/admin/users/insights”回归用例，校验返回统计结构。
+  - `test_all.js`：新增“GET /api/admin/users/insights 拒绝教师访问”回归用例，校验返回 `403`。
+- 结果：通过。

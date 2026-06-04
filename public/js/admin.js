@@ -447,6 +447,7 @@ const Admin = {
           </div>
         </div>
         <div class="card__body">
+          <div id="users-insights" class="mb-3"></div>
           <div class="search-filter-bar" id="users-filter-bar"></div>
           <div class="table-container" id="users-table-container"></div>
           <div id="users-pagination"></div>
@@ -454,8 +455,106 @@ const Admin = {
       </div>
     `;
     this._renderUsersFilter(container);
+    this._loadUserInsights(container);
     this._loadUsers(container);
     this._bindUsersEvents(container);
+  },
+
+  async _loadUserInsights(container) {
+    const root = container.querySelector('#users-insights');
+    if (!root) return;
+    root.innerHTML = '<div class="text-muted" style="padding:.5rem 0;">正在加载用户总览...</div>';
+    try {
+      const res = await API.admin.getUserInsights();
+      const data = res.data || {};
+      const summary = data.summary || {};
+      const studentGrades = data.students?.by_grade || [];
+      const topClasses = data.students?.top_classes || [];
+      const homeroomTeachers = data.teachers?.homeroom || [];
+      const eventTeachers = data.teachers?.event || [];
+      const globalAdmins = data.global_admins || [];
+
+      const cards = [
+        { label: '学生总数', value: summary.total_students || 0, color: '#2d6a4f' },
+        { label: '教师总数', value: summary.total_teachers || 0, color: '#1e6091' },
+        { label: '班主任', value: summary.total_homeroom_teachers || 0, color: '#b8860b' },
+        { label: '任课教师', value: summary.total_event_teachers || 0, color: '#7c3aed' },
+        { label: '全局管理员', value: summary.total_global_admins || 0, color: '#a51d2d' },
+        { label: '禁用账号', value: summary.disabled_users || 0, color: '#6b7280' }
+      ];
+
+      let html = '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin-bottom:16px">';
+      cards.forEach((card) => {
+        html += `<div class="stat-card"><div class="stat-num" style="color:${card.color}">${card.value}</div><div class="stat-label">${card.label}</div></div>`;
+      });
+      html += '</div>';
+
+      html += '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:16px">';
+      html += '<div class="card" style="margin:0"><div class="card__header"><h4 class="card__title">学生年级分布</h4></div><div class="card__body">';
+      if (studentGrades.length) {
+        html += '<div class="table-container"><table class="table table--striped"><thead><tr><th>年级</th><th>学生数</th><th>已通过报名</th><th>成绩记录</th></tr></thead><tbody>';
+        studentGrades.forEach((item) => {
+          html += `<tr><td>${App._escHtml(item.grade || '未配置')}</td><td>${item.student_count || 0}</td><td>${item.approved_registration_count || 0}</td><td>${item.result_count || 0}</td></tr>`;
+        });
+        html += '</tbody></table></div>';
+      } else {
+        html += '<div class="text-muted">暂无学生分布数据</div>';
+      }
+      html += '</div></div>';
+
+      html += '<div class="card" style="margin:0"><div class="card__header"><h4 class="card__title">重点班级数据</h4></div><div class="card__body">';
+      if (topClasses.length) {
+        html += '<div class="table-container"><table class="table table--striped"><thead><tr><th>班级</th><th>学生数</th><th>已通过报名</th><th>成绩记录</th></tr></thead><tbody>';
+        topClasses.forEach((item) => {
+          html += `<tr><td>${App._escHtml((item.grade || '未配置') + ' / ' + (item.class_name || '未配置'))}</td><td>${item.student_count || 0}</td><td>${item.approved_registration_count || 0}</td><td>${item.result_count || 0}</td></tr>`;
+        });
+        html += '</tbody></table></div>';
+      } else {
+        html += '<div class="text-muted">暂无班级维度数据</div>';
+      }
+      html += '</div></div></div>';
+
+      html += '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:16px">';
+      html += '<div class="card" style="margin:0"><div class="card__header"><h4 class="card__title">班主任负责范围</h4></div><span class="text-sm text-muted">' + homeroomTeachers.length + ' 人</span></div><div class="card__body">';
+      if (homeroomTeachers.length) {
+        html += '<div class="table-container"><table class="table table--striped"><thead><tr><th>教师</th><th>负责班级</th><th>学生数</th><th>待审报名</th><th>成绩记录</th></tr></thead><tbody>';
+        homeroomTeachers.forEach((item) => {
+          html += `<tr><td>${App._escHtml(item.name || '-')}<br><small class="text-muted">${App._escHtml(item.email || '-')}</small></td><td>${App._escHtml((item.managed_grade || '未配置') + ' / ' + (item.managed_class_name || '未配置'))}</td><td>${item.student_count || 0}</td><td>${item.pending_registration_count || 0}</td><td>${item.result_count || 0}</td></tr>`;
+        });
+        html += '</tbody></table></div>';
+      } else {
+        html += '<div class="text-muted">暂无班主任数据</div>';
+      }
+      html += '</div></div>';
+
+      html += '<div class="card" style="margin:0"><div class="card__header"><h4 class="card__title">任课教师分配与录入</h4></div><span class="text-sm text-muted">' + eventTeachers.length + ' 人</span></div><div class="card__body">';
+      if (eventTeachers.length) {
+        html += '<div class="table-container"><table class="table table--striped"><thead><tr><th>教师</th><th>分配项目</th><th>项目数</th><th>已录入成绩</th></tr></thead><tbody>';
+        eventTeachers.forEach((item) => {
+          html += `<tr><td>${App._escHtml(item.name || '-')}<br><small class="text-muted">${App._escHtml(item.email || '-')}</small></td><td>${App._escHtml((item.assigned_event_names || []).join('、') || '未分配')}</td><td>${item.assigned_event_count || 0}</td><td>${item.recorded_result_count || 0}</td></tr>`;
+        });
+        html += '</tbody></table></div>';
+      } else {
+        html += '<div class="text-muted">暂无任课教师数据</div>';
+      }
+      html += '</div></div></div>';
+
+      html += '<div class="card" style="margin:0"><div class="card__header"><h4 class="card__title">全局管理员</h4></div><span class="text-sm text-muted">' + globalAdmins.length + ' 人</span></div><div class="card__body">';
+      if (globalAdmins.length) {
+        html += '<div class="table-container"><table class="table table--striped"><thead><tr><th>姓名</th><th>邮箱</th><th>状态</th><th>创建时间</th></tr></thead><tbody>';
+        globalAdmins.forEach((item) => {
+          html += `<tr><td>${App._escHtml(item.name || '-')}</td><td>${App._escHtml(item.email || '-')}</td><td>${item.status === 'active' ? '正常' : '已禁用'}</td><td>${App.formatDate(item.created_at)}</td></tr>`;
+        });
+        html += '</tbody></table></div>';
+      } else {
+        html += '<div class="text-muted">暂无全局管理员数据</div>';
+      }
+      html += '</div></div>';
+
+      root.innerHTML = html;
+    } catch (e) {
+      root.innerHTML = '<div class="text-danger" style="padding:.5rem 0;">用户总览加载失败：' + App._escHtml(e.message || '未知错误') + '</div>';
+    }
   },
 
   _renderUsersFilter(container) {

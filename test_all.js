@@ -1217,6 +1217,28 @@ async function runAllTests() {
       });
     }
 
+    await test('管理员', 'GET /api/admin/users/insights', async () => {
+      const res = await request('GET', '/api/admin/users/insights', { token: adminToken });
+      if (res.status !== 200) return `状态码 ${res.status}: ${JSON.stringify(res.body).slice(0, 120)}`;
+      const summary = res.body?.data?.summary || {};
+      const homeroom = res.body?.data?.teachers?.homeroom || [];
+      const eventTeachers = res.body?.data?.teachers?.event || [];
+      if (typeof summary.total_students !== 'number') return `缺少学生统计: ${JSON.stringify(res.body).slice(0, 120)}`;
+      if (!Array.isArray(homeroom) || !Array.isArray(eventTeachers)) return `教师洞察结构异常: ${JSON.stringify(res.body).slice(0, 120)}`;
+      console.log(` (学生${summary.total_students || 0}人, 教师${summary.total_teachers || 0}人, 管理员${summary.total_global_admins || 0}人)`);
+      return true;
+    });
+
+    if (eventTeacherToken) {
+      await test('管理员', 'GET /api/admin/users/insights 拒绝教师访问', async () => {
+        const res = await request('GET', '/api/admin/users/insights', { token: eventTeacherToken });
+        if (res.status !== 403) return `预期403，实际${res.status}`;
+        return true;
+      });
+    } else {
+      await testSkip('管理员', 'GET /api/admin/users/insights 拒绝教师访问', '无可用token');
+    }
+
     await test('管理员', 'PUT /api/admin/registrations/batch-approve 已下线', async () => {
       const res = await request('PUT', '/api/admin/registrations/batch-approve', {
         token: adminToken,
@@ -1230,6 +1252,8 @@ async function runAllTests() {
     for (const ep of ['dashboard','users','events','registrations','schedules','results','logs']) {
       await testSkip('管理员', `GET /api/admin/${ep}`, '无可用token');
     }
+    await testSkip('管理员', 'GET /api/admin/users/insights', '无可用token');
+    await testSkip('管理员', 'GET /api/admin/users/insights 拒绝教师访问', '无可用token');
     await testSkip('管理员', 'PUT /api/admin/registrations/batch-approve 已下线', '无可用token');
   }
 
