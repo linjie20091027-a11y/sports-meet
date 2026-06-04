@@ -163,13 +163,15 @@ h1{font-family:var(--title-font);font-size:2.2rem}h2{font-size:1.4rem}h3{font-si
   cursor:pointer;
   text-decoration:none;
   animation:sportCardIn .5s ease backwards;
-  animation-delay:var(--delay,0s)
+  animation-delay:var(--delay,0s);
+  transition:transform .5s ease
 }
+.sport-card:hover{transform:scale(1.03)}
 @keyframes sportCardIn{from{opacity:0;transform:scale(.9) translateY(12px)}to{opacity:1;transform:scale(1) translateY(0)}}
 .sport-card-overlay{
   position:absolute;inset:0;
-  background:linear-gradient(180deg,rgba(90,0,0,.75),rgba(50,0,0,.82));
-  transition:opacity .4s ease;
+  background:linear-gradient(180deg,rgba(90,0,0,.85),rgba(50,0,0,.88));
+  transition:opacity .5s ease,background .5s ease;
   z-index:1
 }
 .sport-card-content{
@@ -177,25 +179,28 @@ h1{font-family:var(--title-font);font-size:2.2rem}h2{font-size:1.4rem}h3{font-si
   display:flex;flex-direction:column;
   align-items:center;justify-content:center;
   height:100%;gap:.35rem;padding:1rem;
-  color:#fff;text-align:center
+  color:#fff;text-align:center;
+  transition:transform .5s ease
 }
 .sport-card-content i{
   font-size:1.8rem;
-  filter:drop-shadow(0 2px 6px rgba(0,0,0,.4));
+  filter:drop-shadow(0 2px 6px rgba(0,0,0,.6));
   transition:transform .4s ease
 }
 .sport-card-content span{
   font-size:.82rem;font-weight:700;
   letter-spacing:.04em;
-  text-shadow:0 2px 8px rgba(0,0,0,.5)
+  text-shadow:0 2px 10px rgba(0,0,0,.6);
+  transition:text-shadow .4s ease
 }
 .sport-card-content small{
-  font-size:.65rem;opacity:.75;
-  text-shadow:0 1px 4px rgba(0,0,0,.4)
+  font-size:.65rem;opacity:.8;
+  text-shadow:0 1px 6px rgba(0,0,0,.5)
 }
-.sport-card:hover .sport-card-overlay{opacity:0}
-.sport-card:hover .sport-card-content i{transform:scale(1.2)}
-.sport-card:hover .sport-card-content span{text-shadow:0 4px 16px rgba(0,0,0,.7)}
+.sport-card:hover .sport-card-overlay{opacity:.25;background:linear-gradient(180deg,rgba(60,0,0,.3),rgba(30,0,0,.4))}
+.sport-card:hover .sport-card-content{transform:scale(1.02)}
+.sport-card:hover .sport-card-content i{transform:scale(1.15)}
+.sport-card:hover .sport-card-content span{text-shadow:0 4px 16px rgba(0,0,0,.85)}
 @media(max-width:1200px){.sport-grid{grid-template-columns:repeat(5,1fr)}}
 @media(max-width:900px){.sport-grid{grid-template-columns:repeat(4,1fr)}}
 @media(max-width:600px){.sport-grid{grid-template-columns:repeat(3,1fr)}}

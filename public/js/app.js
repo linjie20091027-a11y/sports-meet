@@ -1844,24 +1844,54 @@ const App = {
           '铅球':'fa-volleyball','铁饼':'fa-circle','标枪':'fa-arrow-up-long'
         };
         const bgMap = {
-          track:'https://images.unsplash.com/photo-1461896836934-bd45ba2ae6c7?w=600&q=80',
-          field:'https://images.unsplash.com/photo-1552674605-db6ffd4facb9?w=600&q=80',
-          relay:'https://images.unsplash.com/photo-1530549387789-4c1017266635?w=600&q=80',
-          team:'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=600&q=80'
+          '100米':'/images/ddf1d2b3324aeee515346fdb8afdc218.jpg',
+          '200米':'/images/46e105c352bb2f391888ebb10cb4f57c.jpg',
+          '400米':'/images/f6c6bdac0eadbf783e84760a8506a307.jpg',
+          '800米':'/images/09dc29bdff7b60ccd315c869c8a9351d.jpg',
+          '1500米':'/images/09a79551e9be0a6a4dbd8a7a02d28c1a.jpg',
+          '3000米':'/images/09dc29bdff7b60ccd315c869c8a9351d.jpg',
+          '110米栏':'/images/71a6e485d12c9338d0ad4da83f4b0ca6.png',
+          '400米栏':'/images/7eb1254ac7589e9e086c353664323678.png',
+          '跳高':'/images/68bf3c19a0195fa6df7f76f4413cffef.jpg',
+          '跳远':'/images/474af7a724df995eadcbe06fc896a8fd.jpg',
+          '三级跳远':'/images/474af7a724df995eadcbe06fc896a8fd.jpg',
+          '4×100米接力':'/images/f6c6bdac0eadbf783e84760a8506a307.jpg',
+          '标枪':'/images/3c7cc9cd1c052d26f93315c0005d38b8.png',
+          '铁饼':'/images/ee8312953d8b174f662c058fecddde8f.png',
+          '铅球':'/images/080d73f7264d3d550cd69ed1a0118c09.png',
+          '实心球':'/images/080d73f7264d3d550cd69ed1a0118c09.png',
         };
+        const getBg = (name, cat) => bgMap[name] || ({
+          track:'/images/ddf1d2b3324aeee515346fdb8afdc218.jpg',
+          field:'/images/68bf3c19a0195fa6df7f76f4413cffef.jpg',
+          relay:'/images/7eb1254ac7589e9e086c353664323678.png',
+          team:'/images/09dc29bdff7b60ccd315c869c8a9351d.jpg'
+        })[cat];
         list.className = 'sport-grid';
-        list.innerHTML = data.length ? data.map((e, i) => {
-          const icon = iconMap[e.name] || iconMap[e.category] || 'fa-person-running';
-          const bg = bgMap[e.category] || bgMap.track;
-          return `<a href="#/events/${e.id}" class="sport-card" style="background-image:url(${bg});--delay:${i*0.04}s">
-            <div class="sport-card-overlay"></div>
-            <div class="sport-card-content">
-              <i class="fas ${icon}"></i>
-              <span>${e.name}</span>
-              <small>${genderL(e.gender_group)}</small>
-            </div>
-          </a>`;
-        }).join('') : '<div class="empty-state" style="grid-column:1/-1"><p class="text-muted">暂无符合条件的赛事</p></div>';
+        if (data.length) {
+          // 按项目名合并同类项
+          const grouped = {};
+          data.forEach(e => {
+            if (!grouped[e.name]) grouped[e.name] = { name: e.name, category: e.category, event_type: e.event_type, genders: [] };
+            grouped[e.name].genders.push(e.gender_group);
+          });
+          const groupedList = Object.values(grouped);
+          list.innerHTML = groupedList.map((g, i) => {
+            const icon = iconMap[g.name] || iconMap[g.category] || 'fa-person-running';
+            const bg = getBg(g.name, g.category);
+            const genderBadges = g.genders.map(gen => `<span class="badge badge-info">${genderL(gen)}</span>`).join(' ');
+            return `<a href="#/events/${g.name}" class="sport-card" style="background-image:url(${bg});--delay:${i*0.04}s">
+              <div class="sport-card-overlay"></div>
+              <div class="sport-card-content">
+                <i class="fas ${icon}"></i>
+                <span>${g.name}</span>
+                <small>${genderBadges}</small>
+              </div>
+            </a>`;
+          }).join('');
+        } else {
+          list.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><p class="text-muted">暂无符合条件的赛事</p></div>';
+        }
       } catch (e) { }
       finally { this.hideLoading(); }
     };
