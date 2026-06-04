@@ -1,6 +1,6 @@
 {
   "name": "sports-meet-manager",
-  "version": "1.0.0",
+  "version": "4.0.0",
   "description": "学校运动会管理网站",
   "main": "server.js",
   "scripts": {
