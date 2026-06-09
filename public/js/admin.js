@@ -3032,7 +3032,7 @@ const Admin = {
 
   _showResultsImport(container) {
     let html = '<div class="modal__header"><h3 class="modal__title">批量导入成绩</h3><button class="modal__close" type="button" id="btn-close-results-import"><i class="fas fa-times"></i></button></div>';
-    html += '<div class="modal__body"><button type="button" class="btn btn-outline btn-sm mb-2" id="btn-download-results-template"><i class="fas fa-download"></i> 下载Excel模板</button><div class="form"><div class="form__group"><label class="form__label">选择 Excel 文件</label><input type="file" id="results-import-file" class="form__input" accept=".xlsx,.xls,.csv"></div>';
+    html += '<div class="modal__body"><div style="display:flex;gap:8px;margin-bottom:8px;"><button type="button" class="btn btn-outline btn-sm" id="btn-download-results-template"><i class="fas fa-download"></i> 下载Excel模板</button><a href="/samples/成绩导入样例.csv" class="btn btn-outline btn-sm" download><i class="fas fa-download"></i> CSV样例</a></div><div class="form"><div class="form__group"><label class="form__label">选择 Excel 或 CSV 文件</label><input type="file" id="results-import-file" class="form__input" accept=".xlsx,.xls,.csv"></div>';
     html += '<div class="form__hint">支持列：赛程ID(schedule_id)、学生姓名(name) 或 学号(student_id) 或 用户ID(user_id)、成绩(performance)、奖项(award)、输入备注(note)、是否打破学校记录(is_school_record)</div></div></div>';
     html += '<div class="modal__footer"><button class="btn btn--outline" type="button" id="btn-cancel-results-import">取消</button><button class="btn btn--primary" id="btn-do-import-results">开始导入</button></div>';
     App.showModal(html);
