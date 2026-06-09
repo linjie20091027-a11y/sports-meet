@@ -275,6 +275,9 @@ const App = {
     const hash = window.location.hash.slice(1) || '/';
     document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
     document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+    const searchInput = document.getElementById('nav-search-input');
+    if (searchInput) searchInput.value = '';
+    this.searchState.query = '';
 
     if (hash === '/' || hash === '') {
       document.getElementById('page-home').classList.remove('hidden');
