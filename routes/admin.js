@@ -1329,11 +1329,27 @@ router.post('/results', (req, res) => {
 // POST /results/batch - 批量导入成绩
 router.post('/results/batch', upload.single('file'), (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ success: false, error: '请上传Excel文件' });
+    if (!req.file) return res.status(400).json({ success: false, error: '请上传文件' });
     const db = getDb();
-    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sheet);
+    const ext = (req.file.originalname || '').toLowerCase().split('.').pop();
+    let rows;
+
+    if (ext === 'csv') {
+      const csvText = req.file.buffer.toString('utf-8');
+      const csvRows = csvText.split(/\r?\n/).filter(line => line.trim());
+      if (csvRows.length < 2) return res.status(400).json({ success: false, error: 'CSV文件至少需要包含表头和一行数据' });
+      const headers = csvRows[0].split(',').map(h => h.trim().replace(/\"\"/g, '').replace(/\"\"/g, ''));
+      rows = csvRows.slice(1).map(line => {
+        const vals = line.split(',');
+        const row = {};
+        headers.forEach((h, i) => { row[h] = (vals[i] || '').trim().replace(/\"/g, ''); });
+        return row;
+      });
+    } else {
+      const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      rows = XLSX.utils.sheet_to_json(sheet);
+    }
 
     let success = 0, fail = 0;
     const insert = db.prepare('INSERT INTO results (schedule_id, user_id, performance, award, note, is_school_record, recorded_by) VALUES (?, ?, ?, ?, ?, ?, ?)');
