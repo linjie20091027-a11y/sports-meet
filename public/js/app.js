@@ -616,6 +616,16 @@ const App = {
     ids.add(String(id));
     localStorage.setItem('notify_read_ids', JSON.stringify([...ids]));
   },
+  _loadLocalDeletedIds() {
+    try {
+      return new Set(JSON.parse(localStorage.getItem('notify_deleted_ids') || '[]'));
+    } catch (_) { return new Set(); }
+  },
+  _saveLocalDeletedId(id) {
+    const ids = this._loadLocalDeletedIds();
+    ids.add(String(id));
+    localStorage.setItem('notify_deleted_ids', JSON.stringify([...ids]));
+  },
 
   async _loadNotifications(options = {}) {
     if (!this.user) return;
@@ -625,7 +635,8 @@ const App = {
       const previousIds = this.notificationItems.map((item) => item.id);
       const res = await API.student.getNotifications({ limit: 50 });
       const localReadIds = this._loadLocalReadIds();
-      const list = (res.data?.list || []).map(item => {
+      const localDeletedIds = this._loadLocalDeletedIds();
+      const list = (res.data?.list || []).filter(item => !localDeletedIds.has(String(item.id))).map(item => {
         if (localReadIds.has(String(item.id)) && !item.is_read) {
           return { ...item, is_read: 1 };
         }
@@ -791,6 +802,7 @@ const App = {
   async _deleteNotification(id) {
     try {
       await API.student.deleteNotification(id);
+      this._saveLocalDeletedId(id);
       const item = this.notificationItems.find((entry) => entry.id === id);
       const el = document.querySelector(`.notify-item[data-id="${id}"]`);
       if (el) {
