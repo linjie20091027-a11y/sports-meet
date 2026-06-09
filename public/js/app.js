@@ -1953,16 +1953,15 @@ const App = {
             <div class="detail-tags">
               <span class="badge badge-info">${typeL(e.event_type)}</span>
               <span class="badge badge-success">${catL(e.category)}</span>
-              <span class="badge badge-general">${genderL(e.gender_group)}</span>
             </div>
           </div>
           <div class="detail-actions">${actionHtml}</div>
         </div>
         <div class="detail-stats-row">
+          <div class="detail-stat"><span class="label">参赛组别</span><span class="value">${genderL(e.gender_group)}</span></div>
           <div class="detail-stat"><span class="label">比赛场地</span><span class="value">${this._escHtml(e.venue || '待定')}</span></div>
           <div class="detail-stat"><span class="label">人数上限</span><span class="value">${e.max_participants || '不限'}</span></div>
           <div class="detail-stat"><span class="label">已报名</span><span class="value">${e.registration_count ?? 0} 人</span></div>
-          <div class="detail-stat"><span class="label">已通过</span><span class="value">${e.approved_count ?? 0} 人</span></div>
         </div>
         <div class="card mt-3">
           <div class="card-header"><h3>项目详情</h3></div>
