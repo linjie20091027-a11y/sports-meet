@@ -1103,6 +1103,24 @@ router.post('/schedules', (req, res) => {
     const db = getDb();
     const { event_id, round_name, start_time, end_time, venue, max_heats, note } = req.body;
     if (!event_id || !start_time) return res.status(400).json({ success: false, error: '项目和开始时间必填' });
+
+    const st = start_time;
+    const en = end_time || st;
+    // 场地冲突检测
+    const venueConflict = db.prepare('SELECT e.name as event_name FROM schedules s JOIN events e ON s.event_id = e.id WHERE s.venue = ? AND s.start_time < ? AND s.end_time > ? AND s.id IS NOT NULL LIMIT 1').get(venue, en, st);
+    if (venueConflict) return res.status(400).json({ success: false, error: `场地「${venue}」在该时段已被「${venueConflict.event_name}」占用` });
+    // 学生冲突检测
+    const students = db.prepare(`SELECT user_id FROM registrations WHERE event_id = ? AND status = 'approved'`).all(event_id);
+    const studentConflicts = db.prepare(`
+      SELECT DISTINCT u.name FROM registrations r1
+      JOIN registrations r2 ON r1.user_id = r2.user_id AND r2.event_id = s.event_id
+      JOIN schedules s ON r2.event_id = s.event_id AND r2.status = 'approved' AND s.start_time < ? AND s.end_time > ?
+      JOIN users u ON u.id = r1.user_id
+      WHERE r1.event_id = ? AND r1.status = 'approved'
+      LIMIT 1
+    `).all(en, st, event_id);
+    if (studentConflicts.length) return res.status(400).json({ success: false, error: `学生「${studentConflicts[0].name}」在该时段已有其他比赛` });
+
     const result = db.prepare(`INSERT INTO schedules (event_id, round_name, start_time, end_time, venue, max_heats, note)
       VALUES (?, ?, ?, ?, ?, ?, ?)`).run(event_id, round_name || '预赛', start_time, end_time || '', venue || '', max_heats || 1, note || '');
     logOperation(req.user.id, req.user.username, '创建赛程', `赛程ID:${result.lastInsertRowid}`, getIp(req));
@@ -1168,13 +1186,22 @@ router.post('/schedules/auto', (req, res) => {
     const baseDate = start_date || '2026-06-01';
     const existingSchedules = db.prepare('SELECT * FROM schedules').all();
 
-    const isConflict = (eventId, date, timeSlot, venue) => {
-      return existingSchedules.some(s =>
-        s.event_id === eventId &&
-        s.start_time && s.start_time.startsWith(date) &&
-        s.venue === venue &&
-        ((s.start_time && `${date}T${timeSlot.start}` < s.end_time) && (`${date}T${timeSlot.end}` > s.start_time))
-      );
+    const getRegStudents = (eventId) => {
+      return db.prepare(`SELECT user_id FROM registrations WHERE event_id = ? AND status = 'approved'`).all(eventId).map(r => r.user_id);
+    };
+
+    const isConflict = (eventId, date, timeSlot, venue, eventCategory) => {
+      const ts = `${date}T${timeSlot.start}:00`;
+      const te = `${date}T${timeSlot.end}:00`;
+      // 1. 场地冲突：同一场地同一时间段不能有两个比赛
+      if (existingSchedules.some(s => s.venue === venue && s.start_time < te && s.end_time > ts)) return true;
+      // 2. 学生冲突：同一学生不能同时参加两个比赛
+      const students = getRegStudents(eventId);
+      return existingSchedules.some(s => {
+        if (!(s.start_time < te && s.end_time > ts)) return false;
+        const otherStudents = getRegStudents(s.event_id);
+        return students.some(sid => otherStudents.includes(sid));
+      });
     };
 
     let createdCount = 0;
