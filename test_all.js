@@ -1166,6 +1166,16 @@ async function runAllTests() {
       return true;
     });
 
+    await test('教师', 'GET /api/teacher/event/assignments 仅返回有效项目分配', async () => {
+      const res = await request('GET', '/api/teacher/event/assignments', { token: eventTeacherToken });
+      if (res.status !== 200) return `状态码 ${res.status}: ${JSON.stringify(res.body).slice(0, 120)}`;
+      const events = res.body?.data?.events || [];
+      if (!events.length) return '当前任课教师没有有效项目分配';
+      const invalidEvent = events.find((item) => !item.id || Number(item.id) <= 0);
+      if (invalidEvent) return `发现无效项目分配: ${JSON.stringify(invalidEvent).slice(0, 120)}`;
+      return true;
+    });
+
     await test('教师', 'GET /api/teacher/event/results-entry', async () => {
       const assignmentsRes = await request('GET', '/api/teacher/event/assignments', { token: eventTeacherToken });
       const firstEventId = assignmentsRes.body?.data?.events?.[0]?.id;
@@ -1177,6 +1187,32 @@ async function runAllTests() {
       return true;
     });
 
+    await test('教师', 'GET /api/teacher/event/results-entry 返回录入摘要与就绪状态', async () => {
+      const assignmentsRes = await request('GET', '/api/teacher/event/assignments', { token: eventTeacherToken });
+      const firstEventId = assignmentsRes.body?.data?.events?.[0]?.id;
+      if (!firstEventId) return '缺少已分配项目';
+      const res = await request('GET', `/api/teacher/event/results-entry?event_id=${firstEventId}`, { token: eventTeacherToken });
+      if (res.status !== 200) return `状态码 ${res.status}: ${JSON.stringify(res.body).slice(0, 120)}`;
+      const data = res.body?.data || {};
+      if (!data.event || Number(data.event.id) !== Number(firstEventId)) return `项目元数据异常: ${JSON.stringify(data).slice(0, 120)}`;
+      if (!data.summary || typeof data.summary.schedule_count !== 'number') return `缺少成绩录入摘要: ${JSON.stringify(data).slice(0, 120)}`;
+      if (!data.readiness || typeof data.readiness.can_edit !== 'boolean' || !Array.isArray(data.readiness.blockers)) {
+        return `缺少录入就绪状态: ${JSON.stringify(data).slice(0, 120)}`;
+      }
+      return true;
+    });
+
+    await test('教师', 'GET /api/teacher/event/results-entry 拒绝未分配项目访问', async () => {
+      const assignmentsRes = await request('GET', '/api/teacher/event/assignments', { token: eventTeacherToken });
+      const assigned = new Set((assignmentsRes.body?.data?.events || []).map((item) => Number(item.id)));
+      let deniedEventId = 1;
+      while (assigned.has(deniedEventId)) deniedEventId += 1;
+      const res = await request('GET', `/api/teacher/event/results-entry?event_id=${deniedEventId}`, { token: eventTeacherToken });
+      if (![400, 403].includes(res.status)) return `预期400/403，实际${res.status}`;
+      if (!String(res.body?.error || '').includes('未分配')) return `错误信息异常: ${JSON.stringify(res.body).slice(0, 120)}`;
+      return true;
+    });
+
     await test('教师', 'GET /api/teacher/homeroom/overview 拒绝任课教师访问', async () => {
       const res = await request('GET', '/api/teacher/homeroom/overview', { token: eventTeacherToken });
       if (![400, 403].includes(res.status)) return `预期400/403，实际${res.status}`;
@@ -1185,7 +1221,10 @@ async function runAllTests() {
   } else {
     await testSkip('教师', 'GET /api/teacher/me 任课教师', '无可用token');
     await testSkip('教师', 'GET /api/teacher/event/assignments', '无可用token');
+    await testSkip('教师', 'GET /api/teacher/event/assignments 仅返回有效项目分配', '无可用token');
     await testSkip('教师', 'GET /api/teacher/event/results-entry', '无可用token');
+    await testSkip('教师', 'GET /api/teacher/event/results-entry 返回录入摘要与就绪状态', '无可用token');
+    await testSkip('教师', 'GET /api/teacher/event/results-entry 拒绝未分配项目访问', '无可用token');
     await testSkip('教师', 'GET /api/teacher/homeroom/overview 拒绝任课教师访问', '无可用token');
   }
 
