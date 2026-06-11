@@ -885,6 +885,7 @@ const Teacher = {
             <p>${App._escHtml(this._formatResultsEventMeta(activeEvent))}</p>
           </div>
           <div class="teacher-inline-meta">
+            <span class="teacher-readiness-badge ${canEdit ? 'is-ready' : 'is-blocked'}">${canEdit ? '可直接录入' : '待准备'}</span>
             <span>班级 ${view.summary.class_count || 0} 个</span>
             <span>当前筛选 ${view.filteredParticipants.length} 条</span>
             <span>总数据 ${view.participants.length} 条</span>
@@ -921,6 +922,9 @@ const Teacher = {
           <div class="teacher-results-checklist">
             <h4>待完成项</h4>
             <ul>${tips}</ul>
+            <div class="teacher-blocker-pills">
+              ${blockers.map((item) => `<span>${App._escHtml(item)}</span>`).join('')}
+            </div>
             <div class="teacher-table-actions">
               <button type="button" class="btn btn-outline btn-sm" id="teacher-switch-assignment-btn">查看项目分配</button>
               <button type="button" class="btn btn-primary btn-sm" id="teacher-refresh-results-empty-btn">重新检查</button>

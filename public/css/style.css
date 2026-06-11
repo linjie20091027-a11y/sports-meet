@@ -376,6 +376,9 @@ h1{font-family:var(--title-font);font-size:2.2rem}h2{font-size:1.4rem}h3{font-si
 .teacher-results-headline{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;padding:1rem 1.1rem;border:1px solid var(--border);border-radius:16px;background:#fffdf8}
 .teacher-results-headline h4{font-size:1rem;color:var(--red);margin-bottom:.25rem}
 .teacher-results-headline p{font-size:.76rem;color:var(--text3);line-height:1.7}
+.teacher-readiness-badge{display:inline-flex;align-items:center;justify-content:center;padding:.2rem .55rem;border-radius:999px;font-size:.68rem;font-weight:700}
+.teacher-readiness-badge.is-ready{background:rgba(33,150,83,.14);color:#1b7f46}
+.teacher-readiness-badge.is-blocked{background:rgba(167,34,34,.12);color:#9f2020}
 .teacher-filter-grid--results{margin-bottom:0}
 .teacher-results-actions{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;padding:.9rem 1rem;border:1px solid var(--border);border-radius:14px;background:#fffaf2}
 .teacher-results-actions p{font-size:.75rem;color:var(--text2);line-height:1.7}
@@ -384,6 +387,8 @@ h1{font-family:var(--title-font);font-size:2.2rem}h2{font-size:1.4rem}h3{font-si
 .teacher-results-checklist{padding:1rem 1.1rem;border:1px solid rgba(201,168,76,.45);border-radius:16px;background:linear-gradient(135deg,#fffdf9,#faf5eb)}
 .teacher-results-checklist h4{font-size:.9rem;color:var(--red);margin-bottom:.65rem}
 .teacher-results-checklist ul{margin:0 0 1rem 1.1rem;padding:0;display:flex;flex-direction:column;gap:.5rem;color:var(--text2);font-size:.76rem;line-height:1.6}
+.teacher-blocker-pills{display:flex;gap:.45rem;flex-wrap:wrap;margin-bottom:1rem}
+.teacher-blocker-pills span{display:inline-flex;align-items:center;padding:.24rem .6rem;border-radius:999px;background:rgba(167,34,34,.08);color:#9f2020;font-size:.7rem;font-weight:600}
 .teacher-event-card--action{width:100%;text-align:left;background:#fffdf9;cursor:pointer}
 .teacher-event-card--action.is-active{border-color:rgba(201,168,76,.65);box-shadow:0 0 0 3px rgba(201,168,76,.16)}
 .teacher-event-card--action:hover{transform:translateY(-2px);box-shadow:var(--shadow-md)}
