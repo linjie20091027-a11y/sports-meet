@@ -843,6 +843,12 @@ const Teacher = {
     });
     const readiness = entryData?.readiness || { can_edit: participants.length > 0, blockers: [] };
     const summary = entryData?.summary || {};
+    const resultMeta = entryData?.result_meta || {
+      unit: '',
+      unit_label: '',
+      input_hint: '',
+      ranking_label: ''
+    };
     const activeEvent = events.find((item) => Number(item.id) === Number(entryData?.event_id || this.selectedEventId || 0)) || null;
     return {
       activeEvent,
@@ -851,6 +857,7 @@ const Teacher = {
       classOptions,
       roundOptions,
       readiness,
+      resultMeta,
       summary: {
         schedule_count: Number(summary.schedule_count || activeEvent?.schedule_count || 0),
         approved_participant_count: Number(summary.approved_participant_count || activeEvent?.participant_count || 0),
@@ -886,6 +893,8 @@ const Teacher = {
           </div>
           <div class="teacher-inline-meta">
             <span class="teacher-readiness-badge ${canEdit ? 'is-ready' : 'is-blocked'}">${canEdit ? '可直接录入' : '待准备'}</span>
+            <span>${App._escHtml(view.resultMeta?.unit_label || '成绩单位待定')}</span>
+            <span>${App._escHtml(view.resultMeta?.ranking_label || '保存后自动排序')}</span>
             <span>班级 ${view.summary.class_count || 0} 个</span>
             <span>当前筛选 ${view.filteredParticipants.length} 条</span>
             <span>总数据 ${view.participants.length} 条</span>
@@ -951,6 +960,8 @@ const Teacher = {
     const participants = view.filteredParticipants || [];
     const hasSourceRows = (view.participants || []).length > 0;
     const disabled = !participants.length;
+    const unit = String(view.resultMeta?.unit || '').trim();
+    const performanceTitle = unit ? `成绩（${unit}）` : '成绩';
     return `
       <div class="teacher-filter-grid teacher-filter-grid--results">
         <div class="form__group">
@@ -981,7 +992,7 @@ const Teacher = {
         </div>
       </div>
       <div class="teacher-results-actions">
-        <p>${hasSourceRows ? '建议先选择班级后批量录入，再使用提交确认完成当前筛选结果保存。' : '当前项目暂无可录入学生。'}</p>
+        <p>${hasSourceRows ? `直接输入成绩后保存即可，系统会自动补充单位提示并按${App._escHtml(view.resultMeta?.ranking_direction === 'desc' ? '高到低' : '低到高')}完成排序。` : '当前项目暂无可录入学生。'}</p>
         <div class="teacher-table-actions">
           <button type="button" class="btn btn-outline btn-sm" id="teacher-clear-results-filters-btn">清空筛选</button>
           <button type="button" class="btn btn-outline btn-sm" id="teacher-save-draft-btn"${disabled ? ' disabled' : ''}>暂存成绩</button>
@@ -998,7 +1009,7 @@ const Teacher = {
               <th>学生</th>
               <th>学号</th>
               <th>班级</th>
-              <th>成绩</th>
+              <th>${App._escHtml(performanceTitle)}</th>
               <th>名次</th>
               <th>奖项</th>
               <th>备注</th>
@@ -1013,8 +1024,13 @@ const Teacher = {
                 <td>${App._escHtml(item.student_name || '-')}</td>
                 <td>${App._escHtml(item.student_id || '-')}</td>
                 <td>${App._escHtml(item.grade || '-')} ${App._escHtml(item.class_name || '-')}</td>
-                <td><input type="text" class="form__input form__input--compact" data-field="performance" value="${App._escAttr(item.performance || '')}" placeholder="成绩"></td>
-                <td><input type="number" class="form__input form__input--compact" data-field="rank" value="${Number(item.rank || 0) || ''}" min="0" placeholder="名次"></td>
+                <td>
+                  <div class="teacher-performance-input">
+                    <input type="text" class="form__input form__input--compact" data-field="performance" value="${App._escAttr(item.performance || '')}" placeholder="${App._escAttr(unit ? `输入${unit}` : '成绩')}">
+                    ${unit ? `<span>${App._escHtml(unit)}</span>` : ''}
+                  </div>
+                </td>
+                <td><span class="teacher-rank-chip">${Number(item.rank || 0) || '待排序'}</span></td>
                 <td>
                   <select class="form__select form__select--compact" data-field="award">
                     <option value="">无</option>
@@ -1056,6 +1072,12 @@ const Teacher = {
         this._renderResultsEntry();
       }, 180);
     });
+    document.querySelectorAll('.teacher-results-table [data-field="performance"]').forEach((input) => {
+      input.addEventListener('input', (e) => {
+        const sanitized = String(e.target.value || '').toUpperCase().replace(/[^0-9A-Z:.]/g, '').slice(0, 20);
+        if (sanitized !== e.target.value) e.target.value = sanitized;
+      });
+    });
   },
 
   async _submitResultsBatch(options = {}) {
@@ -1072,7 +1094,6 @@ const Teacher = {
       schedule_id: Number(row.dataset.scheduleId || 0),
       user_id: Number(row.dataset.userId || 0),
       performance: row.querySelector('[data-field="performance"]')?.value || '',
-      rank: Number(row.querySelector('[data-field="rank"]')?.value || 0),
       award: row.querySelector('[data-field="award"]')?.value || '',
       note: row.querySelector('[data-field="note"]')?.value || '',
       is_published: row.querySelector('[data-field="is_published"]')?.checked ? 1 : 0
