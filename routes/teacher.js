@@ -5,6 +5,7 @@ const { getDb } = require('../database/init');
 const { authMiddleware, teacherOnly, logOperation } = require('../middleware/auth');
 const { createNotification } = require('../utils/notify');
 const { resolveAccessProfile } = require('../utils/accessControl');
+const { buildEventResultMeta, autoRankSchedules } = require('../utils/resultEntry');
 
 router.use(authMiddleware);
 router.use(teacherOnly);
@@ -669,7 +670,7 @@ router.get('/event/results-entry', (req, res) => {
       JOIN schedules s ON s.event_id = r.event_id
       LEFT JOIN results rs ON rs.schedule_id = s.id AND rs.user_id = u.id
       WHERE r.event_id = ? AND r.status = 'approved'
-      ORDER BY s.start_time, s.id, u.grade, u.class_name, u.name
+      ORDER BY s.start_time, s.id, CASE WHEN COALESCE(rs.rank, 0) > 0 THEN COALESCE(rs.rank, 0) ELSE 999999 END, u.grade, u.class_name, u.name
     `).all(eventId);
     const summary = db.prepare(`
       SELECT
@@ -703,6 +704,7 @@ router.get('/event/results-entry', (req, res) => {
         participants,
         classes,
         rounds,
+        result_meta: buildEventResultMeta(event),
         summary: {
           schedule_count: Number(summary.schedule_count || schedules.length || 0),
           approved_participant_count: Number(summary.approved_participant_count || 0),
@@ -732,6 +734,7 @@ router.post('/event/results/batch-save', (req, res) => {
       return res.status(400).json({ success: false, error: '请提供要保存的成绩数据' });
     }
     let saved = 0;
+    const affectedScheduleIds = new Set();
     const saveOne = db.transaction((rows) => {
       rows.forEach((row) => {
         const scheduleId = parseInt(row.schedule_id, 10);
@@ -741,28 +744,47 @@ router.post('/event/results/batch-save', (req, res) => {
         if (!schedule || !eventIds.includes(schedule.event_id)) return;
         const existing = db.prepare('SELECT id FROM results WHERE schedule_id = ? AND user_id = ? ORDER BY id LIMIT 1').get(scheduleId, userId);
         const performance = String(row.performance || '').trim().slice(0, 20);
-        const rank = Math.max(0, parseInt(row.rank, 10) || 0);
         const award = String(row.award || '').trim().slice(0, 20);
         const note = String(row.note || '').trim().slice(0, 200);
         const isPublished = row.is_published ? 1 : 0;
         if (existing) {
           db.prepare(`
             UPDATE results
-            SET performance = ?, rank = ?, award = ?, note = ?, is_published = ?, recorded_by = ?, updated_at = datetime('now','localtime')
+            SET performance = ?, award = ?, note = ?, is_published = ?, recorded_by = ?, updated_at = datetime('now','localtime')
             WHERE id = ?
-          `).run(performance, rank, award, note, isPublished, req.user.id, existing.id);
+          `).run(performance, award, note, isPublished, req.user.id, existing.id);
         } else {
           db.prepare(`
-            INSERT INTO results (schedule_id, user_id, performance, rank, award, note, is_published, recorded_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-          `).run(scheduleId, userId, performance, rank, award, note, isPublished, req.user.id);
+            INSERT INTO results (schedule_id, user_id, performance, award, note, is_published, recorded_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `).run(scheduleId, userId, performance, award, note, isPublished, req.user.id);
         }
+        affectedScheduleIds.add(scheduleId);
         saved++;
       });
     });
     saveOne(items);
+    const ranking = autoRankSchedules(db, [...affectedScheduleIds]);
+    const firstSchedule = [...affectedScheduleIds][0];
+    const firstEvent = firstSchedule
+      ? db.prepare(`
+          SELECT e.name, e.category, e.event_type, e.gender_group
+          FROM schedules s
+          JOIN events e ON e.id = s.event_id
+          WHERE s.id = ?
+          LIMIT 1
+        `).get(firstSchedule)
+      : null;
     logOperation(req.user.id, req.user.username, '教师批量保存成绩', `保存${saved}条成绩`, getIp(req));
-    res.json({ success: true, message: `已保存${saved}条成绩` });
+    res.json({
+      success: true,
+      message: `已保存${saved}条成绩，并按成绩自动排序`,
+      data: {
+        ranked_count: ranking.ranked_count || 0,
+        affected_schedule_count: affectedScheduleIds.size,
+        result_meta: buildEventResultMeta(firstEvent || {})
+      }
+    });
   } catch (e) {
     res.status(400).json({ success: false, error: e.message });
   }
