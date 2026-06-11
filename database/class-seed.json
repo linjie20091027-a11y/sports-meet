@@ -1,0 +1,368 @@
+[
+  {
+    "grade": "初一",
+    "grade_sort_order": 1,
+    "class_name": "初一(1)班",
+    "class_sort_order": 1
+  },
+  {
+    "grade": "初一",
+    "grade_sort_order": 1,
+    "class_name": "初一(2)班",
+    "class_sort_order": 2
+  },
+  {
+    "grade": "初一",
+    "grade_sort_order": 1,
+    "class_name": "初一(3)班",
+    "class_sort_order": 3
+  },
+  {
+    "grade": "初一",
+    "grade_sort_order": 1,
+    "class_name": "初一(4)班",
+    "class_sort_order": 4
+  },
+  {
+    "grade": "初一",
+    "grade_sort_order": 1,
+    "class_name": "初一(5)班",
+    "class_sort_order": 5
+  },
+  {
+    "grade": "初一",
+    "grade_sort_order": 1,
+    "class_name": "初一(6)班",
+    "class_sort_order": 6
+  },
+  {
+    "grade": "初一",
+    "grade_sort_order": 1,
+    "class_name": "初一(7)班",
+    "class_sort_order": 7
+  },
+  {
+    "grade": "初一",
+    "grade_sort_order": 1,
+    "class_name": "初一(8)班",
+    "class_sort_order": 8
+  },
+  {
+    "grade": "初一",
+    "grade_sort_order": 1,
+    "class_name": "初一(9)班",
+    "class_sort_order": 9
+  },
+  {
+    "grade": "初一",
+    "grade_sort_order": 1,
+    "class_name": "初一(10)班",
+    "class_sort_order": 10
+  },
+  {
+    "grade": "初二",
+    "grade_sort_order": 2,
+    "class_name": "初二(1)班",
+    "class_sort_order": 1
+  },
+  {
+    "grade": "初二",
+    "grade_sort_order": 2,
+    "class_name": "初二(2)班",
+    "class_sort_order": 2
+  },
+  {
+    "grade": "初二",
+    "grade_sort_order": 2,
+    "class_name": "初二(3)班",
+    "class_sort_order": 3
+  },
+  {
+    "grade": "初二",
+    "grade_sort_order": 2,
+    "class_name": "初二(4)班",
+    "class_sort_order": 4
+  },
+  {
+    "grade": "初二",
+    "grade_sort_order": 2,
+    "class_name": "初二(5)班",
+    "class_sort_order": 5
+  },
+  {
+    "grade": "初二",
+    "grade_sort_order": 2,
+    "class_name": "初二(6)班",
+    "class_sort_order": 6
+  },
+  {
+    "grade": "初二",
+    "grade_sort_order": 2,
+    "class_name": "初二(7)班",
+    "class_sort_order": 7
+  },
+  {
+    "grade": "初二",
+    "grade_sort_order": 2,
+    "class_name": "初二(8)班",
+    "class_sort_order": 8
+  },
+  {
+    "grade": "初二",
+    "grade_sort_order": 2,
+    "class_name": "初二(9)班",
+    "class_sort_order": 9
+  },
+  {
+    "grade": "初二",
+    "grade_sort_order": 2,
+    "class_name": "初二(10)班",
+    "class_sort_order": 10
+  },
+  {
+    "grade": "初三",
+    "grade_sort_order": 3,
+    "class_name": "初三(1)班",
+    "class_sort_order": 1
+  },
+  {
+    "grade": "初三",
+    "grade_sort_order": 3,
+    "class_name": "初三(2)班",
+    "class_sort_order": 2
+  },
+  {
+    "grade": "初三",
+    "grade_sort_order": 3,
+    "class_name": "初三(3)班",
+    "class_sort_order": 3
+  },
+  {
+    "grade": "初三",
+    "grade_sort_order": 3,
+    "class_name": "初三(4)班",
+    "class_sort_order": 4
+  },
+  {
+    "grade": "初三",
+    "grade_sort_order": 3,
+    "class_name": "初三(5)班",
+    "class_sort_order": 5
+  },
+  {
+    "grade": "初三",
+    "grade_sort_order": 3,
+    "class_name": "初三(6)班",
+    "class_sort_order": 6
+  },
+  {
+    "grade": "初三",
+    "grade_sort_order": 3,
+    "class_name": "初三(7)班",
+    "class_sort_order": 7
+  },
+  {
+    "grade": "初三",
+    "grade_sort_order": 3,
+    "class_name": "初三(8)班",
+    "class_sort_order": 8
+  },
+  {
+    "grade": "初三",
+    "grade_sort_order": 3,
+    "class_name": "初三(9)班",
+    "class_sort_order": 9
+  },
+  {
+    "grade": "初三",
+    "grade_sort_order": 3,
+    "class_name": "初三(10)班",
+    "class_sort_order": 10
+  },
+  {
+    "grade": "高一",
+    "grade_sort_order": 4,
+    "class_name": "高一(1)班",
+    "class_sort_order": 1
+  },
+  {
+    "grade": "高一",
+    "grade_sort_order": 4,
+    "class_name": "高一(2)班",
+    "class_sort_order": 2
+  },
+  {
+    "grade": "高一",
+    "grade_sort_order": 4,
+    "class_name": "高一(3)班",
+    "class_sort_order": 3
+  },
+  {
+    "grade": "高一",
+    "grade_sort_order": 4,
+    "class_name": "高一(4)班",
+    "class_sort_order": 4
+  },
+  {
+    "grade": "高一",
+    "grade_sort_order": 4,
+    "class_name": "高一(5)班",
+    "class_sort_order": 5
+  },
+  {
+    "grade": "高一",
+    "grade_sort_order": 4,
+    "class_name": "高一(6)班",
+    "class_sort_order": 6
+  },
+  {
+    "grade": "高一",
+    "grade_sort_order": 4,
+    "class_name": "高一(7)班",
+    "class_sort_order": 7
+  },
+  {
+    "grade": "高一",
+    "grade_sort_order": 4,
+    "class_name": "高一(8)班",
+    "class_sort_order": 8
+  },
+  {
+    "grade": "高一",
+    "grade_sort_order": 4,
+    "class_name": "高一(9)班",
+    "class_sort_order": 9
+  },
+  {
+    "grade": "高一",
+    "grade_sort_order": 4,
+    "class_name": "高一(10)班",
+    "class_sort_order": 10
+  },
+  {
+    "grade": "高一",
+    "grade_sort_order": 4,
+    "class_name": "高一(11)班",
+    "class_sort_order": 11
+  },
+  {
+    "grade": "高二",
+    "grade_sort_order": 5,
+    "class_name": "高二(1)班",
+    "class_sort_order": 1
+  },
+  {
+    "grade": "高二",
+    "grade_sort_order": 5,
+    "class_name": "高二(2)班",
+    "class_sort_order": 2
+  },
+  {
+    "grade": "高二",
+    "grade_sort_order": 5,
+    "class_name": "高二(3)班",
+    "class_sort_order": 3
+  },
+  {
+    "grade": "高二",
+    "grade_sort_order": 5,
+    "class_name": "高二(4)班",
+    "class_sort_order": 4
+  },
+  {
+    "grade": "高二",
+    "grade_sort_order": 5,
+    "class_name": "高二(5)班",
+    "class_sort_order": 5
+  },
+  {
+    "grade": "高二",
+    "grade_sort_order": 5,
+    "class_name": "高二(6)班",
+    "class_sort_order": 6
+  },
+  {
+    "grade": "高二",
+    "grade_sort_order": 5,
+    "class_name": "高二(7)班",
+    "class_sort_order": 7
+  },
+  {
+    "grade": "高二",
+    "grade_sort_order": 5,
+    "class_name": "高二(8)班",
+    "class_sort_order": 8
+  },
+  {
+    "grade": "高二",
+    "grade_sort_order": 5,
+    "class_name": "高二(9)班",
+    "class_sort_order": 9
+  },
+  {
+    "grade": "高二",
+    "grade_sort_order": 5,
+    "class_name": "高二(10)班",
+    "class_sort_order": 10
+  },
+  {
+    "grade": "高三",
+    "grade_sort_order": 6,
+    "class_name": "高三(1)班",
+    "class_sort_order": 1
+  },
+  {
+    "grade": "高三",
+    "grade_sort_order": 6,
+    "class_name": "高三(2)班",
+    "class_sort_order": 2
+  },
+  {
+    "grade": "高三",
+    "grade_sort_order": 6,
+    "class_name": "高三(3)班",
+    "class_sort_order": 3
+  },
+  {
+    "grade": "高三",
+    "grade_sort_order": 6,
+    "class_name": "高三(4)班",
+    "class_sort_order": 4
+  },
+  {
+    "grade": "高三",
+    "grade_sort_order": 6,
+    "class_name": "高三(5)班",
+    "class_sort_order": 5
+  },
+  {
+    "grade": "高三",
+    "grade_sort_order": 6,
+    "class_name": "高三(6)班",
+    "class_sort_order": 6
+  },
+  {
+    "grade": "高三",
+    "grade_sort_order": 6,
+    "class_name": "高三(7)班",
+    "class_sort_order": 7
+  },
+  {
+    "grade": "高三",
+    "grade_sort_order": 6,
+    "class_name": "高三(8)班",
+    "class_sort_order": 8
+  },
+  {
+    "grade": "高三",
+    "grade_sort_order": 6,
+    "class_name": "高三(9)班",
+    "class_sort_order": 9
+  },
+  {
+    "grade": "高三",
+    "grade_sort_order": 6,
+    "class_name": "高三(10)班",
+    "class_sort_order": 10
+  }
+]
