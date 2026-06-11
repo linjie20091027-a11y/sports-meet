@@ -2345,7 +2345,7 @@ const Admin = {
   _bindResultsEvents(container) {
     container.querySelector('#btn-add-result').addEventListener('click', () => this._showResultModal(null, container));
     container.querySelector('#btn-import-results').addEventListener('click', () => this._showResultsImport(container));
-    container.querySelector('#btn-auto-rank').addEventListener('click', () => this._autoRank());
+    container.querySelector('#btn-auto-rank').addEventListener('click', () => this._autoRank(container));
     container.querySelector('#btn-publish-results').addEventListener('click', () => this._publishResults(container));
     container.querySelector('#btn-unpublish-results').addEventListener('click', () => this._unpublishResults(container));
     container.querySelector('#btn-export-results').addEventListener('click', () => this._exportResults());
@@ -2824,6 +2824,35 @@ const Admin = {
     return validation;
   },
 
+  _inferResultMeta(eventName, category) {
+    const name = String(eventName || '').trim();
+    const normalizedCategory = String(category || '').trim();
+    if (normalizedCategory === 'track' || normalizedCategory === 'relay') {
+      return { unit: '秒', hint: '输入数字或 mm:ss.xxx，系统保存后自动按时间快慢排序' };
+    }
+    if (normalizedCategory === 'field') {
+      return { unit: '米', hint: '输入数字成绩，系统保存后自动按成绩高低排序' };
+    }
+    if (/操|评分|分数|总分|拔河|团体/.test(name) || normalizedCategory === 'team') {
+      return { unit: '分', hint: '输入数字成绩，系统保存后自动按成绩高低排序' };
+    }
+    return { unit: '', hint: '系统保存后自动完成排序' };
+  },
+
+  _getResultMetaBySchedule(schedules, scheduleId) {
+    const schedule = (schedules || []).find((item) => Number(item.id) === Number(scheduleId || 0));
+    return this._inferResultMeta(schedule?.event_name || '', schedule?.category || '');
+  },
+
+  _applyResultPerformanceMeta(meta) {
+    const label = document.getElementById('result-performance-unit');
+    const hint = document.getElementById('result-performance-meta');
+    const input = document.getElementById('result-performance');
+    if (label) label.textContent = meta?.unit ? `成绩单位：${meta.unit}` : '成绩单位待定';
+    if (hint) hint.textContent = meta?.hint || '系统保存后自动完成排序';
+    if (input) input.placeholder = meta?.unit ? `输入${meta.unit}成绩` : '请输入成绩';
+  },
+
   async _showResultModal(result, container) {
     const isEdit = !!result;
     const schedules = [];
@@ -2857,7 +2886,7 @@ const Admin = {
       html += '<div class="form__group"><label class="form__label form__label--required">班级</label><select class="form__select" id="result-class"></select><div class="form__hint">选择年级后自动筛出对应班级</div><div class="form__hint" id="result-class-error" style="display:none;color:#dc2626;"></div></div>';
     html += '<input type="hidden" id="result-user-id" value="' + this._escapeHtml(initialData.user_id) + '">';
     html += '<div class="form__group"><label class="form__label form__label--required">学生姓名</label><input class="form__input" id="result-student-name" placeholder="请先选择年级和班级，再点击选择学生" autocomplete="off" readonly value="' + this._escapeHtml(initialData.student_name) + '"><div class="form__hint" id="result-selected-student" style="display:none;"></div><div class="form__hint">点击学生姓名字段后，只会展示当前年级和班级下的学生</div><div class="form__hint" id="result-student-name-error" style="display:none;color:#dc2626;"></div></div>';
-    html += '<div class="form__group"><label class="form__label form__label--required">成绩</label><input class="form__input" id="result-performance" placeholder="如: 12.34、1:23.45、DNS" value="' + this._escapeHtml(initialData.performance) + '"><div class="form__hint">支持纯数字、时间格式，或 DNS / DNF / DQ / NM</div><div class="form__hint" id="result-performance-error" style="display:none;color:#dc2626;"></div></div>';
+    html += '<div class="form__group"><label class="form__label form__label--required">成绩</label><input class="form__input" id="result-performance" placeholder="请输入成绩" value="' + this._escapeHtml(initialData.performance) + '"><div class="form__hint" id="result-performance-unit">成绩单位待定</div><div class="form__hint" id="result-performance-meta">支持纯数字、时间格式，或 DNS / DNF / DQ / NM</div><div class="form__hint" id="result-performance-error" style="display:none;color:#dc2626;"></div></div>';
     html += '<div class="form__group"><label class="form__label">奖项</label><select class="form__select" id="result-award"><option value="">无</option><option value="第一名"' + (initialData.award === '第一名' ? ' selected' : '') + '>第一名</option><option value="第二名"' + (initialData.award === '第二名' ? ' selected' : '') + '>第二名</option><option value="第三名"' + (initialData.award === '第三名' ? ' selected' : '') + '>第三名</option><option value="优秀"' + (initialData.award === '优秀' ? ' selected' : '') + '>优秀</option><option value="团体"' + (initialData.award === '团体' ? ' selected' : '') + '>团体</option></select></div>';
     html += '<div class="form__group"><label class="form__label form__label--required">输入备注</label><textarea class="form__textarea" id="result-note" rows="4" placeholder="请输入补充说明，最多500字">' + this._escapeHtml(initialData.note) + '</textarea><div style="display:flex;justify-content:space-between;gap:12px;"><div class="form__hint">支持中文、英文、数字及常用标点</div><div class="form__hint" id="result-note-counter">0/500</div></div><div class="form__hint" id="result-note-error" style="display:none;color:#dc2626;"></div></div>';
     html += '<div class="form__group"><label class="form__label form__label--required">是否打破学校记录</label><label style="display:flex;align-items:center;gap:8px;font-weight:500;color:#374151;"><input type="checkbox" id="result-school-record"' + (initialData.is_school_record ? ' checked' : '') + '> 是，已刷新校史记录</label></div>';
@@ -2915,6 +2944,10 @@ const Admin = {
 
     const handleLiveInput = () => this._runResultValidation(false);
     scheduleInput.addEventListener('change', handleLiveInput);
+    this._applyResultPerformanceMeta(this._getResultMetaBySchedule(schedules, scheduleInput.value));
+    scheduleInput.addEventListener('change', () => {
+      this._applyResultPerformanceMeta(this._getResultMetaBySchedule(schedules, scheduleInput.value));
+    });
     gradeInput.addEventListener('change', () => {
       syncResultClassOptions(false);
       document.getElementById('result-user-id').value = '';
@@ -3009,11 +3042,11 @@ const Admin = {
       try {
         App.showLoading();
         if (isEdit) {
-          await API.admin.updateResult(id, validation.data);
-          App.showToast('成绩已更新', 'success');
+          const res = await API.admin.updateResult(id, validation.data);
+          App.showToast(res.message || '成绩已更新', 'success');
         } else {
-          await API.admin.submitResult(validation.data);
-          App.showToast('成绩已录入', 'success');
+          const res = await API.admin.submitResult(validation.data);
+          App.showToast(res.message || '成绩已录入', 'success');
           if (state.activeDraftId) {
             this._setResultDrafts(this._getResultDrafts().filter((item) => item.id !== state.activeDraftId));
           }
@@ -3061,12 +3094,13 @@ const Admin = {
     });
   },
 
-  async _autoRank() {
+  async _autoRank(container) {
     try {
       App.showLoading();
       const res = await API.post('/admin/results/auto-rank');
       App.hideLoading();
       App.showToast(res.message || '自动排名完成', 'success');
+      if (container) this._loadResults(container);
     } catch (e) { App.hideLoading(); App.showToast(e.message, 'error'); }
   },
 
