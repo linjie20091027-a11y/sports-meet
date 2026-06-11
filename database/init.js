@@ -1040,6 +1040,24 @@ function seedDefaultData() {
 
 function ensureTeacherAccounts() {
   const teacherHash = bcrypt.hashSync('teacher123', 10);
+  const activeEvents = [];
+  const activeEventStmt = _db.prepare("SELECT id FROM events WHERE status = 'active' ORDER BY sort_order, id");
+  while (activeEventStmt.step()) activeEvents.push(Number(activeEventStmt.getAsObject().id));
+  activeEventStmt.free();
+  const activeEventSet = new Set(activeEvents);
+  const fallbackAssignedEventIds = JSON.stringify(activeEvents.slice(0, 6));
+  const normalizeAssignedEventIds = (value) => {
+    try {
+      const parsed = typeof value === 'string' ? JSON.parse(value || '[]') : value;
+      const source = Array.isArray(parsed) ? parsed : [];
+      const valid = [...new Set(source
+        .map((item) => Number(item))
+        .filter((item) => Number.isInteger(item) && activeEventSet.has(item)))];
+      return JSON.stringify(valid.length ? valid : JSON.parse(fallbackAssignedEventIds));
+    } catch (_) {
+      return fallbackAssignedEventIds;
+    }
+  };
   const defaults = [
     {
       username: 'teacher_homeroom',
@@ -1059,15 +1077,18 @@ function ensureTeacherAccounts() {
       staff_type: 'event_teacher',
       managed_grade: '',
       managed_class_name: '',
-      assigned_event_ids: '[1,2]'
+      assigned_event_ids: fallbackAssignedEventIds
     }
   ];
 
   defaults.forEach((teacher) => {
-    const stmt = _db.prepare('SELECT id FROM users WHERE email = ?');
+    const stmt = _db.prepare('SELECT id, assigned_event_ids FROM users WHERE email = ?');
     stmt.bind([teacher.email]);
     const exists = stmt.step() ? stmt.getAsObject() : null;
     stmt.free();
+    const assignedEventIds = teacher.staff_type === 'event_teacher'
+      ? normalizeAssignedEventIds(exists?.assigned_event_ids || teacher.assigned_event_ids)
+      : teacher.assigned_event_ids;
 
     if (exists && exists.id) {
       _db.run(`
@@ -1084,7 +1105,7 @@ function ensureTeacherAccounts() {
         teacher.staff_type,
         teacher.managed_grade,
         teacher.managed_class_name,
-        teacher.assigned_event_ids,
+        assignedEventIds,
         exists.id
       ]);
       return;
@@ -1104,7 +1125,7 @@ function ensureTeacherAccounts() {
       teacher.name,
       teacher.managed_grade,
       teacher.managed_class_name,
-      teacher.assigned_event_ids
+      assignedEventIds
     ]);
   });
 }
