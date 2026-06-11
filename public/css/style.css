@@ -364,6 +364,9 @@ h1{font-family:var(--title-font);font-size:2.2rem}h2{font-size:1.4rem}h3{font-si
 .teacher-results-table td{vertical-align:middle}
 .teacher-results-table input,.teacher-results-table select{min-width:84px}
 .form__input--compact,.form__select--compact{padding:.4rem .55rem;font-size:.72rem}
+.teacher-performance-input{display:flex;align-items:center;gap:.45rem}
+.teacher-performance-input span{display:inline-flex;align-items:center;justify-content:center;min-width:2.3rem;padding:.18rem .45rem;border-radius:999px;background:rgba(201,168,76,.16);color:var(--red);font-size:.68rem;font-weight:700}
+.teacher-rank-chip{display:inline-flex;align-items:center;justify-content:center;min-width:3.2rem;padding:.22rem .55rem;border-radius:999px;background:rgba(15,23,42,.06);color:var(--text2);font-size:.7rem;font-weight:700}
 .teacher-checkbox{display:inline-flex;align-items:center;gap:.35rem;font-size:.72rem;color:var(--text2);cursor:pointer}
 .teacher-config-panel{padding:1rem;border:1px dashed rgba(201,168,76,.45);border-radius:14px;background:#fffaf2}
 .teacher-event-select{min-height:160px}
