@@ -3,6 +3,11 @@ const Teacher = {
   currentTab: 'overview',
   selectedEventId: null,
   latestResultsEntry: null,
+  resultsEntryFilters: {
+    class_name: '',
+    round_name: '',
+    keyword: ''
+  },
   homeroomRegistrationFilters: {
     status: '',
     event_id: '',
@@ -16,6 +21,7 @@ const Teacher = {
   },
   _homeroomRegistrationFilterTimer: null,
   _homeroomOverviewFilterTimer: null,
+  _resultsEntryFilterTimer: null,
 
   async render() {
     const page = document.getElementById('page-teacher');
@@ -695,7 +701,9 @@ const Teacher = {
       const assignmentRes = await API.teacher.getAssignments();
       if (!assignmentRes.success) throw new Error(assignmentRes.error || '项目分配加载失败');
       const events = assignmentRes.data?.events || [];
-      const activeEventId = Number(this.selectedEventId || events[0]?.id || 0);
+      const preferredEvent = this._pickPreferredResultsEvent(events);
+      const currentEvent = events.find((item) => Number(item.id) === Number(this.selectedEventId || 0));
+      const activeEventId = Number(currentEvent?.id || preferredEvent?.id || 0);
       this.selectedEventId = activeEventId || null;
       let entryData = null;
       if (activeEventId) {
@@ -704,6 +712,8 @@ const Teacher = {
         entryData = entryRes.data || {};
       }
       this.latestResultsEntry = entryData;
+      const view = this._buildResultsEntryView(events, entryData);
+      const activeEvent = events.find((item) => Number(item.id) === activeEventId) || null;
 
       content.innerHTML = `
         <div class="teacher-shell">
@@ -711,17 +721,17 @@ const Teacher = {
             <div class="card__header">
               <div>
                 <h3 class="card__title">成绩录入</h3>
-                <p class="teacher-hero__meta">任课教师可直接在系统内批量保存成绩并控制公示状态</p>
+                <p class="teacher-hero__meta">按“选择项目 -> 选择班级/轮次 -> 录入并提交”三步完成当前项目成绩录入</p>
               </div>
               <div class="teacher-toolbar">
                 <select id="teacher-event-selector" class="form__select">
-                  ${events.map((event) => `<option value="${event.id}"${Number(event.id) === activeEventId ? ' selected' : ''}>${App._escHtml(event.name || '-')} (${App._escHtml(event.gender_group || '-')}组)</option>`).join('')}
+                  ${events.map((event) => `<option value="${event.id}"${Number(event.id) === activeEventId ? ' selected' : ''}>${this._buildResultsEventLabel(event)}</option>`).join('')}
                 </select>
-                <button type="button" class="btn btn-primary btn-sm" id="teacher-save-results-btn"${activeEventId ? '' : ' disabled'}>保存成绩</button>
+                <button type="button" class="btn btn-outline btn-sm" id="teacher-refresh-results-btn"${activeEventId ? '' : ' disabled'}>刷新</button>
               </div>
             </div>
             <div class="card__body">
-              ${activeEventId && entryData ? this._renderResultsTable(entryData) : '<div class="empty-state"><p class="empty-state__desc">当前没有可录入的项目，请先在后台分配教师项目</p></div>'}
+              ${activeEventId && entryData ? this._renderResultsEntryWorkspace(activeEvent, view, events) : '<div class="empty-state"><p class="empty-state__desc">当前没有可录入的项目，请先在后台分配教师项目</p></div>'}
             </div>
           </div>
         </div>
@@ -729,30 +739,240 @@ const Teacher = {
 
       document.getElementById('teacher-event-selector')?.addEventListener('change', async (e) => {
         this.selectedEventId = Number(e.target.value || 0);
+        this._resetResultsEntryFilters();
         await this._renderResultsEntry();
       });
-      document.getElementById('teacher-save-results-btn')?.addEventListener('click', async () => {
-        await this._submitResultsBatch();
+      document.getElementById('teacher-refresh-results-btn')?.addEventListener('click', async () => {
+        await this._renderResultsEntry();
       });
+      document.getElementById('teacher-refresh-results-empty-btn')?.addEventListener('click', async () => {
+        await this._renderResultsEntry();
+      });
+      document.getElementById('teacher-switch-assignment-btn')?.addEventListener('click', async () => {
+        this.currentTab = 'assignments';
+        this._renderSidebar();
+        await this._renderCurrentTab();
+      });
+      document.querySelectorAll('[data-results-event-id]').forEach((button) => {
+        button.addEventListener('click', async () => {
+          this.selectedEventId = Number(button.dataset.resultsEventId || 0);
+          this._resetResultsEntryFilters();
+          await this._renderResultsEntry();
+        });
+      });
+      document.getElementById('teacher-save-draft-btn')?.addEventListener('click', async () => {
+        await this._submitResultsBatch({ requireConfirm: false });
+      });
+      document.getElementById('teacher-submit-results-btn')?.addEventListener('click', async () => {
+        await this._submitResultsBatch({ requireConfirm: true });
+      });
+      this._bindResultsEntryFilters();
     } catch (e) {
       content.innerHTML = `<div class="empty-state"><p class="empty-state__desc">${App._escHtml(e.message || '成绩录入页面加载失败')}</p></div>`;
     }
   },
 
-  _renderResultsTable(entryData) {
-    const participants = entryData?.participants || [];
-    if (!participants.length) {
-      return '<div class="empty-state"><p class="empty-state__desc">当前项目暂无已审核参赛学生</p></div>';
-    }
+  _pickPreferredResultsEvent(events) {
+    if (!Array.isArray(events) || !events.length) return null;
+    return [...events].sort((a, b) => {
+      const participantDiff = Number(b.participant_count || 0) - Number(a.participant_count || 0);
+      if (participantDiff !== 0) return participantDiff;
+      const scheduleDiff = Number(b.schedule_count || 0) - Number(a.schedule_count || 0);
+      if (scheduleDiff !== 0) return scheduleDiff;
+      return Number(a.id || 0) - Number(b.id || 0);
+    })[0];
+  },
+
+  _resetResultsEntryFilters() {
+    this.resultsEntryFilters = {
+      class_name: '',
+      round_name: '',
+      keyword: ''
+    };
+  },
+
+  _buildResultsEventLabel(event) {
+    const genderMap = { male: '男子', female: '女子', mixed: '混合' };
+    const scheduleCount = Number(event?.schedule_count || 0);
+    const participantCount = Number(event?.participant_count || 0);
+    return `${App._escHtml(event?.name || '-')} (${genderMap[event?.gender_group] || '混合'}组 / ${scheduleCount}场 / ${participantCount}人)`;
+  },
+
+  _buildResultsEntryView(events, entryData) {
+    const participants = Array.isArray(entryData?.participants) ? entryData.participants : [];
+    const classOptions = Array.isArray(entryData?.classes) ? entryData.classes : [];
+    const roundOptions = Array.isArray(entryData?.rounds) ? entryData.rounds : [];
+    const className = classOptions.includes(this.resultsEntryFilters.class_name) ? this.resultsEntryFilters.class_name : '';
+    const roundName = roundOptions.includes(this.resultsEntryFilters.round_name) ? this.resultsEntryFilters.round_name : '';
+    const keyword = String(this.resultsEntryFilters.keyword || '').trim();
+    this.resultsEntryFilters = {
+      class_name: className,
+      round_name: roundName,
+      keyword
+    };
+    const normalizedKeyword = keyword.toLowerCase();
+    const filteredParticipants = participants.filter((item) => {
+      const rowClass = [item.grade, item.class_name].filter(Boolean).join(' ');
+      const matchesClass = !className || rowClass === className;
+      const matchesRound = !roundName || String(item.round_name || '') === roundName;
+      const haystack = [
+        item.student_name,
+        item.student_id,
+        item.grade,
+        item.class_name,
+        item.round_name
+      ].join(' ').toLowerCase();
+      const matchesKeyword = !normalizedKeyword || haystack.includes(normalizedKeyword);
+      return matchesClass && matchesRound && matchesKeyword;
+    });
+    const readiness = entryData?.readiness || { can_edit: participants.length > 0, blockers: [] };
+    const summary = entryData?.summary || {};
+    const activeEvent = events.find((item) => Number(item.id) === Number(entryData?.event_id || this.selectedEventId || 0)) || null;
+    return {
+      activeEvent,
+      participants,
+      filteredParticipants,
+      classOptions,
+      roundOptions,
+      readiness,
+      summary: {
+        schedule_count: Number(summary.schedule_count || activeEvent?.schedule_count || 0),
+        approved_participant_count: Number(summary.approved_participant_count || activeEvent?.participant_count || 0),
+        result_count: Number(summary.result_count || 0),
+        published_result_count: Number(summary.published_result_count || 0),
+        class_count: Number(summary.class_count || classOptions.length || 0)
+      }
+    };
+  },
+
+  _renderResultsEntryWorkspace(activeEvent, view, events) {
+    const blockers = Array.isArray(view.readiness?.blockers) ? view.readiness.blockers : [];
+    const canEdit = !!view.readiness?.can_edit;
+    const resultCountText = view.summary.result_count || 0;
+    const publishCountText = view.summary.published_result_count || 0;
     return `
-      <div class="teacher-results-meta">
-        <span>赛程数量：${(entryData.schedules || []).length}</span>
-        <span>参赛人数：${participants.length}</span>
+      <div class="teacher-results-panel">
+        <div class="teacher-results-steps">
+          <div class="teacher-results-step is-active"><strong>1</strong><span>选择项目</span></div>
+          <div class="teacher-results-step ${view.classOptions.length || view.roundOptions.length ? 'is-active' : ''}"><strong>2</strong><span>筛选班级</span></div>
+          <div class="teacher-results-step ${canEdit ? 'is-active' : ''}"><strong>3</strong><span>录入提交</span></div>
+        </div>
+        <div class="teacher-summary-grid">
+          <div class="teacher-summary-card"><strong>${view.summary.schedule_count}</strong><span>已编排赛程</span></div>
+          <div class="teacher-summary-card"><strong>${view.summary.approved_participant_count}</strong><span>可录入学生</span></div>
+          <div class="teacher-summary-card"><strong>${resultCountText}</strong><span>已录成绩</span></div>
+          <div class="teacher-summary-card"><strong>${publishCountText}</strong><span>已公示成绩</span></div>
+        </div>
+        <div class="teacher-results-headline">
+          <div>
+            <h4>${App._escHtml(activeEvent?.name || '当前项目')}</h4>
+            <p>${App._escHtml(this._formatResultsEventMeta(activeEvent))}</p>
+          </div>
+          <div class="teacher-inline-meta">
+            <span>班级 ${view.summary.class_count || 0} 个</span>
+            <span>当前筛选 ${view.filteredParticipants.length} 条</span>
+            <span>总数据 ${view.participants.length} 条</span>
+          </div>
+        </div>
+        ${canEdit ? this._renderResultsTable(view) : this._renderResultsEntryEmpty(activeEvent, blockers, events)}
       </div>
+    `;
+  },
+
+  _formatResultsEventMeta(event) {
+    if (!event) return '暂无项目说明';
+    const genderMap = { male: '男子组', female: '女子组', mixed: '混合组' };
+    const typeMap = { team: '集体项目', individual: '个人项目' };
+    return [
+      event.category || '项目',
+      genderMap[event.gender_group] || '混合组',
+      typeMap[event.event_type] || '个人项目',
+      event.venue || '场地待定'
+    ].filter(Boolean).join(' · ');
+  },
+
+  _renderResultsEntryEmpty(activeEvent, blockers, events) {
+    const tips = blockers.length
+      ? blockers.map((item) => `<li>${App._escHtml(item)}</li>`).join('')
+      : '<li>当前项目尚未满足成绩录入条件</li>';
+    return `
+      <div class="teacher-results-empty">
+        <div class="empty-state">
+          <div class="empty-state__icon"><i class="fas fa-clipboard-list"></i></div>
+          <p class="empty-state__desc">${App._escHtml(activeEvent?.name || '当前项目')} 暂时无法进入成绩录入表格，请先完成下列准备项：</p>
+        </div>
+        <div class="teacher-results-empty__body">
+          <div class="teacher-results-checklist">
+            <h4>待完成项</h4>
+            <ul>${tips}</ul>
+            <div class="teacher-table-actions">
+              <button type="button" class="btn btn-outline btn-sm" id="teacher-switch-assignment-btn">查看项目分配</button>
+              <button type="button" class="btn btn-primary btn-sm" id="teacher-refresh-results-empty-btn">重新检查</button>
+            </div>
+          </div>
+          <div class="teacher-card-grid">
+            ${events.map((event) => `
+              <button type="button" class="teacher-event-card teacher-event-card--action ${Number(event.id) === Number(this.selectedEventId || 0) ? 'is-active' : ''}" data-results-event-id="${event.id}">
+                <h4>${App._escHtml(event.name || '-')}</h4>
+                <p>${App._escHtml(this._formatResultsEventMeta(event))}</p>
+                <div class="teacher-event-card__meta">
+                  <span>${Number(event.schedule_count || 0)} 场赛程</span>
+                  <span>${Number(event.participant_count || 0)} 名学生</span>
+                </div>
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  _renderResultsTable(view) {
+    const participants = view.filteredParticipants || [];
+    const hasSourceRows = (view.participants || []).length > 0;
+    const disabled = !participants.length;
+    return `
+      <div class="teacher-filter-grid teacher-filter-grid--results">
+        <div class="form__group">
+          <label class="form__label">班级选择</label>
+          <select id="teacher-results-class-filter" class="form__select">
+            <option value="">全部班级</option>
+            ${view.classOptions.map((item) => `<option value="${App._escAttr(item)}"${item === this.resultsEntryFilters.class_name ? ' selected' : ''}>${App._escHtml(item)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form__group">
+          <label class="form__label">轮次筛选</label>
+          <select id="teacher-results-round-filter" class="form__select">
+            <option value="">全部轮次</option>
+            ${view.roundOptions.map((item) => `<option value="${App._escAttr(item)}"${item === this.resultsEntryFilters.round_name ? ' selected' : ''}>${App._escHtml(item)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form__group">
+          <label class="form__label">学生检索</label>
+          <input id="teacher-results-keyword-filter" class="form__input" placeholder="输入姓名、学号或班级" value="${App._escAttr(this.resultsEntryFilters.keyword || '')}">
+        </div>
+        <div class="form__group">
+          <label class="form__label">当前状态</label>
+          <div class="teacher-inline-meta">
+            <span>本次保存 ${participants.length} 条</span>
+            <span>已录入 ${view.summary.result_count}</span>
+            <span>已公示 ${view.summary.published_result_count}</span>
+          </div>
+        </div>
+      </div>
+      <div class="teacher-results-actions">
+        <p>${hasSourceRows ? '建议先选择班级后批量录入，再使用提交确认完成当前筛选结果保存。' : '当前项目暂无可录入学生。'}</p>
+        <div class="teacher-table-actions">
+          <button type="button" class="btn btn-outline btn-sm" id="teacher-save-draft-btn"${disabled ? ' disabled' : ''}>暂存成绩</button>
+          <button type="button" class="btn btn-primary btn-sm" id="teacher-submit-results-btn"${disabled ? ' disabled' : ''}>提交确认</button>
+        </div>
+      </div>
+      ${participants.length ? `
       <div class="table-container">
         <table class="table table--striped teacher-results-table">
           <thead>
             <tr>
+              <th>序号</th>
               <th>轮次</th>
               <th>学生</th>
               <th>学号</th>
@@ -767,6 +987,7 @@ const Teacher = {
           <tbody>
             ${participants.map((item, index) => `
               <tr data-row-index="${index}" data-schedule-id="${item.schedule_id}" data-user-id="${item.user_id}">
+                <td>${index + 1}</td>
                 <td>${App._escHtml(item.round_name || '-')}</td>
                 <td>${App._escHtml(item.student_name || '-')}</td>
                 <td>${App._escHtml(item.student_id || '-')}</td>
@@ -790,12 +1011,42 @@ const Teacher = {
           </tbody>
         </table>
       </div>
+      ` : `
+        <div class="empty-state">
+          <p class="empty-state__desc">${hasSourceRows ? '当前筛选条件下没有匹配的学生，请调整班级、轮次或关键词。' : '当前项目暂无已审核参赛学生。'}</p>
+        </div>
+      `}
     `;
   },
 
-  async _submitResultsBatch() {
+  _bindResultsEntryFilters() {
+    document.getElementById('teacher-results-class-filter')?.addEventListener('change', async (e) => {
+      this.resultsEntryFilters.class_name = e.target.value || '';
+      await this._renderResultsEntry();
+    });
+    document.getElementById('teacher-results-round-filter')?.addEventListener('change', async (e) => {
+      this.resultsEntryFilters.round_name = e.target.value || '';
+      await this._renderResultsEntry();
+    });
+    document.getElementById('teacher-results-keyword-filter')?.addEventListener('input', async (e) => {
+      this.resultsEntryFilters.keyword = e.target.value.trim();
+      clearTimeout(this._resultsEntryFilterTimer);
+      this._resultsEntryFilterTimer = setTimeout(() => {
+        this._renderResultsEntry();
+      }, 180);
+    });
+  },
+
+  async _submitResultsBatch(options = {}) {
     const rows = Array.from(document.querySelectorAll('.teacher-results-table tbody tr'));
-    if (!rows.length) return;
+    if (!rows.length) {
+      App.showToast('当前没有可保存的成绩记录', 'warning');
+      return;
+    }
+    if (options.requireConfirm) {
+      const confirmed = await App.confirmDialog(`确认提交当前筛选结果中的 ${rows.length} 条成绩吗？`);
+      if (!confirmed) return;
+    }
     const items = rows.map((row) => ({
       schedule_id: Number(row.dataset.scheduleId || 0),
       user_id: Number(row.dataset.userId || 0),
@@ -810,7 +1061,7 @@ const Teacher = {
       const res = await API.teacher.batchSaveResults({ items });
       App.hideLoading();
       if (!res.success) throw new Error(res.error || '成绩保存失败');
-      App.showToast(res.message || '成绩已保存', 'success');
+      App.showToast(res.message || (options.requireConfirm ? '成绩提交成功' : '成绩已暂存'), 'success');
       await this._renderResultsEntry();
     } catch (e) {
       App.hideLoading();
