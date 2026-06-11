@@ -8,6 +8,7 @@ const { getDb } = require('../database/init');
 const { createNotification } = require('../utils/notify');
 const { authMiddleware, adminOnly, logOperation } = require('../middleware/auth');
 const { PRIMARY_ROLES } = require('../utils/accessControl');
+const { buildEventResultMeta, autoRankSchedules } = require('../utils/resultEntry');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -442,26 +443,77 @@ router.get('/student-directory', (req, res) => {
     const studentRows = db.prepare(`SELECT id, name, student_id, class_name, grade, username, email
       FROM users WHERE role = 'student' AND status = 'active'
       ORDER BY grade, class_name, name, id`).all();
-
-    const classes = classRows.map((cls) => {
-      const students = studentRows.filter((student) => student.class_name === cls.name && student.grade === cls.grade_name);
-      return {
+    const gradeMap = new Map(gradeRows.map((item) => [String(item.name || '').trim(), { ...item }]));
+    studentRows.forEach((student) => {
+      const gradeName = String(student.grade || '').trim();
+      if (!gradeName || gradeMap.has(gradeName)) return;
+      gradeMap.set(gradeName, {
+        id: null,
+        name: gradeName,
+        sort_order: 999
+      });
+    });
+    const normalizedGrades = [...gradeMap.values()].sort((a, b) => {
+      const sortDiff = Number(a.sort_order || 0) - Number(b.sort_order || 0);
+      if (sortDiff !== 0) return sortDiff;
+      return String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hans-CN-u-co-pinyin');
+    });
+    const gradeSortMap = new Map(normalizedGrades.map((item, index) => [String(item.name || '').trim(), Number(item.sort_order || index + 1)]));
+    const classMap = new Map();
+    classRows.forEach((cls) => {
+      classMap.set(`${cls.grade_name}__${cls.name}`, {
         id: cls.id,
         name: cls.name,
         grade_id: cls.grade_id,
         grade_name: cls.grade_name,
         sort_order: cls.sort_order || 0,
-        grade_sort_order: cls.grade_sort_order || 0,
-        student_count: students.length
-      };
+        grade_sort_order: cls.grade_sort_order || gradeSortMap.get(cls.grade_name) || 0
+      });
     });
+    studentRows.forEach((student) => {
+      const gradeName = String(student.grade || '').trim();
+      const className = String(student.class_name || '').trim();
+      if (!gradeName || !className) return;
+      const key = `${gradeName}__${className}`;
+      if (classMap.has(key)) return;
+      const match = className.match(/\((\d+)\)/);
+      classMap.set(key, {
+        id: null,
+        name: className,
+        grade_id: null,
+        grade_name: gradeName,
+        sort_order: match ? Number(match[1]) : 999,
+        grade_sort_order: gradeSortMap.get(gradeName) || 999
+      });
+    });
+    const classes = [...classMap.values()]
+      .sort((a, b) => {
+        const gradeDiff = Number(a.grade_sort_order || 0) - Number(b.grade_sort_order || 0);
+        if (gradeDiff !== 0) return gradeDiff;
+        const sortDiff = Number(a.sort_order || 0) - Number(b.sort_order || 0);
+        if (sortDiff !== 0) return sortDiff;
+        return String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hans-CN-u-co-pinyin');
+      })
+      .map((cls) => {
+        const students = studentRows.filter((student) => student.class_name === cls.name && student.grade === cls.grade_name);
+        return {
+          ...cls,
+          student_count: students.length
+        };
+      });
 
     res.json({
       success: true,
       data: {
-        grades: gradeRows,
+        grades: normalizedGrades,
         classes,
-        students: studentRows
+        students: studentRows,
+        summary: {
+          total_students: studentRows.length,
+          total_classes: classes.length,
+          total_grades: normalizedGrades.length,
+          inferred_class_count: classes.filter((item) => item.id === null).length
+        }
       }
     });
   } catch (e) {
@@ -1308,7 +1360,7 @@ router.post('/results', (req, res) => {
     const user = db.prepare('SELECT id FROM users WHERE id = ?').get(data.user_id);
     if (!schedule) return res.status(400).json({ success: false, error: '赛程不存在' });
     if (!user) return res.status(400).json({ success: false, error: '用户不存在' });
-    db.prepare(`INSERT INTO results (schedule_id, user_id, performance, award, note, is_school_record, recorded_by)
+    const insertResult = db.prepare(`INSERT INTO results (schedule_id, user_id, performance, award, note, is_school_record, recorded_by)
       VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
       data.schedule_id,
       data.user_id,
@@ -1318,8 +1370,24 @@ router.post('/results', (req, res) => {
       data.is_school_record || 0,
       req.user.id
     );
+    const ranking = autoRankSchedules(db, [data.schedule_id]);
+    const resultMeta = db.prepare(`
+      SELECT e.name, e.category, e.event_type, e.gender_group
+      FROM schedules s
+      JOIN events e ON e.id = s.event_id
+      WHERE s.id = ?
+      LIMIT 1
+    `).get(data.schedule_id);
     logOperation(req.user.id, req.user.username, '录入成绩', `赛程ID:${data.schedule_id} 用户ID:${data.user_id}`, getIp(req));
-    res.json({ success: true, message: '成绩已录入' });
+    res.json({
+      success: true,
+      message: `成绩已录入，并自动完成排序`,
+      data: {
+        id: Number(insertResult.lastInsertRowid || 0),
+        ranked_count: ranking.ranked_count || 0,
+        result_meta: buildEventResultMeta(resultMeta || {})
+      }
+    });
   } catch (e) {
     if (e.message.includes('UNIQUE')) return res.status(400).json({ success: false, error: '该用户在此赛程已有成绩' });
     res.status(400).json({ success: false, error: e.message });
@@ -1352,6 +1420,7 @@ router.post('/results/batch', upload.single('file'), (req, res) => {
     }
 
     let success = 0, fail = 0;
+    const affectedScheduleIds = new Set();
     const insert = db.prepare('INSERT INTO results (schedule_id, user_id, performance, award, note, is_school_record, recorded_by) VALUES (?, ?, ?, ?, ?, ?, ?)');
 
     for (const row of rows) {
@@ -1397,14 +1466,23 @@ router.post('/results/batch', upload.single('file'), (req, res) => {
           payload.is_school_record || 0,
           req.user.id
         );
+        affectedScheduleIds.add(Number(payload.schedule_id));
         success++;
       } catch (_) {
         fail++;
       }
     }
+    const ranking = autoRankSchedules(db, [...affectedScheduleIds]);
 
     logOperation(req.user.id, req.user.username, '批量导入成绩', `成功${success}条，失败${fail}条`, getIp(req));
-    res.json({ success: true, message: `导入完成：成功${success}条，失败${fail}条` });
+    res.json({
+      success: true,
+      message: `导入完成：成功${success}条，失败${fail}条，并自动更新排名`,
+      data: {
+        ranked_count: ranking.ranked_count || 0,
+        affected_schedule_count: affectedScheduleIds.size
+      }
+    });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
@@ -1442,8 +1520,28 @@ router.put('/results/:id', (req, res) => {
     if (sets.length === 0) return res.json({ success: true, message: '无需更新' });
     vals.push(id);
     db.prepare(`UPDATE results SET ${sets.join(', ')}, updated_at = datetime('now','localtime') WHERE id = ?`).run(...vals);
+    const scheduleIdsToRank = [result.schedule_id];
+    if (data.schedule_id && Number(data.schedule_id) !== Number(result.schedule_id)) {
+      scheduleIdsToRank.push(data.schedule_id);
+    }
+    const ranking = autoRankSchedules(db, scheduleIdsToRank);
+    const targetScheduleId = Number(data.schedule_id || result.schedule_id || 0);
+    const resultMeta = db.prepare(`
+      SELECT e.name, e.category, e.event_type, e.gender_group
+      FROM schedules s
+      JOIN events e ON e.id = s.event_id
+      WHERE s.id = ?
+      LIMIT 1
+    `).get(targetScheduleId);
     logOperation(req.user.id, req.user.username, '修改成绩', `成绩ID:${id}`, getIp(req));
-    res.json({ success: true, message: '成绩已更新' });
+    res.json({
+      success: true,
+      message: '成绩已更新，并自动完成排序',
+      data: {
+        ranked_count: ranking.ranked_count || 0,
+        result_meta: buildEventResultMeta(resultMeta || {})
+      }
+    });
   } catch (e) {
     res.status(400).json({ success: false, error: e.message });
   }
@@ -1491,38 +1589,18 @@ router.delete('/results/:id', (req, res) => {
 router.post('/results/auto-rank', (req, res) => {
   try {
     const db = getDb();
-    const scheduleIds = db.prepare('SELECT DISTINCT schedule_id FROM results').all().map(r => r.schedule_id);
+    const requestedScheduleIds = Array.isArray(req.body?.schedule_ids) ? req.body.schedule_ids : [];
+    const scheduleIds = requestedScheduleIds.length
+      ? requestedScheduleIds
+      : db.prepare('SELECT DISTINCT schedule_id FROM results').all().map((row) => row.schedule_id);
+    const ranking = autoRankSchedules(db, scheduleIds);
 
-    const updateRank = db.prepare('UPDATE results SET rank = ? WHERE id = ?');
-    let rankedCount = 0;
-
-    const txn = db.transaction(() => {
-      for (const schedId of scheduleIds) {
-        const schedule = db.prepare('SELECT s.*, e.category FROM schedules s JOIN events e ON s.event_id = e.id WHERE s.id = ?').get(schedId);
-        if (!schedule) continue;
-
-        const results = db.prepare('SELECT * FROM results WHERE schedule_id = ? AND performance != \'\'').all(schedId);
-        if (results.length === 0) continue;
-
-        const sorted = results.sort((a, b) => {
-          const pa = parseFloat(a.performance);
-          const pb = parseFloat(b.performance);
-          if (isNaN(pa) && isNaN(pb)) return 0;
-          if (isNaN(pa)) return 1;
-          if (isNaN(pb)) return -1;
-          return pa - pb;
-        });
-
-        sorted.forEach((r, i) => {
-          updateRank.run(i + 1, r.id);
-          rankedCount++;
-        });
-      }
+    logOperation(req.user.id, req.user.username, '自动排名', `已排名${ranking.ranked_count || 0}条成绩`, getIp(req));
+    res.json({
+      success: true,
+      message: `自动排名完成，已排名${ranking.ranked_count || 0}条成绩`,
+      data: ranking
     });
-    txn();
-
-    logOperation(req.user.id, req.user.username, '自动排名', `已排名${rankedCount}条成绩`, getIp(req));
-    res.json({ success: true, message: `自动排名完成，已排名${rankedCount}条成绩` });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
