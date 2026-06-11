@@ -8,9 +8,95 @@ const { backupFile } = require('./backupManager');
 
 const DB_PATH = path.join(__dirname, 'sports_meet.db');
 const DB_BACKUP_DIR = path.join(__dirname, 'backups');
+const CLASS_SEED_PATH = path.join(__dirname, 'class-seed.json');
+const STUDENT_SEED_PATH = path.join(__dirname, 'student-seed.json');
+const DEFAULT_GRADE_NAMES = ['初一', '初二', '初三', '高一', '高二', '高三'];
 
 let _db = null;
 let _sql = null;
+
+function readSeedJson(filePath, fallbackValue = []) {
+  try {
+    if (!fs.existsSync(filePath)) return fallbackValue;
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    return Array.isArray(parsed) ? parsed : fallbackValue;
+  } catch (e) {
+    console.error(`读取种子数据失败: ${path.basename(filePath)} ${e.message}`);
+    return fallbackValue;
+  }
+}
+
+function getClassSeedRows() {
+  const rows = readSeedJson(CLASS_SEED_PATH, []);
+  if (rows.length) {
+    return rows
+      .map((item) => ({
+        grade: String(item.grade || '').trim(),
+        grade_sort_order: Number(item.grade_sort_order || 0),
+        class_name: String(item.class_name || '').trim(),
+        class_sort_order: Number(item.class_sort_order || 0)
+      }))
+      .filter((item) => item.grade && item.class_name);
+  }
+  return DEFAULT_GRADE_NAMES.flatMap((grade, index) =>
+    Array.from({ length: 5 }, (_, classIndex) => ({
+      grade,
+      grade_sort_order: index + 1,
+      class_name: `${grade}(${classIndex + 1})班`,
+      class_sort_order: classIndex + 1
+    }))
+  );
+}
+
+function getGradeSeedRows(classSeedRows = getClassSeedRows()) {
+  const gradeMap = new Map();
+  classSeedRows.forEach((item, index) => {
+    if (!item.grade || gradeMap.has(item.grade)) return;
+    gradeMap.set(item.grade, {
+      name: item.grade,
+      sort_order: Number(item.grade_sort_order || index + 1)
+    });
+  });
+  if (!gradeMap.size) {
+    DEFAULT_GRADE_NAMES.forEach((name, index) => {
+      gradeMap.set(name, { name, sort_order: index + 1 });
+    });
+  }
+  return [...gradeMap.values()].sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0));
+}
+
+function getStudentSeedRows() {
+  const rows = readSeedJson(STUDENT_SEED_PATH, []);
+  if (rows.length) {
+    return rows
+      .map((item) => ({
+        username: String(item.username || item.student_id || '').trim(),
+        email: String(item.email || '').trim(),
+        student_id: String(item.student_id || '').trim(),
+        name: String(item.name || '').trim(),
+        class_name: String(item.class_name || '').trim(),
+        grade: String(item.grade || '').trim(),
+        gender: String(item.gender || '').trim(),
+        age: Number(item.age || 16)
+      }))
+      .filter((item) => item.student_id && item.name && item.class_name && item.grade);
+  }
+  const original = ['甘子轩','朱嘉诚','何政熙','何衍禧','吴子琪','吴灿','宋子谦','李力','李靖汐','周佳妮','林杰','林俊淘','徐振华','张秦坤','梁倩','陈天泽','陈宇轩','陈妙燃','麦君权','冯梓雯','冯淽健','黄子鹏','黄广晋','董兆威','廖浚良','刘嘉裕','郑咏心','陈威羽'];
+  let sid = 20250001;
+  return original.map((name, index) => {
+    const studentId = String(sid++);
+    return {
+      username: studentId,
+      email: `${studentId}@hkms.hktedu.com`,
+      student_id: studentId,
+      name,
+      class_name: '高一(11)班',
+      grade: '高一',
+      gender: index % 2 === 0 ? 'male' : 'female',
+      age: 16
+    };
+  });
+}
 
 function persistRawDb(sqlDb) {
   try {
@@ -844,20 +930,41 @@ function seedDefaultData() {
       ['学校运动会', '活力校园·运动青春', '2026-10-22', '2026-10-24', 1]);
   }
 
-  // 种子学生数据（仅在首次创建时）
+  // 种子学生数据与正式学生名册
   const stuStmt = _db.prepare("SELECT COUNT(*) as cnt FROM users WHERE role='student'");
   stuStmt.step();
   const stuRow = stuStmt.getAsObject();
   stuStmt.free();
 
-  if (stuRow.cnt === 0) {
+  const studentSeeds = getStudentSeedRows();
+  if (stuRow.cnt < studentSeeds.length) {
     const stuHash = bcrypt.hashSync('123456', 10);
-    const original = ['甘子轩','朱嘉诚','何政熙','何衍禧','吴子琪','吴灿','宋子谦','李力','李靖汐','周佳妮','林杰','林俊淘','徐振华','张秦坤','梁倩','陈天泽','陈宇轩','陈妙燃','麦君权','冯梓雯','冯淽健','黄子鹏','黄广晋','董兆威','廖浚良','刘嘉裕','郑咏心','陈威羽'];
-    let sid = 20250001;
-    original.forEach(n => {
-      const s = String(sid++);
-      _db.run("INSERT INTO users (username, email, password, role, permission_role, student_id, name, class_name, grade, gender, age) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-        [s, s+'@hkms.hktedu.com', stuHash, 'student', 'student', s, n, '高一(11)班', '高一', Math.random()>0.5?'male':'female', 15+Math.floor(Math.random()*3)]);
+    studentSeeds.forEach((student) => {
+      _db.run(`
+        INSERT INTO users (
+          username, email, password, role, permission_role, student_id, name, class_name, grade, gender, age, status
+        ) VALUES (?, ?, ?, 'student', 'student', ?, ?, ?, ?, ?, ?, 'active')
+        ON CONFLICT(student_id) DO UPDATE SET
+          username = excluded.username,
+          email = excluded.email,
+          name = excluded.name,
+          class_name = excluded.class_name,
+          grade = excluded.grade,
+          gender = excluded.gender,
+          age = excluded.age,
+          permission_role = 'student',
+          updated_at = datetime('now','localtime')
+      `, [
+        student.username || student.student_id,
+        student.email || `${student.student_id}@hkms.hktedu.com`,
+        stuHash,
+        student.student_id,
+        student.name,
+        student.class_name,
+        student.grade,
+        student.gender || '',
+        Number.isFinite(student.age) ? student.age : 16
+      ]);
     });
   }
 
@@ -915,9 +1022,11 @@ function seedDefaultData() {
   const gradeRow = gradeStmt.getAsObject();
   gradeStmt.free();
 
-  if (gradeRow.cnt === 0) {
-    ['初一', '初二', '初三', '高一', '高二', '高三'].forEach((g, i) => {
-      _db.run("INSERT INTO grades (name, sort_order) VALUES (?, ?)", [g, i + 1]);
+  const classSeeds = getClassSeedRows();
+  const gradeSeeds = getGradeSeedRows(classSeeds);
+  if (gradeRow.cnt < gradeSeeds.length) {
+    gradeSeeds.forEach((grade) => {
+      _db.run("INSERT OR IGNORE INTO grades (name, sort_order) VALUES (?, ?)", [grade.name, grade.sort_order || 0]);
     });
   }
 
@@ -927,16 +1036,21 @@ function seedDefaultData() {
   const classRow = classStmt.getAsObject();
   classStmt.free();
 
-  if (classRow.cnt === 0) {
+  if (classRow.cnt < classSeeds.length) {
     const gradeStmt2 = _db.prepare("SELECT id, name FROM grades");
     const grades = [];
     while (gradeStmt2.step()) { grades.push(gradeStmt2.getAsObject()); }
     gradeStmt2.free();
+    const gradeIdMap = new Map(grades.map((item) => [item.name, item.id]));
 
-    grades.forEach(g => {
-      for (let i = 1; i <= 5; i++) {
-        _db.run("INSERT INTO classes (grade_id, name, sort_order) VALUES (?, ?, ?)", [g.id, g.name + '(' + i + ')班', i]);
-      }
+    classSeeds.forEach((item) => {
+      const gradeId = gradeIdMap.get(item.grade);
+      if (!gradeId) return;
+      _db.run("INSERT OR IGNORE INTO classes (grade_id, name, sort_order) VALUES (?, ?, ?)", [
+        gradeId,
+        item.class_name,
+        item.class_sort_order || 0
+      ]);
     });
   }
 
