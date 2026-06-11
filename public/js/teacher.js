@@ -680,6 +680,9 @@ const Teacher = {
                         <span>${event.schedule_count || 0} 场赛程</span>
                         <span>${event.participant_count || 0} 名选手</span>
                       </div>
+                      <div class="teacher-table-actions">
+                        <button type="button" class="btn btn-outline btn-sm" data-assignment-enter="${event.id}">进入录入</button>
+                      </div>
                     </article>
                   `).join('')}
                 </div>
@@ -688,6 +691,15 @@ const Teacher = {
           </div>
         </div>
       `;
+      document.querySelectorAll('[data-assignment-enter]').forEach((button) => {
+        button.addEventListener('click', async () => {
+          this.selectedEventId = Number(button.dataset.assignmentEnter || 0);
+          this._resetResultsEntryFilters();
+          this.currentTab = 'results';
+          this._renderSidebar();
+          await this._renderCurrentTab();
+        });
+      });
     } catch (e) {
       content.innerHTML = `<div class="empty-state"><p class="empty-state__desc">${App._escHtml(e.message || '项目分配加载失败')}</p></div>`;
     }
