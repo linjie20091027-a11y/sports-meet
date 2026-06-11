@@ -196,8 +196,12 @@ async function runAllTests() {
     return true;
   });
 
-  await test('公开', 'GET /api/public/events/1', async () => {
-    const res = await request('GET', '/api/public/events/1');
+  await test('公开', 'GET /api/public/events/:id', async () => {
+    const listRes = await request('GET', '/api/public/events');
+    if (listRes.status !== 200) return `获取项目列表失败: ${listRes.status}`;
+    const firstEventId = listRes.body?.data?.[0]?.id;
+    if (!firstEventId) return '项目列表为空，无法验证详情接口';
+    const res = await request('GET', `/api/public/events/${firstEventId}`);
     if (res.status !== 200) return `状态码 ${res.status}: ${JSON.stringify(res.body).slice(0,120)}`;
     if (res.body?.data) {
       console.log(` (项目: ${res.body.data.name}, 类型: ${res.body.data.category})`);
@@ -1202,6 +1206,18 @@ async function runAllTests() {
       return true;
     });
 
+    await test('教师', 'GET /api/teacher/event/results-entry 返回成绩单位与自动排序规则', async () => {
+      const assignmentsRes = await request('GET', '/api/teacher/event/assignments', { token: eventTeacherToken });
+      const firstEventId = assignmentsRes.body?.data?.events?.[0]?.id;
+      if (!firstEventId) return '缺少已分配项目';
+      const res = await request('GET', `/api/teacher/event/results-entry?event_id=${firstEventId}`, { token: eventTeacherToken });
+      if (res.status !== 200) return `状态码 ${res.status}: ${JSON.stringify(res.body).slice(0, 120)}`;
+      const meta = res.body?.data?.result_meta || {};
+      if (!meta.unit || typeof meta.unit !== 'string') return `缺少成绩单位: ${JSON.stringify(meta).slice(0, 120)}`;
+      if (!meta.ranking_label || !String(meta.ranking_label).includes('自动')) return `缺少自动排序规则: ${JSON.stringify(meta).slice(0, 120)}`;
+      return true;
+    });
+
     await test('教师', 'GET /api/teacher/event/results-entry 拒绝未分配项目访问', async () => {
       const assignmentsRes = await request('GET', '/api/teacher/event/assignments', { token: eventTeacherToken });
       const assigned = new Set((assignmentsRes.body?.data?.events || []).map((item) => Number(item.id)));
@@ -1265,6 +1281,106 @@ async function runAllTests() {
       if (typeof summary.total_students !== 'number') return `缺少学生统计: ${JSON.stringify(res.body).slice(0, 120)}`;
       if (!Array.isArray(homeroom) || !Array.isArray(eventTeachers)) return `教师洞察结构异常: ${JSON.stringify(res.body).slice(0, 120)}`;
       console.log(` (学生${summary.total_students || 0}人, 教师${summary.total_teachers || 0}人, 管理员${summary.total_global_admins || 0}人)`);
+      return true;
+    });
+
+    await test('管理员', 'GET /api/admin/student-directory 返回完整学生目录与班级映射', async () => {
+      const res = await request('GET', '/api/admin/student-directory', { token: adminToken });
+      if (res.status !== 200) return `状态码 ${res.status}: ${JSON.stringify(res.body).slice(0, 120)}`;
+      const data = res.body?.data || {};
+      const students = Array.isArray(data.students) ? data.students : [];
+      const classes = Array.isArray(data.classes) ? data.classes : [];
+      const summary = data.summary || {};
+      if (!students.length) return `学生目录为空: ${JSON.stringify(data).slice(0, 120)}`;
+      if (Number(summary.total_students || 0) !== students.length) return `学生目录统计异常: ${JSON.stringify(summary).slice(0, 120)}`;
+      const missingClassStudent = students.find((student) => !classes.some((cls) => cls.name === student.class_name && cls.grade_name === student.grade));
+      if (missingClassStudent) return `存在未映射班级学生: ${JSON.stringify(missingClassStudent).slice(0, 120)}`;
+      return true;
+    });
+
+    await test('管理员', 'POST /api/admin/results 自动区分径赛与田赛排序方向', async () => {
+      const eventsRes = await request('GET', '/api/admin/events', { token: adminToken });
+      const events = Array.isArray(eventsRes.body?.data) ? eventsRes.body.data : [];
+      const trackEvent = events.find((item) => item.category === 'track');
+      const fieldEvent = events.find((item) => item.category === 'field');
+      if (!trackEvent || !fieldEvent) return '缺少可用的径赛或田赛项目';
+
+      const directoryRes = await request('GET', '/api/admin/student-directory', { token: adminToken });
+      const students = Array.isArray(directoryRes.body?.data?.students) ? directoryRes.body.data.students : [];
+      if (students.length < 2) return '缺少可用于自动排序的学生数据';
+      const [studentA, studentB] = students;
+
+      const uniqueSeed = Date.now();
+      const createdScheduleIds = [];
+      const pad = (value) => String(value).padStart(2, '0');
+      const formatDateTime = (minuteOffset) => {
+        const date = new Date(uniqueSeed + (minuteOffset * 60 * 1000));
+        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+      };
+
+      const createSchedule = async (eventId, roundName, venue, minuteOffset) => {
+        const response = await request('POST', '/api/admin/schedules', {
+          token: adminToken,
+          body: {
+            event_id: eventId,
+            round_name: roundName,
+            start_time: formatDateTime(minuteOffset),
+            end_time: formatDateTime(minuteOffset + 30),
+            venue,
+            max_heats: 1,
+            note: 'auto-rank-test'
+          }
+        });
+        if (response.status !== 200) throw new Error(`创建赛程失败: ${JSON.stringify(response.body).slice(0, 120)}`);
+        const scheduleId = response.body?.data?.id;
+        if (scheduleId) createdScheduleIds.push(scheduleId);
+        return scheduleId;
+      };
+
+      let trackScheduleId = null;
+      let fieldScheduleId = null;
+      try {
+        trackScheduleId = await createSchedule(trackEvent.id, '自动排序测试-径赛', `自动化跑道-${uniqueSeed}`, 0);
+        fieldScheduleId = await createSchedule(fieldEvent.id, '自动排序测试-田赛', `自动化田赛区-${uniqueSeed}`, 60);
+        if (!trackScheduleId || !fieldScheduleId) return '测试赛程创建失败';
+
+        const trackFirst = await request('POST', '/api/admin/results', {
+          token: adminToken,
+          body: { schedule_id: trackScheduleId, user_id: studentA.id, performance: '13.20', grade: studentA.grade, class_name: studentA.class_name }
+        });
+        const trackSecond = await request('POST', '/api/admin/results', {
+          token: adminToken,
+          body: { schedule_id: trackScheduleId, user_id: studentB.id, performance: '12.80', grade: studentB.grade, class_name: studentB.class_name }
+        });
+        const fieldFirst = await request('POST', '/api/admin/results', {
+          token: adminToken,
+          body: { schedule_id: fieldScheduleId, user_id: studentA.id, performance: '5.80', grade: studentA.grade, class_name: studentA.class_name }
+        });
+        const fieldSecond = await request('POST', '/api/admin/results', {
+          token: adminToken,
+          body: { schedule_id: fieldScheduleId, user_id: studentB.id, performance: '6.10', grade: studentB.grade, class_name: studentB.class_name }
+        });
+        const responses = [trackFirst, trackSecond, fieldFirst, fieldSecond];
+        const failedRes = responses.find((item) => item.status !== 200 && item.status !== 400);
+        if (failedRes) return `成绩录入失败: ${JSON.stringify(failedRes.body).slice(0, 120)}`;
+
+        const trackListRes = await request('GET', `/api/admin/results?schedule_id=${trackScheduleId}&limit=20`, { token: adminToken });
+        const fieldListRes = await request('GET', `/api/admin/results?schedule_id=${fieldScheduleId}&limit=20`, { token: adminToken });
+        if (trackListRes.status !== 200 || fieldListRes.status !== 200) return '查询自动排序结果失败';
+        const trackRows = (trackListRes.body?.data?.list || []).filter((item) => Number(item.schedule_id) === Number(trackScheduleId));
+        const fieldRows = (fieldListRes.body?.data?.list || []).filter((item) => Number(item.schedule_id) === Number(fieldScheduleId));
+        if (trackRows.length < 2 || fieldRows.length < 2) return '测试成绩数量不足，无法验证自动排序';
+        if (String(trackRows[0].performance) !== '12.80' || Number(trackRows[0].rank) !== 1) {
+          return `径赛自动排序异常: ${JSON.stringify(trackRows.slice(0, 2)).slice(0, 120)}`;
+        }
+        if (String(fieldRows[0].performance) !== '6.10' || Number(fieldRows[0].rank) !== 1) {
+          return `田赛自动排序异常: ${JSON.stringify(fieldRows.slice(0, 2)).slice(0, 120)}`;
+        }
+      } finally {
+        for (const scheduleId of createdScheduleIds.reverse()) {
+          await request('DELETE', `/api/admin/schedules/${scheduleId}`, { token: adminToken });
+        }
+      }
       return true;
     });
 
