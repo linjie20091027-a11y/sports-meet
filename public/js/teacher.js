@@ -778,6 +778,10 @@ const Teacher = {
       document.getElementById('teacher-submit-results-btn')?.addEventListener('click', async () => {
         await this._submitResultsBatch({ requireConfirm: true });
       });
+      document.getElementById('teacher-clear-results-filters-btn')?.addEventListener('click', async () => {
+        this._resetResultsEntryFilters();
+        await this._renderResultsEntry();
+      });
       this._bindResultsEntryFilters();
     } catch (e) {
       content.innerHTML = `<div class="empty-state"><p class="empty-state__desc">${App._escHtml(e.message || '成绩录入页面加载失败')}</p></div>`;
@@ -975,6 +979,7 @@ const Teacher = {
       <div class="teacher-results-actions">
         <p>${hasSourceRows ? '建议先选择班级后批量录入，再使用提交确认完成当前筛选结果保存。' : '当前项目暂无可录入学生。'}</p>
         <div class="teacher-table-actions">
+          <button type="button" class="btn btn-outline btn-sm" id="teacher-clear-results-filters-btn">清空筛选</button>
           <button type="button" class="btn btn-outline btn-sm" id="teacher-save-draft-btn"${disabled ? ' disabled' : ''}>暂存成绩</button>
           <button type="button" class="btn btn-primary btn-sm" id="teacher-submit-results-btn"${disabled ? ' disabled' : ''}>提交确认</button>
         </div>
