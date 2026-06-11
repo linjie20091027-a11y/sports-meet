@@ -632,6 +632,15 @@ router.get('/event/results-entry', (req, res) => {
     if (!eventId || !eventIds.includes(eventId)) {
       return res.status(400).json({ success: false, error: '当前教师未分配该项目' });
     }
+    const event = db.prepare(`
+      SELECT id, name, category, gender_group, event_type, venue
+      FROM events
+      WHERE id = ?
+      LIMIT 1
+    `).get(eventId);
+    if (!event) {
+      return res.status(404).json({ success: false, error: '项目不存在' });
+    }
     const schedules = db.prepare(`
       SELECT s.id, s.round_name, s.start_time, s.end_time, s.venue, s.status, e.name AS event_name
       FROM schedules s
@@ -662,7 +671,51 @@ router.get('/event/results-entry', (req, res) => {
       WHERE r.event_id = ? AND r.status = 'approved'
       ORDER BY s.start_time, s.id, u.grade, u.class_name, u.name
     `).all(eventId);
-    res.json({ success: true, data: { event_id: eventId, schedules, participants } });
+    const summary = db.prepare(`
+      SELECT
+        COUNT(DISTINCT s.id) AS schedule_count,
+        COUNT(DISTINCT CASE WHEN r.status = 'approved' THEN r.user_id END) AS approved_participant_count,
+        COUNT(DISTINCT rs.id) AS result_count,
+        COUNT(DISTINCT CASE WHEN COALESCE(rs.is_published, 0) = 1 THEN rs.id END) AS published_result_count
+      FROM events e
+      LEFT JOIN schedules s ON s.event_id = e.id
+      LEFT JOIN registrations r ON r.event_id = e.id
+      LEFT JOIN results rs ON rs.schedule_id = s.id
+      WHERE e.id = ?
+      GROUP BY e.id
+      LIMIT 1
+    `).get(eventId) || {};
+    const classes = [...new Set(participants
+      .map((item) => [item.grade, item.class_name].filter(Boolean).join(' '))
+      .filter(Boolean))];
+    const rounds = [...new Set(participants
+      .map((item) => String(item.round_name || '').trim())
+      .filter(Boolean))];
+    const blockers = [];
+    if (!schedules.length) blockers.push('尚未编排赛程');
+    if (schedules.length && !participants.length) blockers.push('暂无已审核参赛学生');
+    res.json({
+      success: true,
+      data: {
+        event_id: eventId,
+        event,
+        schedules,
+        participants,
+        classes,
+        rounds,
+        summary: {
+          schedule_count: Number(summary.schedule_count || schedules.length || 0),
+          approved_participant_count: Number(summary.approved_participant_count || 0),
+          result_count: Number(summary.result_count || 0),
+          published_result_count: Number(summary.published_result_count || 0),
+          class_count: classes.length
+        },
+        readiness: {
+          can_edit: schedules.length > 0 && participants.length > 0,
+          blockers
+        }
+      }
+    });
   } catch (e) {
     res.status(400).json({ success: false, error: e.message });
   }
