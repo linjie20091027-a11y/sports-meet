@@ -1,0 +1,25 @@
+{
+  "users": {
+    "students": 500,
+    "teachers": 62,
+    "global_admins": 7
+  },
+  "business": {
+    "course_records": 5120,
+    "exam_registrations": 4160,
+    "activity_participations": 1750,
+    "registrations": 360,
+    "schedules": 32,
+    "results": 300
+  },
+  "behavior": {
+    "login_logs": 3000,
+    "page_view_logs": 6000,
+    "feature_usage_logs": 4000,
+    "operation_logs": 4000,
+    "notifications": 1500,
+    "forum_posts": 90,
+    "forum_replies": 180,
+    "friendships": 940
+  }
+}
