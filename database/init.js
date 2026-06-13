@@ -790,6 +790,111 @@ function initTables() {
   _db.run('CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id)');
   _db.run('CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(user_id, is_read)');
 
+  _db.run(`
+    CREATE TABLE IF NOT EXISTS student_course_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      academic_year TEXT NOT NULL,
+      term TEXT NOT NULL,
+      course_name TEXT NOT NULL,
+      course_type TEXT DEFAULT 'required' CHECK(course_type IN ('required','elective','activity')),
+      credits DECIMAL(4,1) DEFAULT 0,
+      score DECIMAL(5,2) DEFAULT 0,
+      grade_point DECIMAL(4,2) DEFAULT 0,
+      class_rank INTEGER DEFAULT 0,
+      teacher_name TEXT DEFAULT '',
+      status TEXT DEFAULT 'completed' CHECK(status IN ('completed','in_progress','withdrawn')),
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      updated_at TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+  _db.run('CREATE INDEX IF NOT EXISTS idx_course_records_user ON student_course_records(user_id, academic_year, term)');
+
+  _db.run(`
+    CREATE TABLE IF NOT EXISTS student_exam_registrations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      exam_name TEXT NOT NULL,
+      exam_type TEXT DEFAULT 'school' CHECK(exam_type IN ('school','district','city','province','national')),
+      subject_name TEXT NOT NULL,
+      registration_status TEXT DEFAULT 'registered' CHECK(registration_status IN ('registered','attended','absent','cancelled')),
+      seat_no TEXT DEFAULT '',
+      exam_date TEXT,
+      score DECIMAL(5,2) DEFAULT 0,
+      grade_level TEXT DEFAULT '',
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      updated_at TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+  _db.run('CREATE INDEX IF NOT EXISTS idx_exam_registrations_user ON student_exam_registrations(user_id, exam_date)');
+
+  _db.run(`
+    CREATE TABLE IF NOT EXISTS login_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      username TEXT DEFAULT '',
+      login_status TEXT DEFAULT 'success' CHECK(login_status IN ('success','failed','expired')),
+      ip_address TEXT DEFAULT '',
+      user_agent TEXT DEFAULT '',
+      device_type TEXT DEFAULT 'web' CHECK(device_type IN ('web','mobile','tablet','desktop')),
+      login_at TEXT DEFAULT (datetime('now','localtime')),
+      logout_at TEXT,
+      session_minutes INTEGER DEFAULT 0,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+  _db.run('CREATE INDEX IF NOT EXISTS idx_login_logs_user ON login_logs(user_id, login_at DESC)');
+
+  _db.run(`
+    CREATE TABLE IF NOT EXISTS page_view_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      route TEXT NOT NULL,
+      page_title TEXT DEFAULT '',
+      referrer TEXT DEFAULT '',
+      stay_seconds INTEGER DEFAULT 0,
+      ip_address TEXT DEFAULT '',
+      viewed_at TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+  _db.run('CREATE INDEX IF NOT EXISTS idx_page_view_logs_user ON page_view_logs(user_id, viewed_at DESC)');
+
+  _db.run(`
+    CREATE TABLE IF NOT EXISTS feature_usage_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      module_name TEXT NOT NULL,
+      action_name TEXT NOT NULL,
+      action_result TEXT DEFAULT 'success' CHECK(action_result IN ('success','warning','failed')),
+      detail TEXT DEFAULT '',
+      source_page TEXT DEFAULT '',
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+  _db.run('CREATE INDEX IF NOT EXISTS idx_feature_usage_logs_user ON feature_usage_logs(user_id, created_at DESC)');
+
+  _db.run(`
+    CREATE TABLE IF NOT EXISTS activity_participations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      activity_name TEXT NOT NULL,
+      activity_type TEXT DEFAULT 'platform' CHECK(activity_type IN ('platform','sports','club','volunteer','academic')),
+      participation_role TEXT DEFAULT 'participant',
+      participation_status TEXT DEFAULT 'completed' CHECK(participation_status IN ('registered','completed','cancelled')),
+      award_name TEXT DEFAULT '',
+      credit_hours DECIMAL(4,1) DEFAULT 0,
+      activity_date TEXT,
+      remark TEXT DEFAULT '',
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+  _db.run('CREATE INDEX IF NOT EXISTS idx_activity_participations_user ON activity_participations(user_id, activity_date DESC)');
+
   // 濠江中学信息表
   _db.run(`
     CREATE TABLE IF NOT EXISTS school_info (

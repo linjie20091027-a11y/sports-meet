@@ -7,6 +7,7 @@
     "start": "node server.js",
     "dev": "node server.js",
     "test:all": "node test_all.js",
+    "db:generate:demo": "node scripts/generate-full-demo-db.js",
     "db:cloud:check": "node scripts/cloud-db-check.js",
     "db:cloud:migrate": "node scripts/migrate-local-db-to-cloud.js",
     "db:cloud:backup": "node scripts/cloud-db-backup.js"
